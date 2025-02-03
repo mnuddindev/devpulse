@@ -9,7 +9,8 @@ import (
 func main() {
 	config, err := config.LoadConfig()
 	if err != nil {
-		fmt.Printf("Error loading config: %v\n", err)
+		fmt.Printf("Error while loading config: %v\n", err)
 		return
 	}
+	fmt.Println(config.ServerConfig.App)
 }
