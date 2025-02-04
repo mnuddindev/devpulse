@@ -1,10 +1,12 @@
 package models
 
 import (
+	"time"
+
 	"github.com/google/uuid"
 )
 
-type User Struct {
+type User struct {
 	// Use google uuid to generate a unique id for each user
 	ID uuid.UUID `gorm:"type:uuid;primary_key;default:uuid_generate_v4()" json:"id"`
 	// Unique username for each user
@@ -62,16 +64,17 @@ type User Struct {
 	// notifications
 	Notifications []Notification `gorm:"foreignkey:UserID" json:"notifications"`
 	// theme preference of the user
-	ThemePreference string `gorm:"default:light" json:"theme_preference"`
-	CreatedAt time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
-	UpdatedAt time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"updated_at"`
+	ThemePreference string    `gorm:"default:light" json:"theme_preference"`
+	CreatedAt       time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
+	UpdatedAt       time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"updated_at"`
 }
 
 type Notification struct {
 	// Send notification to user if any event occurs
-	EmailOnLikes bool `gorm:"default:false" json:"email_on_likes"`
-	EmailOnComments bool `gorm:"default:false" json:"email_on_comments"`
-	EmailOnMentions bool `gorm:"default:false" json:"email_on_mentions"`
-	EmailOnFollower bool `gorm:"default:false" json:"email_on_followers"`
-	EmailOnNewPosts bool `gorm:"default:false" json:"email_on_new_posts"`
+	UserID          uuid.UUID `gorm:"type:uuid;not null" json:"user_id"`
+	EmailOnLikes    bool      `gorm:"default:false" json:"email_on_likes"`
+	EmailOnComments bool      `gorm:"default:false" json:"email_on_comments"`
+	EmailOnMentions bool      `gorm:"default:false" json:"email_on_mentions"`
+	EmailOnFollower bool      `gorm:"default:false" json:"email_on_followers"`
+	EmailOnNewPosts bool      `gorm:"default:false" json:"email_on_new_posts"`
 }
