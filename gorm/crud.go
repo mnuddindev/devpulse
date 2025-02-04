@@ -77,7 +77,18 @@ func (g *GormDB) GetAll(model interface{}) error {
 
 // GetByCondition records
 func (g *GormDB) GetByCondition(model interface{}, condition string, args ...interface{}) error {
-	return g.DB.Where(condition, args...).Find(model).Error
+	if err := g.DB.Where(condition, args...).Find(model).Error; err != nil {
+		logrus.WithFields(logrus.Fields{
+			"error":     err,
+			"model":     model,
+			"condition": condition,
+		}).Error("Failed to get record by Condition")
+		return errors.New("failed to get record by condition")
+	}
+	logrus.WithFields(logrus.Fields{
+		"model": model,
+	}).Info("Record fetched successfully!!")
+	return nil
 }
 
 // Update a record by ID
