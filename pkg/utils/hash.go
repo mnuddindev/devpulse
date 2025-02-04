@@ -1,8 +1,6 @@
 package utils
 
-import (
-	"bcrypt"
-)
+import "golang.org/x/crypto/bcrypt"
 
 // HashPassword is a function that hashes the password using bcrypt
 func HashPassword(password string) (string, error) {
@@ -15,7 +13,7 @@ func HashPassword(password string) (string, error) {
 }
 
 // ComparePasswords is a function that compares the hashed password with the password
-func ComparePasswords(hashedPassword, password string) (error) {
+func ComparePasswords(hashedPassword, password string) error {
 	// CompareHashAndPassword compares a bcrypt hashed password with its possible plaintext equivalent
 	return bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(password))
 }
