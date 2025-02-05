@@ -3,6 +3,7 @@ package services
 import (
 	"errors"
 
+	"github.com/google/uuid"
 	"github.com/mnuddindev/devpulse/gorm"
 	"github.com/mnuddindev/devpulse/pkg/logger"
 	"github.com/mnuddindev/devpulse/pkg/models"
@@ -181,9 +182,66 @@ func (us *UserSystem) GetOTP(email string) (int, error) {
 		return 0, errors.New("failed to generate OTP")
 	}
 
-	// log if succeded
+	// log if succed
 	logger.Log.WithFields(logrus.Fields{
 		"user": user,
 	}).Info("OTP generated and assigned successfully")
 	return user.OTP, nil
+}
+
+// Users get all the users from the database
+func (us *UserSystem) Users() ([]models.User, error) {
+	// an empty instance of user model
+	var users []models.User
+
+	// check for users in db
+	if err := us.crud.GetAll(&users); err != nil {
+		// log if failed to get data
+		logger.Log.WithFields(logrus.Fields{
+			"error": err,
+		}).Error("Failed to fetch all User")
+		return nil, errors.New("failed to fetch all user")
+	}
+
+	//log if succed
+	logger.Log.Info("All users fetched successfully!!")
+	return users, nil
+}
+
+// DeleteUsers deletes user by ID
+func (us *UserSystem) DeleteUser(userid uuid.UUID) error {
+	// an empty instance for user model
+	var user models.User
+
+	// delete user data using id
+	if err := us.crud.Delete(&user, userid); err != nil {
+		// log if failed
+		logger.Log.WithFields(logrus.Fields{
+			"error": err,
+			"id":    userid,
+		}).Error("Failed to delete user")
+		return errors.New("failed to delete user")
+	}
+	logger.Log.WithFields(logrus.Fields{
+		"id": userid,
+	}).Info("User deleted Successfully!!")
+	return nil
+}
+
+// UpdateUser updates a user's details
+func (us *UserSystem) UpdateUser(user *models.User, userid uuid.UUID) error {
+	// update user data
+	if err := us.crud.Update(user, userid); err != nil {
+		// log if failed to update user data
+		logger.Log.WithFields(logrus.Fields{
+			"error": err,
+			"user":  user,
+		}).Error("Failed to update user")
+		return errors.New("failed to update user")
+	}
+
+	logger.Log.WithFields(logrus.Fields{
+		"user": user,
+	}).Info("User updated Successfully!!")
+	return nil
 }

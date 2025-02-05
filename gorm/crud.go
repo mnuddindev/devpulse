@@ -107,7 +107,7 @@ func (g *GormDB) Update(model interface{}, id interface{}) error {
 }
 
 // Delete a record by ID
-func (g *GormDB) Delete(model interface{}, id int) error {
+func (g *GormDB) Delete(model interface{}, id interface{}) error {
 	if err := g.DB.Delete(model, id).Error; err != nil {
 		logrus.WithFields(logrus.Fields{
 			"error": err,
