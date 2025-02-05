@@ -48,7 +48,7 @@ func (g *GormDB) Create(model interface{}) error {
 }
 
 // GetByID a record by ID
-func (g *GormDB) GetByID(model interface{}, id int) error {
+func (g *GormDB) GetByID(model interface{}, id string) error {
 	if err := g.DB.First(model, id).Error; err != nil {
 		logrus.WithFields(logrus.Fields{
 			"error": err,
@@ -92,7 +92,7 @@ func (g *GormDB) GetByCondition(model interface{}, condition string, args ...int
 }
 
 // Update a record by ID
-func (g *GormDB) Update(model interface{}, id int) error {
+func (g *GormDB) Update(model interface{}, id interface{}) error {
 	if err := g.DB.Save(model).Error; err != nil {
 		logrus.WithFields(logrus.Fields{
 			"error": err,

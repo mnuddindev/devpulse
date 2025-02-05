@@ -19,6 +19,8 @@ type User struct {
 	FirstName string `gorm:"size:100;not null;" json:"first_name" validate:"required,min=3"`
 	// Last name of the user
 	LastName string `gorm:"size:100;not null;" json:"last_name" validate:"required,min=3"`
+	// OTP for user
+	OTP int `gorm:"size:6;not null;" json:"otp" validate:"required,min=6"`
 	// Bio of the user
 	Bio string `gorm:"type:text;size:255;" json:"bio" validate:"max=255"`
 	// Avatar Url of the user
