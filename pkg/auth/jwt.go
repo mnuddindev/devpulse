@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gofiber/fiber"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/mnuddindev/devpulse/config"
+	"github.com/mnuddindev/devpulse/pkg/logger"
 	"github.com/sirupsen/logrus"
 )
 
@@ -23,7 +25,7 @@ type Claims struct {
 	jwt.RegisteredClaims
 }
 
-func GenerateAccessToken(userID uuid.UUID, email string) string {
+func GenerateAccessToken(userID uuid.UUID, email string) (string, error) {
 	claims := Claims{
 		UserID: userID,
 		Email:  email,
@@ -36,16 +38,22 @@ func GenerateAccessToken(userID uuid.UUID, email string) string {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	t, err := token.SignedString(jwtSecretKey)
 	if err != nil {
-		logrus.WithFields(logrus.Fields{
+		logger.Log.WithFields(logrus.Fields{
 			"error": err,
+			"user":  email,
 			"field": "GenerateAccessToken",
 		}).Error("Access Token generation failed!!")
+		return "", err
 	}
-	return t
+	logger.Log.WithFields(logrus.Fields{
+		"user":  email,
+		"token": t,
+	}).Info("Access token generated successfully")
+	return t, nil
 }
 
 // GenerateRefreshToken generates a new refresh token
-func GenerateRefreshToken(userID uuid.UUID) string {
+func GenerateRefreshToken(userID uuid.UUID) (string, error) {
 	claims := Claims{
 		UserID: userID,
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -58,36 +66,77 @@ func GenerateRefreshToken(userID uuid.UUID) string {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	t, err := token.SignedString(jwtSecretKey)
 	if err != nil {
-		logrus.WithFields(logrus.Fields{
+		logger.Log.WithFields(logrus.Fields{
 			"error": err,
+			"user":  userID,
 			"field": "GenerateRefreshToken",
 		}).Error("Refresh Token generation failed!!")
+		return "", err
 	}
-	return t
+	logger.Log.WithFields(logrus.Fields{
+		"user":  userID,
+		"token": t,
+		"field": "GenerateRefreshToken",
+	}).Info("Refresh token generated successfully!!")
+	return t, nil
 }
 
+// VerifyToken verifies the token by extracting the token and cross checking secretkey, values, signing method returns
 func VerifyToken(tokenString string) (*Claims, error) {
+	//
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			logrus.WithFields(logrus.Fields{
-				"error": ok,
-				"field": "VerifyToken",
-			}).Error(fmt.Errorf("unexpected signing method: %v", token.Header["alg"]))
-			return nil, nil
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 		return jwtSecretKey, nil
 	})
 
 	if err != nil {
 		if errors.Is(err, jwt.ErrTokenExpired) {
+			logger.Log.WithFields(logrus.Fields{
+				"error": err,
+				"token": tokenString,
+			}).Warn("Token has expired")
 			return nil, ErrExpiredToken
 		}
+		logger.Log.WithFields(logrus.Fields{
+			"error": err,
+			"token": tokenString,
+		}).Error("Invalid token")
 		return nil, ErrInvalidToken
 	}
 
 	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
+		logger.Log.WithFields(logrus.Fields{
+			"user":  claims.Email,
+			"token": tokenString,
+		}).Info("Token verified successfully")
 		return claims, nil
 	}
 
+	logger.Log.WithFields(logrus.Fields{
+		"token": tokenString,
+	}).Error("Invalid token claims")
 	return nil, ErrInvalidToken
+}
+
+// ExtractToken extracts the token from the request header
+func ExtractToken(c *fiber.Ctx) string {
+	authHeader := c.Get("Authorization")
+	if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+		return authHeader[7:]
+	}
+	logger.Log.Warn("No token found in the request header")
+	return ""
+}
+
+// ExtractTokenAuth extracts and verifies the token from the request header
+func ExtractTokenAuth(c *fiber.Ctx) (*Claims, error) {
+	tokenString := ExtractToken(c)
+	if tokenString == "" {
+		logger.Log.Warn("Empty token string")
+		return nil, ErrInvalidToken
+	}
+
+	return VerifyToken(tokenString)
 }
