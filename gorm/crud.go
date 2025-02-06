@@ -41,9 +41,6 @@ func (g *GormDB) Create(model interface{}) error {
 		}).Error("Error while creating a new record")
 		return errors.New("error while creating a new record")
 	}
-	logrus.WithFields(logrus.Fields{
-		"model": model,
-	}).Info("Record created succesfully!!")
 	return nil
 }
 

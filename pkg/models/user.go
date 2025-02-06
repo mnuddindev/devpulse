@@ -14,27 +14,27 @@ type User struct {
 	// Unique email for each user
 	Email string `gorm:"size:100;not null;unique" json:"email" validate:"required,email"`
 	// Password hash for each user (never expose this to the client)
-	Password string `gorm:"not null;" json:"-" validate:"required,min=6"`
+	Password string `gorm:"not null;" json:"password" validate:"required,min=6"`
 	// First name of the user
 	FirstName string `gorm:"size:100;not null;" json:"first_name" validate:"required,min=3"`
 	// Last name of the user
 	LastName string `gorm:"size:100;not null;" json:"last_name" validate:"required,min=3"`
 	// OTP for user
-	OTP int `gorm:"size:6;not null;" json:"otp" validate:"required,min=6"`
+	OTP int `gorm:"size:6;not null;" json:"otp"`
 	// Bio of the user
-	Bio string `gorm:"type:text;size:255;" json:"bio" validate:"max=255"`
+	Bio string `gorm:"type:text;size:255;null" json:"bio" validate:"max=255"`
 	// Avatar Url of the user
-	AvatarUrl string `gorm:"type:text;size:255;" json:"avatar_url" validate:"url"`
+	AvatarUrl string `gorm:"type:text;size:255;null" json:"avatar_url"`
 	// Job Title of the user
-	JobTitle string `gorm:"size:100;" json:"job_title" validate:"max=100"`
+	JobTitle string `gorm:"size:100;null" json:"job_title" validate:"max=100"`
 	// Company of the user
-	Employer string `gorm:"size:100;" json:"employer" validate:"max=100"`
+	Employer string `gorm:"size:100;null" json:"employer" validate:"max=100"`
 	// Location of the user
-	Location string `gorm:"size:100;" json:"location" validate:"max=100"`
+	Location string `gorm:"size:100;null" json:"location" validate:"max=100"`
 	// GithubURL of the user
-	GithubUrl string `gorm:"size:255;" json:"github_url" validate:"url"`
+	GithubUrl string `gorm:"size:255;" json:"github_url"`
 	// Website of the user
-	Website string `gorm:"size:255;" json:"website" validate:"url"`
+	Website string `gorm:"size:255;" json:"website"`
 	// Skills of the user
 	Skills []string `gorm:"type:text[]" json:"skills" validate:"max=255"`
 	// Interests of the user

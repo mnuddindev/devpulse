@@ -3,7 +3,7 @@ package main
 import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/mnuddindev/devpulse/config"
-	"github.com/mnuddindev/devpulse/gorm"
+	"github.com/mnuddindev/devpulse/controllers"
 	"github.com/mnuddindev/devpulse/pkg/logger"
 	"github.com/mnuddindev/devpulse/pkg/routes"
 	"github.com/sirupsen/logrus"
@@ -18,8 +18,14 @@ func main() {
 		}).Fatal("Error while loading config")
 		return
 	}
-	db := gorm.Connect(&config.Postgres)
+	system, err := controllers.StartServices(&config.Postgres)
+	if err != nil {
+		logger.Log.WithFields(logrus.Fields{
+			"error": err,
+		}).Fatal("Failed to initialize application systems")
+		return
+	}
 	app := fiber.New()
-	routes.NewRoutes(app, &config.ServerConfig, db)
+	routes.NewRoutes(app, &config.ServerConfig, system)
 	app.Listen(config.ServerConfig.Port)
 }

@@ -17,6 +17,7 @@ type ServerConfig struct {
 	Port      string `mapstructure:"PORT"`
 	Status    string `mapstructure:"STATUS"`
 	JWTSecret string `mapstructure:"JWT_SECRET"`
+	Author    string `mapstructure:"AUTHOR"`
 }
 
 type Postgres struct {

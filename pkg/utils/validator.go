@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+
 	"github.com/go-playground/validator/v10"
 )
 
@@ -43,15 +44,16 @@ func NewValidator() *Validator {
 // The map is formatted as JSON-friendly output for client-side consumption.
 func (v *Validator) Validate(str interface{}) *ErrorResponse {
 	err := v.validator.Struct(str)
+	if err == nil {
+		return nil
+	}
 	response := ErrorResponse{Errors: make([]Error, 0, len(err.(validator.ValidationErrors)))}
-	if err != nil {
-		for _, err := range err.(validator.ValidationErrors) {
-			field := err.Field() // get the field that caused the error
-			tag := err.Tag() // get the tag that caused the error
-			message := getErrorMessage(field, tag, err.Param()) // get the error message
-			// append the error to the response
-			response.Errors = append(response.Errors, Error{Field: field, Msg: message})
-		}
+	for _, err := range err.(validator.ValidationErrors) {
+		field := err.Field()                                // get the field that caused the error
+		tag := err.Tag()                                    // get the tag that caused the error
+		message := getErrorMessage(field, tag, err.Param()) // get the error message
+		// append the error to the response
+		response.Errors = append(response.Errors, Error{Field: field, Msg: message})
 	}
 
 	return &response

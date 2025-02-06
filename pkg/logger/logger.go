@@ -2,6 +2,7 @@ package logger
 
 import (
 	"os"
+	"time"
 
 	"github.com/sirupsen/logrus"
 )
@@ -14,7 +15,7 @@ func StartLogger() {
 	Log.SetFormatter(&logrus.JSONFormatter{
 		DisableTimestamp: false,
 		PrettyPrint:      true,
-		TimestampFormat:  "2025-02-05 6:30:25",
+		TimestampFormat:  time.RFC3339,
 	})
 	Log.SetOutput(os.Stdout)
 
