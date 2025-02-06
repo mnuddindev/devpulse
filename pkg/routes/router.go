@@ -34,4 +34,6 @@ func NewRoutes(app *fiber.App, config *config.ServerConfig, system *controllers.
 		})
 	})
 	app.Post("/register", system.Usercontroller.Registration)
+	app.Post("/user/:userid/activate", system.Usercontroller.ActiveUser)
+	app.Post("/login", system.Usercontroller.Login)
 }

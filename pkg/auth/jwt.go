@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gofiber/fiber"
+	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/mnuddindev/devpulse/config"
@@ -79,6 +79,23 @@ func GenerateRefreshToken(userID uuid.UUID) (string, error) {
 		"field": "GenerateRefreshToken",
 	}).Info("Refresh token generated successfully!!")
 	return t, nil
+}
+
+// Generate JWT Tokens
+func GenerateJWT(userID uuid.UUID, email string) (string, string, error) {
+	atoken, err := GenerateAccessToken(userID, email)
+	if err != nil {
+		logger.Log.WithFields(logrus.Fields{
+			"error": err,
+		}).Error("Failed to generate JWT access token")
+	}
+	rtoken, err := GenerateRefreshToken(userID)
+	if err != nil {
+		logger.Log.WithFields(logrus.Fields{
+			"error": err,
+		}).Error("Failed to generate JWT refresh token")
+	}
+	return atoken, rtoken, err
 }
 
 // VerifyToken verifies the token by extracting the token and cross checking secretkey, values, signing method returns

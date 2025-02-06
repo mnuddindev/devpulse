@@ -2,7 +2,6 @@ package gorm
 
 import (
 	"errors"
-	"fmt"
 
 	"github.com/mnuddindev/devpulse/pkg/logger"
 	"github.com/sirupsen/logrus"
@@ -24,7 +23,7 @@ type CRUD interface {
 	// GetByCondition records
 	GetByCondition(model interface{}, condition string, args ...interface{}) error
 	// Update a record by ID
-	Update(model interface{}, id int) error
+	Update(model interface{}, condition string, args interface{}, updates interface{}) error
 	// Delete a record by ID
 	Delete(model interface{}, id int) error
 }
@@ -93,9 +92,6 @@ func (g *GormDB) GetByCondition(model interface{}, condition string, args ...int
 // Update a record by ID
 func (g *GormDB) Update(model interface{}, condition string, args interface{}, updates interface{}) error {
 	// Find the record by ID or condition
-	fmt.Println(args)
-	fmt.Println(condition)
-	fmt.Println(updates)
 	result := g.DB.Model(model).Where(condition, args).Updates(updates)
 	if result.Error != nil {
 		logger.Log.WithFields(logrus.Fields{
