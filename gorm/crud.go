@@ -3,6 +3,7 @@ package gorm
 import (
 	"errors"
 
+	"github.com/mnuddindev/devpulse/pkg/logger"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
@@ -89,11 +90,22 @@ func (g *GormDB) GetByCondition(model interface{}, condition string, args ...int
 }
 
 // Update a record by ID
-func (g *GormDB) Update(model interface{}, id interface{}) error {
-	if err := g.DB.Save(model).Error; err != nil {
-		logrus.WithFields(logrus.Fields{
+func (g *GormDB) Update(model interface{}, id interface{}, updates interface{}) error {
+	// Find the record by ID or condition
+	if err := g.DB.First(model, id).Error; err != nil {
+		logger.Log.WithFields(logrus.Fields{
 			"error": err,
-			"model": model,
+			"id":    id,
+		}).Error("Failed to find record to update")
+		return errors.New("record not found")
+	}
+
+	// Apply update to the record
+	if err := g.DB.Model(model).Updates(updates); err != nil {
+		logrus.WithFields(logrus.Fields{
+			"error":   err,
+			"model":   model,
+			"updates": updates,
 		}).Error("Failed to update record")
 		return errors.New("failed to update record")
 	}

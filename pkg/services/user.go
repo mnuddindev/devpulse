@@ -123,6 +123,21 @@ func (us *UserSystem) UserBy(condition string, args ...interface{}) (*models.Use
 	return &user, nil
 }
 
+func (us *UserSystem) ActiveUser(userid uuid.UUID) error {
+	var user models.User
+	updates := map[string]interface{}{
+		"is_active": true,
+	}
+	if err := us.crud.Update(user, userid, updates); err != nil {
+		logrus.WithFields(logrus.Fields{
+			"error": err,
+			"id":    userid,
+		}).Error("Failed to activate user")
+		return err
+	}
+	return nil
+}
+
 // UserActiveByID checks if the user is activated by fetching data using it's ID
 func (us *UserSystem) UserActiveByID(userid string) (bool, error) {
 	// an empty user model
@@ -171,10 +186,10 @@ func (us *UserSystem) GetOTP(email string) (int, error) {
 		return 0, errors.New("otp generation failed")
 	}
 
-	// set OTP to user
-	user.OTP = int(otp)
-
-	if err := us.crud.Update(&user, user.ID); err != nil {
+	updates := map[string]interface{}{
+		"otp": int(otp),
+	}
+	if err := us.crud.Update(&user, user.ID, updates); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 			"user":  user,
@@ -229,9 +244,11 @@ func (us *UserSystem) DeleteUser(userid uuid.UUID) error {
 }
 
 // UpdateUser updates a user's details
-func (us *UserSystem) UpdateUser(user *models.User, userid uuid.UUID) error {
+func (us *UserSystem) UpdateUser(userdata *models.User, userid uuid.UUID) error {
 	// update user data
-	if err := us.crud.Update(user, userid); err != nil {
+	var user models.User
+	userd := utils.StructToMap(userdata)
+	if err := us.crud.Update(user, userid, userd); err != nil {
 		// log if failed to update user data
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
