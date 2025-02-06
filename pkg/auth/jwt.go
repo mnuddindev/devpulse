@@ -3,20 +3,20 @@ package auth
 import (
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"github.com/mnuddindev/devpulse/config"
 	"github.com/mnuddindev/devpulse/pkg/logger"
 	"github.com/sirupsen/logrus"
 )
 
 var (
-	ErrInvalidToken = errors.New("Invalid token")
+	ErrInvalidToken = errors.New("invalid token")
 	ErrExpiredToken = errors.New("token has expired")
-	jwtSecretKey    = []byte(config.ServerConfig.JWTSecret)
+	jwtSecretKey    = []byte(os.Getenv("JWT_SECRET"))
 )
 
 type Claims struct {
