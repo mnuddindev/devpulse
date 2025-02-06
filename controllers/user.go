@@ -184,6 +184,7 @@ func (uc *UserController) ActiveUser(c *fiber.Ctx) error {
 	})
 }
 
+// Login make sure to checks and let users to login
 func (uc *UserController) Login(c *fiber.Ctx) error {
 	type Login struct {
 		Email    string `json:"email" validate:"required,email,min=5"`
@@ -286,5 +287,44 @@ func (uc *UserController) Login(c *fiber.Ctx) error {
 			"email":         user.Email,
 			"profile_photo": user.AvatarUrl,
 		},
+	})
+}
+
+func (uc *UserController) Logout(c *fiber.Ctx) error {
+	// Invalidate access token cookie
+	c.Cookie(&fiber.Cookie{
+		Name:     "access_token",
+		Value:    "",
+		Expires:  time.Now().Add(-time.Hour), // Expire immediately
+		HTTPOnly: true,
+		Secure:   true,     // Add in production (HTTPS-only)
+		SameSite: "Strict", // Prevent CSRF
+	})
+
+	// Invalidate refresh token cookie
+	c.Cookie(&fiber.Cookie{
+		Name:     "refresh_token",
+		Value:    "",
+		Expires:  time.Now().Add(-time.Hour), // Expire immediately
+		HTTPOnly: true,
+		Secure:   true,     // Add in production (HTTPS-only)
+		SameSite: "Strict", // Prevent CSRF
+	})
+
+	// Clear Authorization header (if used)
+	c.Set("Authorization", "")
+
+	// Security headers
+	c.Set("Cache-Control", "no-store")
+	c.Set("Pragma", "no-cache")
+
+	// Log the event
+	logger.Log.WithFields(logrus.Fields{
+		"user_id": c.Locals("user_id"),
+	}).Info("User logged out")
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "Logout successful",
+		"status":  fiber.StatusOK,
 	})
 }
