@@ -42,6 +42,14 @@ func (uc *UserController) Registration(c *fiber.Ctx) error {
 			"status": fiber.StatusUnprocessableEntity,
 		})
 	}
+	otp, err := utils.GenerateOTP()
+	if err != nil {
+		logger.Log.WithFields(logrus.Fields{
+			"error": err,
+			"field": "OTP Generation",
+		}).Error("OTP Generation failed")
+	}
+	user.OTP = otp
 	newUser, err := uc.userSystem.CreateUser(&user)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
@@ -53,7 +61,7 @@ func (uc *UserController) Registration(c *fiber.Ctx) error {
 		})
 	}
 
-	_, err = uc.userSystem.GetOTP(newUser.Email)
+	utils.SendActivationEmail(otp, newUser.Email, newUser.Username)
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
 		"message": "User registered successfully!!",

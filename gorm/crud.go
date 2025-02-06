@@ -2,6 +2,7 @@ package gorm
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/mnuddindev/devpulse/pkg/logger"
 	"github.com/sirupsen/logrus"
@@ -36,7 +37,7 @@ func NewGormDB(db *gorm.DB) *GormDB {
 // Create a new record
 func (g *GormDB) Create(model interface{}) error {
 	if err := g.DB.Create(model).Error; err != nil {
-		logrus.WithFields(logrus.Fields{
+		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 			"model": model,
 		}).Error("Error while creating a new record")
@@ -48,13 +49,13 @@ func (g *GormDB) Create(model interface{}) error {
 // GetByID a record by ID
 func (g *GormDB) GetByID(model interface{}, id string) error {
 	if err := g.DB.First(model, id).Error; err != nil {
-		logrus.WithFields(logrus.Fields{
+		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 			"id":    id,
 		}).Error("Failed to fetch record by ID")
 		return errors.New("record not found")
 	}
-	logrus.WithFields(logrus.Fields{
+	logger.Log.WithFields(logrus.Fields{
 		"id":    id,
 		"model": model,
 	}).Error("Record fetched Successfully!!")
@@ -64,7 +65,7 @@ func (g *GormDB) GetByID(model interface{}, id string) error {
 // GetAll records
 func (g *GormDB) GetAll(model interface{}) error {
 	if err := g.DB.Find(model).Error; err != nil {
-		logrus.WithFields(logrus.Fields{
+		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 		}).Error("Failed to fetch all records!!")
 		return errors.New("failed to fetch records")
@@ -76,55 +77,66 @@ func (g *GormDB) GetAll(model interface{}) error {
 // GetByCondition records
 func (g *GormDB) GetByCondition(model interface{}, condition string, args ...interface{}) error {
 	if err := g.DB.Where(condition, args...).Find(model).Error; err != nil {
-		logrus.WithFields(logrus.Fields{
+		logger.Log.WithFields(logrus.Fields{
 			"error":     err,
 			"model":     model,
 			"condition": condition,
 		}).Error("Failed to get record by Condition")
 		return errors.New("failed to get record by condition")
 	}
-	logrus.WithFields(logrus.Fields{
+	logger.Log.WithFields(logrus.Fields{
 		"model": model,
 	}).Info("Record fetched successfully!!")
 	return nil
 }
 
 // Update a record by ID
-func (g *GormDB) Update(model interface{}, id interface{}, updates interface{}) error {
+func (g *GormDB) Update(model interface{}, condition string, args interface{}, updates interface{}) error {
 	// Find the record by ID or condition
-	if err := g.DB.First(model, id).Error; err != nil {
+	fmt.Println(args)
+	fmt.Println(condition)
+	fmt.Println(updates)
+	result := g.DB.Model(model).Where(condition, args).Updates(updates)
+	if result.Error != nil {
 		logger.Log.WithFields(logrus.Fields{
-			"error": err,
-			"id":    id,
-		}).Error("Failed to find record to update")
-		return errors.New("record not found")
+			"error":     result.Error,
+			"model":     model,
+			"condition": condition,
+			"args":      args,
+			"updates":   updates,
+		}).Error("Failed to update records")
+		return errors.New("failed to update records")
 	}
 
-	// Apply update to the record
-	if err := g.DB.Model(model).Updates(updates); err != nil {
-		logrus.WithFields(logrus.Fields{
-			"error":   err,
-			"model":   model,
-			"updates": updates,
-		}).Error("Failed to update record")
-		return errors.New("failed to update record")
+	// Check if any records were updated
+	if result.RowsAffected == 0 {
+		logger.Log.WithFields(logrus.Fields{
+			"condition": condition,
+			"args":      args,
+		}).Warn("No records matched the update condition")
+		return errors.New("no records matched the update condition")
 	}
-	logrus.WithFields(logrus.Fields{
-		"model": model,
-	}).Info("Record updated successfully!!")
+
+	logger.Log.WithFields(logrus.Fields{
+		"model":     model,
+		"condition": condition,
+		"args":      args,
+		"updates":   updates,
+		"rows":      result.RowsAffected,
+	}).Info("Records updated successfully")
 	return nil
 }
 
 // Delete a record by ID
 func (g *GormDB) Delete(model interface{}, id interface{}) error {
 	if err := g.DB.Delete(model, id).Error; err != nil {
-		logrus.WithFields(logrus.Fields{
+		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 			"model": model,
 		}).Error("Failed to delete record")
 		return errors.New("failed to delete record")
 	}
-	logrus.WithFields(logrus.Fields{
+	logger.Log.WithFields(logrus.Fields{
 		"model": model,
 	}).Info("Record updated successfully!!")
 	return nil
