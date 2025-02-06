@@ -8,6 +8,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/mnuddindev/devpulse/config"
 	"github.com/mnuddindev/devpulse/controllers"
+	"github.com/mnuddindev/devpulse/pkg/auth"
 )
 
 func NewRoutes(app *fiber.App, config *config.ServerConfig, system *controllers.CentralSystem) {
@@ -24,6 +25,8 @@ func NewRoutes(app *fiber.App, config *config.ServerConfig, system *controllers.
 		}),
 	)
 
+	app.Use(auth.RefreshTokenMiddleware(system.DB))
+
 	// home router
 	app.Get("/", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
@@ -37,4 +40,10 @@ func NewRoutes(app *fiber.App, config *config.ServerConfig, system *controllers.
 	app.Post("/user/:userid/activate", system.Usercontroller.ActiveUser)
 	app.Post("/login", system.Usercontroller.Login)
 	app.Post("/logout", system.Usercontroller.Logout)
+
+	// Protected routes
+	app.Get("/protected", func(c *fiber.Ctx) error {
+		userID := c.Locals("user_id")
+		return c.JSON(fiber.Map{"user_id": userID})
+	})
 }
