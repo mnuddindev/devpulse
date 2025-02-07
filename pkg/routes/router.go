@@ -9,6 +9,7 @@ import (
 	"github.com/mnuddindev/devpulse/config"
 	"github.com/mnuddindev/devpulse/controllers"
 	"github.com/mnuddindev/devpulse/pkg/auth"
+	"github.com/mnuddindev/devpulse/pkg/services"
 )
 
 func NewRoutes(app *fiber.App, config *config.ServerConfig, system *controllers.CentralSystem) {
@@ -25,7 +26,10 @@ func NewRoutes(app *fiber.App, config *config.ServerConfig, system *controllers.
 		}),
 	)
 
-	app.Use(auth.RefreshTokenMiddleware(system.DB))
+	userService := services.NewUserSystem(system.DB)
+
+	// refresh token middleware
+	app.Use(auth.RefreshTokenMiddleware(userService))
 
 	// home router
 	app.Get("/", func(c *fiber.Ctx) error {
@@ -44,6 +48,9 @@ func NewRoutes(app *fiber.App, config *config.ServerConfig, system *controllers.
 	// Protected routes
 	app.Get("/protected", func(c *fiber.Ctx) error {
 		userID := c.Locals("user_id")
-		return c.JSON(fiber.Map{"user_id": userID})
+		return c.Status(fiber.StatusOK).JSON(fiber.Map{
+			"message": "This is private data!",
+			"user_id": userID,
+		})
 	})
 }

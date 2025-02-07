@@ -8,12 +8,9 @@ import (
 	"github.com/mnuddindev/devpulse/pkg/logger"
 	"github.com/mnuddindev/devpulse/pkg/services"
 	"github.com/sirupsen/logrus"
-	"gorm.io/gorm"
 )
 
-var uc *services.UserSystem
-
-func RefreshTokenMiddleware(db *gorm.DB) fiber.Handler {
+func RefreshTokenMiddleware(uc *services.UserSystem) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		// Skip token refresh for specific routes (e.g., /refresh, /login)
 		if c.Path() == "/refresh" || c.Path() == "/login" || c.Path() == "/register" {
@@ -24,7 +21,7 @@ func RefreshTokenMiddleware(db *gorm.DB) fiber.Handler {
 		accessToken := c.Cookies("access_token")
 		if accessToken == "" {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error":  "Unauthorized",
+				"error":  "Access token missing",
 				"status": fiber.StatusUnauthorized,
 			})
 		}
@@ -33,8 +30,8 @@ func RefreshTokenMiddleware(db *gorm.DB) fiber.Handler {
 		claims, err := VerifyToken(accessToken)
 		if err != nil {
 			// If token is expired, attempt to refresh
-			if err.Error() == "Token is expired" {
-				return handleTokenRefresh(c)
+			if err.Error() == "Token is expired" || err.Error() == "token has expired" || err.Error() == "token is expired" {
+				return handleTokenRefresh(c, uc)
 			}
 
 			// Other errors (e.g., invalid token)
@@ -42,7 +39,7 @@ func RefreshTokenMiddleware(db *gorm.DB) fiber.Handler {
 				"error": err,
 			}).Error("Invalid access token")
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error":  "Unauthorized",
+				"error":  "Unauthorized 02",
 				"status": fiber.StatusUnauthorized,
 			})
 		}
@@ -54,7 +51,7 @@ func RefreshTokenMiddleware(db *gorm.DB) fiber.Handler {
 	}
 }
 
-func handleTokenRefresh(c *fiber.Ctx) error {
+func handleTokenRefresh(c *fiber.Ctx, uc *services.UserSystem) error {
 	// Extract refresh token from cookie
 	refreshToken := c.Cookies("refresh_token")
 	if refreshToken == "" {
@@ -71,7 +68,7 @@ func handleTokenRefresh(c *fiber.Ctx) error {
 			"error": err,
 		}).Error("Invalid refresh token")
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error":  "Unauthorized",
+			"error":  "Unauthorized 03",
 			"status": fiber.StatusUnauthorized,
 		})
 	}
@@ -81,54 +78,39 @@ func handleTokenRefresh(c *fiber.Ctx) error {
 	user, err := uc.UserBy("id = ?", userID)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
-			"error": err,
+			"error":   err,
+			"user_id": userID,
 		}).Error("User not found")
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error":  "Unauthorized",
+			"error":  "Unauthorized 04",
 			"status": fiber.StatusUnauthorized,
 		})
 	}
 
 	// Generate new tokens (access + refresh)
-	newAccessToken, newRefreshToken, err := GenerateJWT(user.ID, user.Email)
+	newAccessToken, err := GenerateAccessToken(user.ID, user.Email)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 		}).Error("Failed to generate new tokens")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":  "Internal server error",
+			"error":  "Token generation failed",
 			"status": fiber.StatusInternalServerError,
 		})
 	}
 
 	// Set new tokens in cookies
-	setTokenCookies(c, newAccessToken, newRefreshToken)
-
-	// Update context with new access token for current request
-	c.Locals("user_id", user.ID.String())
-
-	// Proceed with the request
-	return c.Next()
-}
-
-func setTokenCookies(c *fiber.Ctx, accessToken, refreshToken string) {
 	// Access token cookie (15 minutes)
 	c.Cookie(&fiber.Cookie{
 		Name:     "access_token",
-		Value:    accessToken,
+		Value:    newAccessToken,
 		Expires:  time.Now().Add(15 * time.Minute),
 		HTTPOnly: true,
-		Secure:   true,     // Use in production (HTTPS-only)
-		SameSite: "Strict", // Prevent CSRF
 	})
 
-	// Refresh token cookie (30 days)
-	c.Cookie(&fiber.Cookie{
-		Name:     "refresh_token",
-		Value:    refreshToken,
-		Expires:  time.Now().Add(30 * 24 * time.Hour),
-		HTTPOnly: true,
-		Secure:   true,     // Use in production (HTTPS-only)
-		SameSite: "Strict", // Prevent CSRF
-	})
+	// Update context with new access token for current request
+	c.Locals("user_id", user.ID)
+
+	// Proceed with the request
+	return c.Next()
 }
