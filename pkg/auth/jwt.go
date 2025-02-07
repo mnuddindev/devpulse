@@ -98,22 +98,6 @@ func GenerateJWT(userID uuid.UUID, email string) (string, string, error) {
 	return atoken, rtoken, err
 }
 
-// ValidateJWT verifies the token
-func ValidateJWT(tokenString string) (*jwt.MapClaims, error) {
-	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		return jwtSecretKey, nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
-		return &claims, nil
-	}
-
-	return nil, errors.New("invalid token")
-}
-
 // VerifyToken verifies the token by extracting the token and cross checking secretkey, values, signing method returns
 func VerifyToken(tokenString string) (*Claims, error) {
 	//

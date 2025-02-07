@@ -1,9 +1,12 @@
 package routes
 
 import (
+	"time"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/compress"
 	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/mnuddindev/devpulse/config"
@@ -24,8 +27,16 @@ func NewRoutes(app *fiber.App, config *config.ServerConfig, system *controllers.
 		compress.New(compress.Config{
 			Level: compress.LevelBestCompression,
 		}),
+		limiter.New(limiter.Config{
+			Expiration: 1 * time.Minute, // Track requests per minute
+			Max:        10,              // Allow 10 requests per minute
+			KeyGenerator: func(c *fiber.Ctx) string {
+				return c.IP() // Rate-limit based on IP
+			},
+		}),
 	)
 
+	// userservice to access crud
 	userService := services.NewUserSystem(system.DB)
 
 	// refresh token middleware
