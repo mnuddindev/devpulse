@@ -140,7 +140,8 @@ func (us *UserSystem) UserBy(condition string, args ...interface{}) (*models.Use
 func (us *UserSystem) ActiveUser(userid uuid.UUID) error {
 	var user models.User
 	updates := map[string]interface{}{
-		"is_active": true,
+		"is_active":         true,
+		"is_email_verified": true,
 	}
 	if err := us.crud.Update(&user, "id = ?", userid, updates); err != nil {
 		logrus.WithFields(logrus.Fields{

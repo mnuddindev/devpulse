@@ -42,8 +42,6 @@ type User struct {
 	// Email verified or not
 	IsEmailVerified bool `gorm:"default:false" json:"is_email_verified"`
 
-	// Last login time
-	LastLogin time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"last_login"`
 	// number of posts
 	PostsCount int `gorm:"default:0" json:"posts_count"`
 	// number of comments
