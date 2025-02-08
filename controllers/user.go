@@ -20,7 +20,7 @@ func (uc *UserController) UserProfile(c *fiber.Ctx) error {
 	}
 
 	// fetch user profile
-	user, err := uc.userSystem.UserProfile(userId)
+	user, err := uc.userSystem.UserBy("id = ?", userId)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
