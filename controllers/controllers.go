@@ -13,6 +13,16 @@ type CentralSystem struct {
 	Usercontroller *UserController
 }
 
+type UserController struct {
+	userSystem *services.UserSystem
+}
+
+func NewUserController(userSystem *services.UserSystem) *UserController {
+	return &UserController{
+		userSystem: userSystem,
+	}
+}
+
 func StartServices(config *config.Postgres) (*CentralSystem, error) {
 	logger.Log.Info("Initializing application system")
 	db := gorm.Connect(config)

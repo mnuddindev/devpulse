@@ -98,6 +98,20 @@ func (us *UserSystem) LoginUser(email, password string) (*models.User, error) {
 	return &user, nil
 }
 
+// UserProfile fetch everything about user from the db
+func (us *UserSystem) UserProfile(id uuid.UUID) (models.User, error) {
+	var user models.User
+	err := us.crud.DB.Preload("Notifications").Select("id, username, first_name, last_name, bio, avatar_url, job_title, employer, location, github_url, website, skills, interests, is_active, theme_preference, created_at, updated_at").Where("id = ?", id).First(&user).Error
+	if err != nil {
+		if err == grm.ErrRecordNotFound {
+			logger.Log.WithFields(logrus.Fields{
+				"user_id": id,
+			}).Warn("User not found")
+		}
+	}
+	return user, err
+}
+
 // UserBy will fetch and filter out any data by given condition Like GetByLocation
 func (us *UserSystem) UserBy(condition string, args ...interface{}) (*models.User, error) {
 	// an empty instance of user model
@@ -160,49 +174,6 @@ func (us *UserSystem) UserActiveByID(userid string) (bool, error) {
 	}).Info("User active status checked successfully!!")
 	return true, nil
 }
-
-// GetOTP generates ONE TIME PASSWORD and assigns an otp the user
-// func (us *UserSystem) GetOTP(email string) int64 {
-// 	// empty instance of model user
-// 	var user models.User
-
-// 	// check if user available
-// 	if err := us.crud.GetByCondition(&user, "email = ?", email); err != nil {
-// 		// log if failed to gather user
-// 		logger.Log.WithFields(logrus.Fields{
-// 			"error": err,
-// 			"email": email,
-// 		}).Error("Failed to fetch usr for OTP generation")
-// 		return 0
-// 	}
-
-// 	// generating otp
-// 	otp, err := utils.GenerateOTP()
-// 	if err != nil {
-// 		logger.Log.WithFields(logrus.Fields{
-// 			"error": err,
-// 			"field": "OTP Generation",
-// 		}).Error("OTP Generation failed")
-// 		return 0
-// 	}
-
-// 	updates := map[string]interface{}{
-// 		"otp": otp,
-// 	}
-// 	if err := us.crud.Update(&user, "id = ?", user.ID, updates); err != nil {
-// 		logger.Log.WithFields(logrus.Fields{
-// 			"error": err,
-// 			"user":  user,
-// 		}).Error("Failed to update user with OTP")
-// 		return 0
-// 	}
-
-// 	// log if succed
-// 	logger.Log.WithFields(logrus.Fields{
-// 		"user": user,
-// 	}).Info("OTP generated and assigned successfully")
-// 	return user.OTP
-// }
 
 // Users get all the users from the database
 func (us *UserSystem) Users() ([]models.User, error) {

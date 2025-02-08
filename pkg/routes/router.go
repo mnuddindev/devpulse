@@ -56,8 +56,12 @@ func NewRoutes(app *fiber.App, config *config.ServerConfig, system *controllers.
 	app.Post("/login", system.Usercontroller.Login)
 	app.Post("/logout", system.Usercontroller.Logout)
 
+	user := app.Group("/user", auth.IsAuth())
+
+	user.Get("/profile", system.Usercontroller.UserProfile)
+
 	// Protected routes
-	app.Get("/protected", func(c *fiber.Ctx) error {
+	app.Get("/protected", auth.IsAuth(), func(c *fiber.Ctx) error {
 		userID := c.Locals("user_id")
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{
 			"message": "This is private data!",
