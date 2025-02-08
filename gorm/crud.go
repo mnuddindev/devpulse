@@ -2,8 +2,10 @@ package gorm
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/mnuddindev/devpulse/pkg/logger"
+	"github.com/mnuddindev/devpulse/pkg/models"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
@@ -136,4 +138,45 @@ func (g *GormDB) Delete(model interface{}, id interface{}) error {
 		"model": model,
 	}).Info("Record updated successfully!!")
 	return nil
+}
+
+// updateManyToMany updates many2many connections
+func (g *GormDB) updateManyToMany(userField interface{}, names []string, field string, model interface{}) {
+	if names == nil {
+		return
+	}
+
+	// Slice to hold th update records
+	var newItems []interface{}
+
+	// Loop through the names and find or create records
+	for _, name := range names {
+		item := model
+		g.DB.FirstOrCreate(&item, field+" = ?", strings.ToLower(name))
+		newItems = append(newItems, item)
+	}
+
+	switch fieldPtr := userField.(type) {
+	case *[]models.Skill:
+		*fieldPtr = newItemsToType[models.Skill](newItems)
+	case *[]models.Interest:
+		*fieldPtr = newItemsToType[models.Interest](newItems)
+	case *[]models.Badge:
+		*fieldPtr = newItemsToType[models.Badge](newItems)
+	case *[]models.Role:
+		*fieldPtr = newItemsToType[models.Role](newItems)
+	default:
+		logrus.Warnf("updateManyToMany: Unhandled type %T", userField)
+	}
+}
+
+// newItemsToType converts []interface{} to the correct type slice
+func newItemsToType[T any](items []interface{}) []T {
+	var result []T
+	for _, item := range items {
+		if typedItem, ok := item.(T); ok {
+			result = append(result, typedItem)
+		}
+	}
+	return result
 }
