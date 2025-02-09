@@ -25,7 +25,7 @@ type User struct {
 	// Bio of the user
 	Bio string `gorm:"type:text;size:255;null" json:"bio" validate:"max=255"`
 	// Avatar Url of the user
-	AvatarUrl string `gorm:"type:text;size:255;null" json:"avatar_url"`
+	AvatarUrl string `gorm:"type:text;size:255;null" json:"avatar_url" validate:"url"`
 	// Job Title of the user
 	JobTitle string `gorm:"size:100;null" json:"job_title" validate:"max=100"`
 	// Company of the user
@@ -33,9 +33,22 @@ type User struct {
 	// Location of the user
 	Location string `gorm:"size:100;null" json:"location" validate:"max=100"`
 	// GithubURL of the user
-	GithubUrl string `gorm:"size:255;" json:"github_url"`
+	GithubUrl string `gorm:"size:255;" json:"github_url" validate:"url"`
 	// Website of the user
-	Website string `gorm:"size:255;" json:"website"`
+	Website string `gorm:"size:255;" json:"website" validate:"url"`
+
+	// Current Learning is for current learning desc
+	CurrentLearning string `gorm:"size:200;type:text" json:"current_learning" validate:"max=200"`
+	// AvailableFor is what you upto
+	AvailableFor string `gorm:"size:200;type:text" json:"available_for" validate:"max=200"`
+	// What is you are doing now
+	CurrentHackingOn string `gorm:"size:200;type:text" json:"current_hacking_on" validate:"max=200"`
+	// Pronouns is for personal attributes to call someone
+	Pronouns string `gorm:"size:100;type:text" json:"pronouns" validate:"max=100"`
+	// Academic background
+	Education string `gorm:"size:100;type:text" json:"education" validate:"max=100"`
+	// Brand Color is for color accent for users profile
+	BrandColor string `gorm:"size:100;type:text" json:"brand_color" validate:"max=7"`
 
 	// User account activation
 	IsActive bool `gorm:"default:false" json:"is_active"`
