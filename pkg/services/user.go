@@ -118,7 +118,7 @@ func (us *UserSystem) UserBy(condition string, args ...interface{}) (*models.Use
 	var user models.User
 
 	// getting user details by given condition for instance ByLocation, BySkills, ByID
-	if err := us.crud.GetByCondition(&user, condition, args...); err != nil {
+	if err := us.crud.GetByCondition(&user, condition, args, []string{"Interests", "Badges", "Roles", "Followers", "Following", "Notifications", "NotificationsPreferences"}, "", 0, 0); err != nil {
 		// log if failed to fetch by condition
 		logger.Log.WithFields(logrus.Fields{
 			"error":     err,
@@ -195,13 +195,13 @@ func (us *UserSystem) Users() ([]models.User, error) {
 	return users, nil
 }
 
-// DeleteUsers deletes user by ID
-func (us *UserSystem) DeleteUser(userid uuid.UUID) error {
+// Update Users updates user by ID
+func (us *UserSystem) UpdateUser(condition string, userid uuid.UUID, updates interface{}) error {
 	// an empty instance for user model
 	var user models.User
 
 	// delete user data using id
-	if err := us.crud.Delete(&user, userid); err != nil {
+	if err := us.crud.Delete(&user, "id = ?", []interface{}{userid}); err != nil {
 		// log if failed
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -215,22 +215,30 @@ func (us *UserSystem) DeleteUser(userid uuid.UUID) error {
 	return nil
 }
 
-// UpdateUser updates a user's details
-func (us *UserSystem) UpdateUser(userdata *models.User, userid uuid.UUID) error {
-	// update user data
+// UpdateUserMany updates many2many field
+func (us *UserSystem) UpdateUserMany(assoc string, userdata interface{}) {
 	var user models.User
-	userd := utils.StructToMap(userdata)
-	if err := us.crud.Update(&user, "id = ?", userid, userd); err != nil {
-		// log if failed to update user data
+	if err := us.crud.UpdateManyToMany(&user, assoc, userdata); err != nil {
+		logger.Log.Error(err)
+	}
+}
+
+// DeleteUsers deletes user by ID
+func (us *UserSystem) DeleteUser(userid uuid.UUID) error {
+	// an empty instance for user model
+	var user models.User
+
+	// delete user data using id
+	if err := us.crud.Delete(&user, "id = ?", []interface{}{userid}); err != nil {
+		// log if failed
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
-			"user":  user,
-		}).Error("Failed to update user")
-		return errors.New("failed to update user")
+			"id":    userid,
+		}).Error("Failed to delete user")
+		return errors.New("failed to delete user")
 	}
-
 	logger.Log.WithFields(logrus.Fields{
-		"user": user,
-	}).Info("User updated Successfully!!")
+		"id": userid,
+	}).Info("User deleted Successfully!!")
 	return nil
 }

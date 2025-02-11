@@ -42,7 +42,7 @@ type User struct {
 	// AvailableFor is what you upto
 	AvailableFor string `gorm:"size:200;type:text" json:"available_for" validate:"max=200"`
 	// What is you are doing now
-	CurrentHackingOn string `gorm:"size:200;type:text" json:"current_hacking_on" validate:"max=200"`
+	CurrentlyHackingOn string `gorm:"size:200;type:text" json:"currently_hacking_on" validate:"max=200"`
 	// Pronouns is for personal attributes to call someone
 	Pronouns string `gorm:"size:100;type:text" json:"pronouns" validate:"max=100"`
 	// Academic background
@@ -69,7 +69,7 @@ type User struct {
 	Role string `gorm:"size:50;default:'user'" json:"role"`
 
 	// Skills of the user
-	Skills []Skill `gorm:"many2many:user_skills;" json:"skills" validate:"max=255"`
+	Skills string `gorm:"type:text;size:200" json:"skills" validate:"max=255"`
 	// Interests of the user
 	Interests []Interest `gorm:"many2many:user_interests;" json:"interests" validate:"max=255"`
 	// Badges for users
@@ -77,13 +77,13 @@ type User struct {
 	// Roles for user
 	Roles []Role `gorm:"many2many:user_roles" json:"roles"`
 	// Followers to follow each other
-	Followers []string `gorm:"type:text[]" json:"followers"`
+	Followers []User `gorm:"many2many:user_followers;association_jointable_foreignkey:follower_id" json:"followers"`
 	// Who is following
-	Following []string `gorm:"type:text[]" json:"following"`
+	Following []User `gorm:"many2many:user_followings;association_jointable_foreignkey:following_id" json:"following"`
 	// Notification that user got from blog
-	Notifications []Notification `gorm:"foreignKey:UserID" json:"notifications"`
+	Notifications []Notification `gorm:"many2many:user_notifications" json:"notifications"`
 	// notifications
-	NotificationsPreferences []NotificationPrefrences `gorm:"foreignkey:UserID" json:"notifipre"`
+	NotificationsPreferences []NotificationPrefrences `gorm:"many2many:user_notifipre" json:"notifipre"`
 
 	// theme preference of the user
 	ThemePreference string         `gorm:"default:light" json:"theme_preference"`
@@ -93,33 +93,35 @@ type User struct {
 }
 
 type Role struct {
-	ID   uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
-	Name string    `gorm:"size:50;not null;unique" json:"name"` // e.g., "admin", "moderator", "writer"
-}
-
-// Skill Model
-type Skill struct {
-	ID   uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
-	Name string    `gorm:"size:100;not null;unique" json:"name"`
+	ID     uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
+	UserID uuid.UUID `gorm:"type:uuid;not null" json:"user_id"`
+	Name   string    `gorm:"size:50;not null;unique" json:"name"` // e.g., "admin", "moderator", "writer"
 }
 
 // Interest Model
 type Interest struct {
-	ID   uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
-	Name string    `gorm:"size:100;not null;unique" json:"name"`
-}
-
-// SocialLinks Model for User
-type SocialLinks struct {
-	Twitter   string `gorm:"size:255;null" json:"twitter"`
-	LinkedIn  string `gorm:"size:255;null" json:"linkedin"`
-	Instagram string `gorm:"size:255;null" json:"instagram"`
+	ID     uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
+	UserID uuid.UUID `gorm:"type:uuid;not null" json:"user_id"`
+	Name   string    `gorm:"size:100;not null;unique" json:"name"`
 }
 
 // Badge Model for User
 type Badge struct {
-	ID   uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
-	Name string    `gorm:"size:100;not null;unique" json:"name"`
+	ID     uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
+	UserID uuid.UUID `gorm:"type:uuid;not null" json:"user_id"`
+	Name   string    `gorm:"size:100;not null;unique" json:"name"`
+}
+
+type UserFollower struct {
+	UserID     uuid.UUID `gorm:"type:uuid;primaryKey"`
+	FollowerID uuid.UUID `gorm:"type:uuid;primaryKey"`
+	FollowedAt time.Time `gorm:"default:CURRENT_TIMESTAMP"`
+}
+
+type UserFollowing struct {
+	UserID      uuid.UUID `gorm:"type:uuid;primaryKey"`
+	FollowingID uuid.UUID `gorm:"type:uuid;primaryKey"`
+	FollowedAt  time.Time `gorm:"default:CURRENT_TIMESTAMP"`
 }
 
 // Notification Model
@@ -134,6 +136,7 @@ type Notification struct {
 
 type NotificationPrefrences struct {
 	// Send notification to user if any event occurs
+	ID              uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
 	UserID          uuid.UUID `gorm:"type:uuid;not null" json:"user_id"`
 	EmailOnLikes    bool      `gorm:"default:false" json:"email_on_likes"`
 	EmailOnComments bool      `gorm:"default:false" json:"email_on_comments"`

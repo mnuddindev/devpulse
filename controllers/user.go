@@ -77,28 +77,7 @@ func (uc *UserController) UpdateUserProfile(c *fiber.Ctx) error {
 	userid := c.Locals("user_id").(uuid.UUID)
 
 	// parse request body
-	var updateData struct {
-		FirstName          *string   `json:"first_name" validate:"omitempty,min=3"`
-		LastName           *string   `json:"last_name" validate:"omitempty,min=3"`
-		Email              *string   `json:"email" validate:"omitempty,email"`
-		Username           *string   `json:"username" validate:"omitempty,min=3"`
-		AvatarUrl          string    `json:"avatar_url" validate:"omitempty,url"`
-		Website            *string   `json:"website" validate:"omitempty,url,max=100"`
-		Location           *string   `json:"location" validate:"omitempty,max=100"`
-		Bio                *string   `json:"bio" validate:"omitempty,max=200"`
-		CurrentlyLearning  *string   `json:"currently_learning" validate:"omitempty,max=200"`
-		AvailableFor       *string   `json:"available_for" validate:"omitempty,max=200"`
-		CurrentlyHackingOn *string   `json:"currently_hacking_on" validate:"omitempty,max=200"`
-		Pronouns           *string   `json:"pronouns" validate:"omitempty,max=100"`
-		JobTitle           *string   `json:"job_title" validate:"omitempty,max=100"`
-		Education          *string   `json:"education" validate:"omitempty,max=100"`
-		BrandColor         *string   `json:"brand_color" validate:"omitempty,max=100"`
-		GithubUrl          *string   `json:"github_url" validate:"omitempty,url"`
-		Skills             *[]string `json:"skills"`
-		Interests          *[]string `json:"interests"`
-		Badges             *[]string `json:"badges"`
-		Roles              *[]string `json:"roles"`
-	}
+	updateData := new(models.User)
 	if err := c.BodyParser(&updateData); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error":  err,
@@ -123,7 +102,44 @@ func (uc *UserController) UpdateUserProfile(c *fiber.Ctx) error {
 	}
 
 	// find user
-	var user models.User
-	if err := 
-	return nil
+	user, err := uc.userSystem.UserBy("id = ?", userid)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to update profile",
+		})
+	}
+
+	if err := uc.userSystem.UpdateUser("id = ?", user.ID, updateData); err != nil {
+		logger.Log.WithFields(logrus.Fields{
+			"error":  err,
+			"userid": user.ID,
+		}).Error("Failed to update user")
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to update profile",
+		})
+	}
+
+	if len(updateData.Skills) > 0 {
+		uc.userSystem.UpdateUserMany("Skills", updateData.Skills)
+	}
+
+	if len(updateData.Interests) > 0 {
+		uc.userSystem.UpdateUserMany("Interests", updateData.Interests)
+	}
+	if len(updateData.Badges) > 0 {
+		uc.userSystem.UpdateUserMany("Badges", updateData.Badges)
+	}
+	if len(updateData.Roles) > 0 {
+		uc.userSystem.UpdateUserMany("Roles", updateData.Roles)
+	}
+	if len(updateData.Followers) > 0 {
+		uc.userSystem.UpdateUserMany("Followers", updateData.Followers)
+	}
+	if len(updateData.Following) > 0 {
+		uc.userSystem.UpdateUserMany("Following", updateData.Following)
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"user": user,
+	})
 }

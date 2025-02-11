@@ -2,10 +2,8 @@ package gorm
 
 import (
 	"errors"
-	"strings"
 
 	"github.com/mnuddindev/devpulse/pkg/logger"
-	"github.com/mnuddindev/devpulse/pkg/models"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
@@ -44,6 +42,9 @@ func (g *GormDB) Create(model interface{}) error {
 		}).Error("Error while creating a new record")
 		return errors.New("error while creating a new record")
 	}
+	logger.Log.WithFields(logrus.Fields{
+		"model": model,
+	}).Info("Record Created Successfully!!")
 	return nil
 }
 
@@ -76,8 +77,22 @@ func (g *GormDB) GetAll(model interface{}) error {
 }
 
 // GetByCondition records
-func (g *GormDB) GetByCondition(model interface{}, condition string, args ...interface{}) error {
-	if err := g.DB.Where(condition, args...).Find(model).Error; err != nil {
+func (g *GormDB) GetByCondition(model interface{}, condition string, args []interface{}, preloads []string, order string, limit, offset int) error {
+	query := g.DB.Where(condition, args...)
+
+	for _, preload := range preloads {
+		query = query.Preload(preload)
+	}
+
+	if order != "" {
+		query = query.Order(order)
+	}
+
+	if limit > 0 {
+		query = query.Limit(limit).Offset(offset)
+	}
+
+	if err := query.Find(model).Error; err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error":     err,
 			"model":     model,
@@ -92,9 +107,9 @@ func (g *GormDB) GetByCondition(model interface{}, condition string, args ...int
 }
 
 // Update a record by ID
-func (g *GormDB) Update(model interface{}, condition string, args interface{}, updates interface{}) error {
+func (g *GormDB) Update(model interface{}, condition string, args []interface{}, updates interface{}) error {
 	// Find the record by ID or condition
-	result := g.DB.Model(model).Where(condition, args).Updates(updates)
+	result := g.DB.Model(model).Where(condition, args...).Updates(updates)
 	if result.Error != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error":     result.Error,
@@ -126,8 +141,8 @@ func (g *GormDB) Update(model interface{}, condition string, args interface{}, u
 }
 
 // Delete a record by ID
-func (g *GormDB) Delete(model interface{}, id interface{}) error {
-	if err := g.DB.Delete(model, id).Error; err != nil {
+func (g *GormDB) Delete(model interface{}, condition string, args []interface{}) error {
+	if err := g.DB.Where(condition, args...).Delete(model).Error; err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 			"model": model,
@@ -140,43 +155,72 @@ func (g *GormDB) Delete(model interface{}, id interface{}) error {
 	return nil
 }
 
-// updateManyToMany updates many2many connections
-func (g *GormDB) updateManyToMany(userField interface{}, names []string, field string, model interface{}) {
-	if names == nil {
-		return
+// Transaction Handler
+func (g *GormDB) Transaction(fn func(tx *gorm.DB) error) error {
+	tx := g.DB.Begin()
+	if tx.Error != nil {
+		logger.Log.WithError(tx.Error).Error("Failed to start transaction")
+		return tx.Error
 	}
-
-	// Slice to hold th update records
-	var newItems []interface{}
-
-	// Loop through the names and find or create records
-	for _, name := range names {
-		item := model
-		g.DB.FirstOrCreate(&item, field+" = ?", strings.ToLower(name))
-		newItems = append(newItems, item)
+	if err := fn(tx); err != nil {
+		tx.Rollback()
+		logger.Log.WithError(err).Error("Transaction failed, rolled back")
+		return err
 	}
-
-	switch fieldPtr := userField.(type) {
-	case *[]models.Skill:
-		*fieldPtr = newItemsToType[models.Skill](newItems)
-	case *[]models.Interest:
-		*fieldPtr = newItemsToType[models.Interest](newItems)
-	case *[]models.Badge:
-		*fieldPtr = newItemsToType[models.Badge](newItems)
-	case *[]models.Role:
-		*fieldPtr = newItemsToType[models.Role](newItems)
-	default:
-		logrus.Warnf("updateManyToMany: Unhandled type %T", userField)
+	if err := tx.Commit().Error; err != nil {
+		logger.Log.WithError(err).Error("Failed to commit transaction")
+		return err
 	}
+	logger.Log.Info("Transaction committed successfully")
+	return nil
 }
+
+// Many2Many update many2many connections
+func (g *GormDB) UpdateManyToMany(model interface{}, assoc string, userdata interface{}) error {
+	if err := g.DB.Model(model).Association(assoc).Replace(userdata); err != nil {
+		logger.Log.WithError(err).Error("Failed to update ManyToMany")
+		return err
+	}
+	return nil
+}
+
+// updateManyToMany updates many2many connections
+// func (g *GormDB) UpdateManyToMany(userField interface{}, names []string, field string, model interface{}) {
+// 	if names == nil {
+// 		return
+// 	}
+
+// 	// Slice to hold th update records
+// 	var newItems []interface{}
+
+// 	// Loop through the names and find or create records
+// 	for _, name := range names {
+// 		item := model
+// 		g.DB.FirstOrCreate(&item, field+" = ?", strings.ToLower(name))
+// 		newItems = append(newItems, item)
+// 	}
+
+// 	switch fieldPtr := userField.(type) {
+// 	case *[]models.Skill:
+// 		*fieldPtr = newItemsToType[models.Skill](newItems)
+// 	case *[]models.Interest:
+// 		*fieldPtr = newItemsToType[models.Interest](newItems)
+// 	case *[]models.Badge:
+// 		*fieldPtr = newItemsToType[models.Badge](newItems)
+// 	case *[]models.Role:
+// 		*fieldPtr = newItemsToType[models.Role](newItems)
+// 	default:
+// 		logrus.Warnf("updateManyToMany: Unhandled type %T", userField)
+// 	}
+// }
 
 // newItemsToType converts []interface{} to the correct type slice
-func newItemsToType[T any](items []interface{}) []T {
-	var result []T
-	for _, item := range items {
-		if typedItem, ok := item.(T); ok {
-			result = append(result, typedItem)
-		}
-	}
-	return result
-}
+// func newItemsToType[T any](items []interface{}) []T {
+// 	var result []T
+// 	for _, item := range items {
+// 		if typedItem, ok := item.(T); ok {
+// 			result = append(result, typedItem)
+// 		}
+// 	}
+// 	return result
+// }
