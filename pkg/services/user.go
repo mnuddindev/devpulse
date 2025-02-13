@@ -69,6 +69,12 @@ func (us *UserSystem) LoginUser(email, password string) (*models.User, error) {
 		return nil, errors.New("invalid credentials")
 	}
 
+	if user.ID.String() == "00000000-0000-0000-0000-000000000000" {
+		logger.Log.WithFields(logrus.Fields{
+			"error": "User not found",
+		}).Warn("Unauthorized access attempt")
+	}
+
 	// Check password if the given password is correct
 	if err := utils.ComparePasswords(password, user.Password); err != nil {
 		// log if the user given password and the user password in db does not match

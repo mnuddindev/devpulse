@@ -12,29 +12,44 @@ import (
 )
 
 func (uc *UserController) UserProfile(c *fiber.Ctx) error {
-	userId := c.Locals("user_id").(uuid.UUID)
-	if userId == uuid.Nil {
+	// Get user ID from context
+	userId, ok := c.Locals("user_id").(uuid.UUID)
+	if !ok {
 		logger.Log.WithFields(logrus.Fields{
-			"error": "User ID missing from context",
+			"error": "User ID missing or invalid type in context",
 		}).Warn("Unauthorized access attempt")
+		// Return unauthorized status
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error":  "Unauthorized",
 			"status": fiber.StatusUnauthorized,
 		})
 	}
 
-	// fetch user profile
-	user, err := uc.userSystem.UserBy("id = ?", userId)
+	// Fetch user profile from the database
+	user, err := uc.userSystem.UserBy("id = $1", userId)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 		}).Error("Database error while fetching user profile")
+		// Return internal server error status
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":  "Internal server error",
 			"status": fiber.StatusInternalServerError,
 		})
 	}
 
+	if user.ID.String() == "00000000-0000-0000-0000-000000000000" {
+		logger.Log.WithFields(logrus.Fields{
+			"error": "User not found",
+		}).Warn("Unauthorized access attempt")
+		// Return unauthorized status
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error":  "User not found",
+			"status": fiber.StatusUnauthorized,
+		})
+	}
+
+	// Prepare user profile response
 	profileResponse := fiber.Map{
 		"id":                        user.ID,
 		"username":                  user.Username,
@@ -69,48 +84,69 @@ func (uc *UserController) UserProfile(c *fiber.Ctx) error {
 		"updated_at":                user.UpdatedAt,
 	}
 
+	// Return user profile response
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"user": profileResponse,
 	})
 }
 
 func (uc *UserController) UpdateUserProfile(c *fiber.Ctx) error {
-	// fetching current user id from context
-	userid := c.Locals("user_id").(uuid.UUID)
+	// Get user ID from context
+	userid, ok := c.Locals("user_id").(uuid.UUID)
+	if !ok {
+		logger.Log.WithFields(logrus.Fields{
+			"error": "User ID missing or invalid type in context",
+		}).Warn("Unauthorized access attempt")
+		// Return unauthorized status
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error":  "Unauthorized",
+			"status": fiber.StatusUnauthorized,
+		})
+	}
 
-	// parse request body
+	// Parse request body into updateData struct
 	updateData := new(models.UpdateUser)
 	if err := c.BodyParser(&updateData); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error":  err,
 			"userid": userid,
 		}).Error("Failed to parse request body")
+		// Return bad request status
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid request body",
 		})
 	}
 
-	// validate updateData
+	// Validate updateData
 	validator := utils.NewValidator()
 	if err := validator.Validate(updateData); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error":  err,
 			"userid": userid,
 		}).Error("User profile update validation failed while registering")
+		// Return unprocessable entity status
 		return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{
 			"errors": err,
 			"status": fiber.StatusUnprocessableEntity,
 		})
 	}
 
-	// find user
+	// Find user in the database
 	user, err := uc.userSystem.UserBy("id = ?", userid)
 	if err != nil {
+		// Return internal server error status
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to update profile",
 		})
 	}
 
+	if user.ID.String() == "00000000-0000-0000-0000-000000000000" {
+		logger.Log.WithFields(logrus.Fields{
+			"error": "User not found",
+		}).Warn("Unauthorized access attempt")
+	}
+
+	// Prepare updates map with non-nil fields from updateData
 	updates := make(map[string]interface{})
 	if updateData.Username != nil {
 		updates["username"] = updateData.Username
@@ -174,6 +210,7 @@ func (uc *UserController) UpdateUserProfile(c *fiber.Ctx) error {
 	}
 	updates["updated_at"] = time.Now()
 
+	// Update user in the database
 	if err := uc.userSystem.UpdateUser("id = ?", user.ID, updates); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -181,13 +218,16 @@ func (uc *UserController) UpdateUserProfile(c *fiber.Ctx) error {
 		}).Error("Update failed")
 	}
 
+	// Fetch updated user profile from the database
 	uu, err := uc.userSystem.UserBy("id = ?", userid)
 	if err != nil {
+		// Return internal server error status
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to update profile",
 		})
 	}
 
+	// Prepare updated user profile response
 	profileResponse := fiber.Map{
 		"id":                        uu.ID,
 		"username":                  uu.Username,
@@ -222,94 +262,146 @@ func (uc *UserController) UpdateUserProfile(c *fiber.Ctx) error {
 		"updated_at":                uu.UpdatedAt,
 	}
 
+	// Return updated user profile response
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"user": profileResponse,
 	})
 }
 
 func (uc *UserController) UpdateUserAccount(c *fiber.Ctx) error {
-	userid := c.Locals("user_id").(uuid.UUID)
+	// Get user ID from context
+	userid, ok := c.Locals("user_id").(uuid.UUID)
+	if !ok {
+		logger.Log.WithFields(logrus.Fields{
+			"error": "User ID missing or invalid type in context",
+		}).Warn("Unauthorized access attempt")
+		// Return unauthorized status
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error":  "Unauthorized",
+			"status": fiber.StatusUnauthorized,
+		})
+	}
 
+	// Define struct for update data
 	type UpdateData struct {
 		CurrentPassword string `json:"current_password" validate:"required,min=6"`
 		Password        string `json:"password" validate:"required,min=6,eqfield=ConfirmPassword"`
 		ConfirmPassword string `json:"confirm_password" validate:"required,min=6"`
 	}
 
-	// parsing body to the struct
+	// Parse request body into updateData struct
 	updateData := new(UpdateData)
 	if err := c.BodyParser(&updateData); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 			"model": "usermodel",
 		}).Error("Parsing Update account body failed")
+		// Return bad request status
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"status": fiber.StatusBadRequest,
 			"error":  "Failed to parse account body",
 		})
 	}
 
-	// validate updateData
+	// Validate updateData
 	validator := utils.NewValidator()
 	if err := validator.Validate(updateData); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error":  err,
 			"userid": userid,
 		}).Error("User profile update validation failed while registering")
+		// Return unprocessable entity status
 		return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{
 			"errors": err,
 			"status": fiber.StatusUnprocessableEntity,
 		})
 	}
 
-	// find user
+	// Find user in the database
 	user, err := uc.userSystem.UserBy("id = ?", userid)
 	if err != nil {
+		// Return internal server error status
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"status": fiber.StatusInternalServerError,
 			"error":  "Failed to update profile",
 		})
 	}
 
+	if user.ID.String() == "00000000-0000-0000-0000-000000000000" {
+		logger.Log.WithFields(logrus.Fields{
+			"error": "User not found",
+		}).Warn("Unauthorized access attempt")
+	}
+
+	// Compare current password with stored password
 	if err := utils.ComparePasswords(user.Password, updateData.CurrentPassword); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 			"user":  userid,
 		}).Error("Old password doesn't matched")
+		// Return bad request status
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"status": fiber.StatusBadRequest,
 			"error":  "Old Password mismatched",
 		})
 	}
 
-	// if updateData.Password != updateData.ConfirmPassword {
-	// 	logger.Log.WithFields(logrus.Fields{
-	// 		"error": err,
-	// 		"user":  userid,
-	// 	}).Error("Make sure the passwords match")
-	// 	return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-	// 		"status": fiber.StatusBadRequest,
-	// 		"error":  "New Password and Confirm Password not matched",
-	// 	})
-	// }
-
+	// Hash new password
 	password, _ := utils.HashPassword(updateData.Password)
 	updates := map[string]interface{}{
 		"password": password,
 	}
 
+	// Update user password in the database
 	if err := uc.userSystem.UpdateUser("id = ?", user.ID, updates); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 			"model": "usermodel",
 		}).Error("Update failed")
+		// Return bad request status
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Failed to update user Password",
 		})
 	}
 
+	// Return success message
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"status":  fiber.StatusOK,
 		"message": "Password Updated successfully!!",
+	})
+}
+
+func (uc *UserController) UpdateUserNotifications(c *fiber.Ctx) error {
+	return nil
+}
+
+func (uc *UserController) DeleteUser(c *fiber.Ctx) error {
+	// Get user ID from context
+	userid, ok := c.Locals("user_id").(uuid.UUID)
+	if !ok {
+		logger.Log.WithFields(logrus.Fields{
+			"error": "User ID missing or invalid type in context",
+		}).Warn("Unauthorized access attempt")
+		// Return unauthorized status
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error":  "Unauthorized",
+			"status": fiber.StatusUnauthorized,
+		})
+	}
+
+	if err := uc.userSystem.DeleteUser(userid); err != nil {
+		logger.Log.WithFields(logrus.Fields{
+			"error": "User deletation failed",
+		}).Warn("User can't be deleted")
+		// Return unauthorized status
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":  "Unauthorized",
+			"status": fiber.StatusInternalServerError,
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"status":  fiber.StatusOK,
+		"message": "User deleted successfully!!",
 	})
 }
