@@ -59,6 +59,7 @@ func NewRoutes(app *fiber.App, config *config.ServerConfig, system *controllers.
 	user := app.Group("/user", auth.IsAuth())
 
 	user.Get("/profile", system.Usercontroller.UserProfile)
+	user.Put("/update/profile/me", system.Usercontroller.UpdateUserProfile)
 
 	// Protected routes
 	app.Get("/protected", auth.IsAuth(), func(c *fiber.Ctx) error {

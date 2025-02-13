@@ -44,6 +44,7 @@ func (uc *UserController) Registration(c *fiber.Ctx) error {
 		}).Error("OTP Generation failed")
 	}
 	user.OTP = otp
+	fmt.Println(user)
 	newUser, err := uc.userSystem.CreateUser(&user)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{

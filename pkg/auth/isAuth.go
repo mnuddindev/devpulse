@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/mnuddindev/devpulse/pkg/logger"
@@ -46,6 +47,8 @@ func IsAuth() fiber.Handler {
 		// Secure cookie settings
 		c.Cookie(&fiber.Cookie{
 			Name:     "access_token",
+			Value:    accessToken,
+			Expires:  time.Now().Add(15 * time.Minute),
 			Secure:   true,
 			HTTPOnly: true,
 			SameSite: "Strict",

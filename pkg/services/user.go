@@ -4,25 +4,12 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
-	"github.com/mnuddindev/devpulse/gorm"
 	"github.com/mnuddindev/devpulse/pkg/logger"
 	"github.com/mnuddindev/devpulse/pkg/models"
 	"github.com/mnuddindev/devpulse/pkg/utils"
 	"github.com/sirupsen/logrus"
 	grm "gorm.io/gorm"
 )
-
-// UserSystem struct that holds a reference to the CRUD operations using Gorm.
-type UserSystem struct {
-	crud *gorm.GormDB
-}
-
-// NewUserSystem initializes a new UserSystem with a given database connection.
-func NewUserSystem(db *grm.DB) *UserSystem {
-	return &UserSystem{
-		crud: gorm.NewGormDB(db),
-	}
-}
 
 // CreateUser creates a new user in the system after validation and password hashing.
 func (us *UserSystem) CreateUser(user *models.User) (*models.User, error) {
@@ -73,7 +60,7 @@ func (us *UserSystem) LoginUser(email, password string) (*models.User, error) {
 	var user models.User
 
 	// trying to get user by email to match credentials
-	if err := us.crud.GetByCondition(&user, "email = ?", email); err != nil {
+	if err := us.crud.GetByCondition(&user, "email = ?", []interface{}{email}, []string{}, "", 0, 0); err != nil {
 		// log if failed to find the user with the provided credentials
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -118,7 +105,7 @@ func (us *UserSystem) UserBy(condition string, args ...interface{}) (*models.Use
 	var user models.User
 
 	// getting user details by given condition for instance ByLocation, BySkills, ByID
-	if err := us.crud.GetByCondition(&user, condition, args, []string{"Interests", "Badges", "Roles", "Followers", "Following", "Notifications", "NotificationsPreferences"}, "", 0, 0); err != nil {
+	if err := us.crud.GetByCondition(&user, condition, args, []string{"Badges", "Roles", "Followers", "Following", "Notifications", "NotificationsPreferences"}, "", 0, 0); err != nil {
 		// log if failed to fetch by condition
 		logger.Log.WithFields(logrus.Fields{
 			"error":     err,
@@ -143,7 +130,7 @@ func (us *UserSystem) ActiveUser(userid uuid.UUID) error {
 		"is_active":         true,
 		"is_email_verified": true,
 	}
-	if err := us.crud.Update(&user, "id = ?", userid, updates); err != nil {
+	if err := us.crud.Update(&user, "id = ?", []interface{}{userid}, updates); err != nil {
 		logrus.WithFields(logrus.Fields{
 			"error": err,
 			"id":    userid,
@@ -201,7 +188,7 @@ func (us *UserSystem) UpdateUser(condition string, userid uuid.UUID, updates int
 	var user models.User
 
 	// delete user data using id
-	if err := us.crud.Delete(&user, "id = ?", []interface{}{userid}); err != nil {
+	if err := us.crud.Update(&user, condition, []interface{}{userid}, updates); err != nil {
 		// log if failed
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -211,14 +198,13 @@ func (us *UserSystem) UpdateUser(condition string, userid uuid.UUID, updates int
 	}
 	logger.Log.WithFields(logrus.Fields{
 		"id": userid,
-	}).Info("User deleted Successfully!!")
+	}).Info("User updated Successfully!!")
 	return nil
 }
 
 // UpdateUserMany updates many2many field
-func (us *UserSystem) UpdateUserMany(assoc string, userdata interface{}) {
-	var user models.User
-	if err := us.crud.UpdateManyToMany(&user, assoc, userdata); err != nil {
+func (us *UserSystem) UpdateUserMany(userid uuid.UUID, assoc string, userdata interface{}) {
+	if err := us.crud.UpdateManyToMany(&models.User{ID: userid}, assoc, userdata); err != nil {
 		logger.Log.Error(err)
 	}
 }

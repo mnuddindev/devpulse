@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/google/uuid"
 	"github.com/mnuddindev/devpulse/pkg/logger"
 	"github.com/sirupsen/logrus"
 	"gopkg.in/gomail.v2"
@@ -55,4 +56,18 @@ func SendActivationEmail(code int64, email, username string) error {
 
 	logrus.WithField("email", email).Info("activation email sent successfully")
 	return nil
+}
+
+// UUIDsFromStrings converts a slice of strings to a slice of UUIDs.
+func UUIDsFromStrings(strUUIDs []string) []uuid.UUID {
+	uuids := make([]uuid.UUID, len(strUUIDs))
+	for i, strUUID := range strUUIDs {
+		parsedUUID, err := uuid.Parse(strUUID)
+		if err != nil {
+			fmt.Println(err.Error())
+			return nil
+		}
+		uuids[i] = parsedUUID
+	}
+	return uuids
 }

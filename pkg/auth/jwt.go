@@ -30,7 +30,7 @@ func GenerateAccessToken(userID uuid.UUID, email string) (string, error) {
 		UserID: userID,
 		Email:  email,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(1 * time.Minute)), // Access token expires in 15 minutes
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(15 * time.Minute)), // Access token expires in 15 minutes
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			ID:        uuid.NewString(),
 		},

@@ -8,134 +8,79 @@ import (
 )
 
 type User struct {
-	// Use google uuid to generate a unique id for each user
-	ID uuid.UUID `gorm:"type:uuid;primary_key;default:uuid_generate_v4()" json:"id"`
-	// Unique username for each user
-	Username string `gorm:"size:255;not null;unique" json:"username" validate:"required,min=3"`
-	// Unique email for each user
-	Email string `gorm:"size:100;not null;unique" json:"email" validate:"required,email"`
-	// Password hash for each user (never expose this to the client)
-	Password string `gorm:"not null;" json:"password" validate:"required,min=6"`
-	// First name of the user
-	FirstName string `gorm:"size:100;not null;" json:"first_name" validate:"required,min=3"`
-	// Last name of the user
-	LastName string `gorm:"size:100;not null;" json:"last_name" validate:"required,min=3"`
-	// OTP for user
-	OTP int64 `gorm:"type:bigint;not null;" json:"otp"`
-	// Bio of the user
-	Bio string `gorm:"type:text;size:255;null" json:"bio" validate:"max=255"`
-	// Avatar Url of the user
-	AvatarUrl string `gorm:"type:text;size:255;null" json:"avatar_url" validate:"url"`
-	// Job Title of the user
-	JobTitle string `gorm:"size:100;null" json:"job_title" validate:"max=100"`
-	// Company of the user
-	Employer string `gorm:"size:100;null" json:"employer" validate:"max=100"`
-	// Location of the user
-	Location string `gorm:"size:100;null" json:"location" validate:"max=100"`
-	// GithubURL of the user
-	GithubUrl string `gorm:"size:255;" json:"github_url" validate:"url"`
-	// Website of the user
-	Website string `gorm:"size:255;" json:"website" validate:"url"`
+	ID                 uuid.UUID      `gorm:"type:uuid;primary_key;default:uuid_generate_v4()" json:"id"`
+	Username           string         `gorm:"size:255;not null;unique" json:"username" validate:"required,min=3"`
+	Email              string         `gorm:"size:100;not null;unique" json:"email" validate:"required,email"`
+	Password           string         `gorm:"not null;" json:"password" validate:"required,min=6"`
+	FirstName          string         `gorm:"size:100;not null;" json:"first_name" validate:"required,min=3"`
+	LastName           string         `gorm:"size:100;not null;" json:"last_name" validate:"required,min=3"`
+	OTP                int64          `gorm:"type:bigint;not null;" json:"otp"`
+	Bio                string         `gorm:"type:text;size:255;null" json:"bio" validate:"max=255"`
+	AvatarUrl          string         `gorm:"type:text;size:255;null" json:"avatar_url" validate:"omitempty,url"`
+	JobTitle           string         `gorm:"size:100;null" json:"job_title" validate:"max=100"`
+	Employer           string         `gorm:"size:100;null" json:"employer" validate:"max=100"`
+	Location           string         `gorm:"size:100;null" json:"location" validate:"max=100"`
+	GithubUrl          string         `gorm:"size:255;" json:"github_url" validate:"omitempty,url"`
+	Website            string         `gorm:"size:255;" json:"website" validate:"omitempty,url"`
+	CurrentLearning    string         `gorm:"size:200;type:text" json:"current_learning" validate:"max=200"`
+	AvailableFor       string         `gorm:"size:200;type:text" json:"available_for" validate:"max=200"`
+	CurrentlyHackingOn string         `gorm:"size:200;type:text" json:"currently_hacking_on" validate:"max=200"`
+	Pronouns           string         `gorm:"size:100;type:text" json:"pronouns" validate:"max=100"`
+	Education          string         `gorm:"size:100;type:text" json:"education" validate:"max=100"`
+	BrandColor         string         `gorm:"size:100;type:text" json:"brand_color" validate:"max=7"`
+	IsActive           bool           `gorm:"default:false" json:"is_active"`
+	IsEmailVerified    bool           `gorm:"default:false" json:"is_email_verified"`
+	PostsCount         int            `gorm:"default:0" json:"posts_count"`
+	CommentsCount      int            `gorm:"default:0" json:"comments_count"`
+	LikesCount         int            `gorm:"default:0" json:"likes_count"`
+	BookmarksCount     int            `gorm:"default:0" json:"bookmarks_count"`
+	LastSeen           time.Time      `gorm:"default:CURRENT_TIMESTAMP" json:"last_seen"`
+	Role               string         `gorm:"size:50;default:'user'" json:"role"`
+	ThemePreference    string         `gorm:"default:light" json:"theme_preference"`
+	CreatedAt          time.Time      `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
+	UpdatedAt          time.Time      `gorm:"default:CURRENT_TIMESTAMP" json:"updated_at"`
+	DeletedAt          gorm.DeletedAt `gorm:"index" json:"-"`
 
-	// Current Learning is for current learning desc
-	CurrentLearning string `gorm:"size:200;type:text" json:"current_learning" validate:"max=200"`
-	// AvailableFor is what you upto
-	AvailableFor string `gorm:"size:200;type:text" json:"available_for" validate:"max=200"`
-	// What is you are doing now
-	CurrentlyHackingOn string `gorm:"size:200;type:text" json:"currently_hacking_on" validate:"max=200"`
-	// Pronouns is for personal attributes to call someone
-	Pronouns string `gorm:"size:100;type:text" json:"pronouns" validate:"max=100"`
-	// Academic background
-	Education string `gorm:"size:100;type:text" json:"education" validate:"max=100"`
-	// Brand Color is for color accent for users profile
-	BrandColor string `gorm:"size:100;type:text" json:"brand_color" validate:"max=7"`
+	Skills                   string                   `gorm:"type:text" json:"skills"`
+	Interests                string                   `gorm:"type:text" json:"interests"`
+	Badges                   []Badge                  `gorm:"many2many:user_badges;" json:"badges"`
+	Roles                    []Role                   `gorm:"many2many:user_roles;" json:"roles"`
+	Followers                []User                   `gorm:"many2many:user_followers;association_jointable_foreignkey:follower_id" json:"followers"`
+	Following                []User                   `gorm:"many2many:user_following;association_jointable_foreignkey:following_id" json:"following"`
+	Notifications            []Notification           `gorm:"foreignKey:UserID" json:"notifications"`
+	NotificationsPreferences []NotificationPrefrences `gorm:"foreignKey:UserID" json:"notifipre"`
+}
 
-	// User account activation
-	IsActive bool `gorm:"default:false" json:"is_active"`
-	// Email verified or not
-	IsEmailVerified bool `gorm:"default:false" json:"is_email_verified"`
-
-	// number of posts
-	PostsCount int `gorm:"default:0" json:"posts_count"`
-	// number of comments
-	CommentsCount int `gorm:"default:0" json:"comments_count"`
-	// number of likes
-	LikesCount int `gorm:"default:0" json:"likes_count"`
-	// number of bookmarks
-	BookmarksCount int `gorm:"default:0" json:"bookmarks_count"`
-	// Show last active time
-	LastSeen time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"last_seen"`
-	// User roles: user, moderator, admin
-	Role string `gorm:"size:50;default:'user'" json:"role"`
-
-	// Skills of the user
-	Skills string `gorm:"type:text;size:200" json:"skills" validate:"max=255"`
-	// Interests of the user
-	Interests []Interest `gorm:"many2many:user_interests;" json:"interests" validate:"max=255"`
-	// Badges for users
-	Badges []Badge `gorm:"many2many:user_badges;" json:"badges"`
-	// Roles for user
-	Roles []Role `gorm:"many2many:user_roles" json:"roles"`
-	// Followers to follow each other
-	Followers []User `gorm:"many2many:user_followers;association_jointable_foreignkey:follower_id" json:"followers"`
-	// Who is following
-	Following []User `gorm:"many2many:user_followings;association_jointable_foreignkey:following_id" json:"following"`
-	// Notification that user got from blog
-	Notifications []Notification `gorm:"many2many:user_notifications" json:"notifications"`
-	// notifications
-	NotificationsPreferences []NotificationPrefrences `gorm:"many2many:user_notifipre" json:"notifipre"`
-
-	// theme preference of the user
-	ThemePreference string         `gorm:"default:light" json:"theme_preference"`
-	CreatedAt       time.Time      `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
-	UpdatedAt       time.Time      `gorm:"default:CURRENT_TIMESTAMP" json:"updated_at"`
-	DeletedAt       gorm.DeletedAt `gorm:"index" json:"-"`
+type Skill struct {
+	ID   uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
+	Name string    `gorm:"size:100;not null" json:"name"`
 }
 
 type Role struct {
-	ID     uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
-	UserID uuid.UUID `gorm:"type:uuid;not null" json:"user_id"`
-	Name   string    `gorm:"size:50;not null;unique" json:"name"` // e.g., "admin", "moderator", "writer"
+	ID   uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
+	Name string    `gorm:"size:50;not null;unique" json:"name"`
 }
 
-// Interest Model
 type Interest struct {
-	ID     uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
-	UserID uuid.UUID `gorm:"type:uuid;not null" json:"user_id"`
-	Name   string    `gorm:"size:100;not null;unique" json:"name"`
+	ID   uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
+	Name string    `gorm:"size:100;not null;unique" json:"name"`
 }
 
-// Badge Model for User
 type Badge struct {
-	ID     uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
-	UserID uuid.UUID `gorm:"type:uuid;not null" json:"user_id"`
-	Name   string    `gorm:"size:100;not null;unique" json:"name"`
+	ID   uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
+	Name string    `gorm:"size:100;not null;unique" json:"name"`
 }
 
-type UserFollower struct {
-	UserID     uuid.UUID `gorm:"type:uuid;primaryKey"`
-	FollowerID uuid.UUID `gorm:"type:uuid;primaryKey"`
-	FollowedAt time.Time `gorm:"default:CURRENT_TIMESTAMP"`
-}
-
-type UserFollowing struct {
-	UserID      uuid.UUID `gorm:"type:uuid;primaryKey"`
-	FollowingID uuid.UUID `gorm:"type:uuid;primaryKey"`
-	FollowedAt  time.Time `gorm:"default:CURRENT_TIMESTAMP"`
-}
-
-// Notification Model
 type Notification struct {
 	ID        uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
 	UserID    uuid.UUID `gorm:"type:uuid;not null" json:"user_id"`
-	Type      string    `gorm:"size:50;not null" json:"type"` // like, comment, follow, etc.
+	Type      string    `gorm:"size:50;not null" json:"type"`
 	Message   string    `gorm:"size:255;not null" json:"message"`
 	IsRead    bool      `gorm:"default:false" json:"is_read"`
 	CreatedAt time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
 }
 
 type NotificationPrefrences struct {
-	// Send notification to user if any event occurs
 	ID              uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
 	UserID          uuid.UUID `gorm:"type:uuid;not null" json:"user_id"`
 	EmailOnLikes    bool      `gorm:"default:false" json:"email_on_likes"`
@@ -143,4 +88,28 @@ type NotificationPrefrences struct {
 	EmailOnMentions bool      `gorm:"default:false" json:"email_on_mentions"`
 	EmailOnFollower bool      `gorm:"default:false" json:"email_on_followers"`
 	EmailOnNewPosts bool      `gorm:"default:false" json:"email_on_new_posts"`
+}
+
+type UpdateUser struct {
+	Username           *string   `json:"username" validate:"omitempty,min=3"`
+	Email              *string   `json:"email" validate:"omitempty,email"`
+	FirstName          *string   `json:"first_name" validate:"omitempty,min=3"`
+	LastName           *string   `json:"last_name" validate:"omitempty,min=3"`
+	Bio                *string   `json:"bio" validate:"omitempty,max=255"`
+	AvatarUrl          *string   `json:"avatar_url" validate:"omitempty,url"`
+	JobTitle           *string   `json:"job_title" validate:"omitempty,max=100"`
+	Employer           *string   `json:"employer" validate:"omitempty,max=100"`
+	Location           *string   `json:"location" validate:"omitempty,max=100"`
+	GithubUrl          *string   `json:"github_url" validate:"omitempty,url"`
+	Website            *string   `json:"website" validate:"omitempty,url"`
+	CurrentLearning    *string   `json:"current_learning" validate:"omitempty,max=200"`
+	AvailableFor       *string   `json:"available_for" validate:"omitempty,max=200"`
+	CurrentlyHackingOn *string   `json:"currently_hacking_on" validate:"omitempty,max=200"`
+	Pronouns           *string   `json:"pronouns" validate:"omitempty,max=100"`
+	Education          *string   `json:"education" validate:"omitempty,max=100"`
+	BrandColor         *string   `json:"brand_color" validate:"omitempty,max=7"`
+	ThemePreference    *string   `json:"theme_preference" validate:"omitempty,oneof=light dark"`
+	Skills             *string   `json:"skills" validate:"omitempty"`
+	Interests          *string   `json:"interests" validate:"omitempty"`
+	UpdatedAt          time.Time `json:"updated_at"`
 }
