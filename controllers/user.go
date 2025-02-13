@@ -226,3 +226,90 @@ func (uc *UserController) UpdateUserProfile(c *fiber.Ctx) error {
 		"user": profileResponse,
 	})
 }
+
+func (uc *UserController) UpdateUserAccount(c *fiber.Ctx) error {
+	userid := c.Locals("user_id").(uuid.UUID)
+
+	type UpdateData struct {
+		CurrentPassword string `json:"current_password" validate:"required,min=6"`
+		Password        string `json:"password" validate:"required,min=6,eqfield=ConfirmPassword"`
+		ConfirmPassword string `json:"confirm_password" validate:"required,min=6"`
+	}
+
+	// parsing body to the struct
+	updateData := new(UpdateData)
+	if err := c.BodyParser(&updateData); err != nil {
+		logger.Log.WithFields(logrus.Fields{
+			"error": err,
+			"model": "usermodel",
+		}).Error("Parsing Update account body failed")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status": fiber.StatusBadRequest,
+			"error":  "Failed to parse account body",
+		})
+	}
+
+	// validate updateData
+	validator := utils.NewValidator()
+	if err := validator.Validate(updateData); err != nil {
+		logger.Log.WithFields(logrus.Fields{
+			"error":  err,
+			"userid": userid,
+		}).Error("User profile update validation failed while registering")
+		return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{
+			"errors": err,
+			"status": fiber.StatusUnprocessableEntity,
+		})
+	}
+
+	// find user
+	user, err := uc.userSystem.UserBy("id = ?", userid)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"status": fiber.StatusInternalServerError,
+			"error":  "Failed to update profile",
+		})
+	}
+
+	if err := utils.ComparePasswords(user.Password, updateData.CurrentPassword); err != nil {
+		logger.Log.WithFields(logrus.Fields{
+			"error": err,
+			"user":  userid,
+		}).Error("Old password doesn't matched")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status": fiber.StatusBadRequest,
+			"error":  "Old Password mismatched",
+		})
+	}
+
+	// if updateData.Password != updateData.ConfirmPassword {
+	// 	logger.Log.WithFields(logrus.Fields{
+	// 		"error": err,
+	// 		"user":  userid,
+	// 	}).Error("Make sure the passwords match")
+	// 	return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+	// 		"status": fiber.StatusBadRequest,
+	// 		"error":  "New Password and Confirm Password not matched",
+	// 	})
+	// }
+
+	password, _ := utils.HashPassword(updateData.Password)
+	updates := map[string]interface{}{
+		"password": password,
+	}
+
+	if err := uc.userSystem.UpdateUser("id = ?", user.ID, updates); err != nil {
+		logger.Log.WithFields(logrus.Fields{
+			"error": err,
+			"model": "usermodel",
+		}).Error("Update failed")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Failed to update user Password",
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"status":  fiber.StatusOK,
+		"message": "Password Updated successfully!!",
+	})
+}

@@ -30,11 +30,9 @@ func Connect(co *cfg.Postgres) *gorm.DB {
 	if err = client.AutoMigrate(
 		&models.User{},
 		&models.Badge{},
-		&models.Interest{},
 		&models.Notification{},
 		&models.NotificationPrefrences{},
 		&models.Role{},
-		&models.Skill{},
 	); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
