@@ -10,19 +10,9 @@ import (
 )
 
 // CreateUser creates a new user in the system after validation and password hashing.
-func (us *UserSystem) CreateNotificationPref(userid uuid.UUID) error {
-	notificationpref := map[string]interface{}{
-		"user_id":            userid,
-		"email_on_likes":     true,
-		"email_on_comments":  true,
-		"email_on_mentions":  true,
-		"email_on_followers": true,
-		"email_on_badge":     true,
-		"email_on_unread":    true,
-		"email_on_new_posts": true,
-	}
+func (us *UserSystem) CreateNotification(userid uuid.UUID, notification models.Notification) error {
 	// Attempt to create the user in the database. If creation fails, log the error and return an error.
-	if err := us.crud.Create(notificationpref); err != nil {
+	if err := us.crud.Create(notification); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error":  err,
 			"userid": userid,

@@ -55,16 +55,16 @@ func (uc *UserController) Registration(c *fiber.Ctx) error {
 		})
 	}
 
-	err = uc.userSystem.CreateNotificationPref(newUser.ID)
-	if err != nil {
-		logger.Log.WithFields(logrus.Fields{
-			"error": err,
-		}).Error("Failed to add default notification preferences to user")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":  err.Error(),
-			"status": fiber.StatusInternalServerError,
-		})
-	}
+	// err = uc.userSystem.CreateNotificationPref(newUser.ID)
+	// if err != nil {
+	// 	logger.Log.WithFields(logrus.Fields{
+	// 		"error": err,
+	// 	}).Error("Failed to add default notification preferences to user")
+	// 	return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+	// 		"error":  err.Error(),
+	// 		"status": fiber.StatusInternalServerError,
+	// 	})
+	// }
 
 	utils.SendActivationEmail(otp, newUser.Email, newUser.Username)
 

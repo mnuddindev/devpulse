@@ -36,6 +36,18 @@ func (us *UserSystem) CreateUser(user *models.User) (*models.User, error) {
 
 	// Set the hashed password back to the user.
 	user.Password = hashedPassword
+	user.NotificationsPreferences = []models.NotificationPrefrences{
+		models.NotificationPrefrences{
+			UserID:          user.ID,
+			EmailOnLikes:    true,
+			EmailOnComments: true,
+			EmailOnMentions: true,
+			EmailOnFollower: true,
+			EmailOnBadge:    true,
+			EmailOnUnread:   true,
+			EmailOnNewPosts: true,
+		},
+	}
 
 	// Attempt to create the user in the database. If creation fails, log the error and return an error.
 	if err := us.crud.Create(user); err != nil {
