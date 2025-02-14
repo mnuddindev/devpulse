@@ -67,8 +67,9 @@ type Interest struct {
 }
 
 type Badge struct {
-	ID   uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
-	Name string    `gorm:"size:100;not null;unique" json:"name"`
+	ID    uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
+	Name  string    `gorm:"size:100;not null;unique" json:"name"`
+	Image string    `gorm:"size:100;not null" json:"image"`
 }
 
 type Notification struct {
@@ -87,6 +88,8 @@ type NotificationPrefrences struct {
 	EmailOnComments bool      `gorm:"default:false" json:"email_on_comments"`
 	EmailOnMentions bool      `gorm:"default:false" json:"email_on_mentions"`
 	EmailOnFollower bool      `gorm:"default:false" json:"email_on_followers"`
+	EmailOnBadge    bool      `gorm:"default:false" json:"email_on_badge"`
+	EmailOnUnread   bool      `gorm:"default:false" json:"email_on_unread"`
 	EmailOnNewPosts bool      `gorm:"default:false" json:"email_on_new_posts"`
 }
 

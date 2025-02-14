@@ -132,7 +132,7 @@ func (uc *UserController) UpdateUserProfile(c *fiber.Ctx) error {
 	}
 
 	// Find user in the database
-	user, err := uc.userSystem.UserBy("id = ?", userid)
+	user, err := uc.userSystem.UserBy("id = $1", userid)
 	if err != nil {
 		// Return internal server error status
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -211,7 +211,7 @@ func (uc *UserController) UpdateUserProfile(c *fiber.Ctx) error {
 	updates["updated_at"] = time.Now()
 
 	// Update user in the database
-	if err := uc.userSystem.UpdateUser("id = ?", user.ID, updates); err != nil {
+	if err := uc.userSystem.UpdateUser("id = $1", user.ID, updates); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 			"model": "usermodel",
@@ -219,7 +219,7 @@ func (uc *UserController) UpdateUserProfile(c *fiber.Ctx) error {
 	}
 
 	// Fetch updated user profile from the database
-	uu, err := uc.userSystem.UserBy("id = ?", userid)
+	uu, err := uc.userSystem.UserBy("id = $1", userid)
 	if err != nil {
 		// Return internal server error status
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -318,7 +318,7 @@ func (uc *UserController) UpdateUserAccount(c *fiber.Ctx) error {
 	}
 
 	// Find user in the database
-	user, err := uc.userSystem.UserBy("id = ?", userid)
+	user, err := uc.userSystem.UserBy("id = $1", userid)
 	if err != nil {
 		// Return internal server error status
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -353,7 +353,7 @@ func (uc *UserController) UpdateUserAccount(c *fiber.Ctx) error {
 	}
 
 	// Update user password in the database
-	if err := uc.userSystem.UpdateUser("id = ?", user.ID, updates); err != nil {
+	if err := uc.userSystem.UpdateUser("id = $1", user.ID, updates); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 			"model": "usermodel",
@@ -372,7 +372,109 @@ func (uc *UserController) UpdateUserAccount(c *fiber.Ctx) error {
 }
 
 func (uc *UserController) UpdateUserNotifications(c *fiber.Ctx) error {
-	return nil
+	userid, ok := c.Locals("user_id").(uuid.UUID)
+	if !ok {
+		logger.Log.WithFields(logrus.Fields{
+			"error": "User ID missing or invalid type in context",
+		}).Warn("Unauthorized access attempt")
+		// Return unauthorized status
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error":  "Unauthorized",
+			"status": fiber.StatusUnauthorized,
+		})
+	}
+
+	type UpdateData struct {
+		EmailOnLikes    *bool `json:"email_on_likes" validate:"omitempty"`
+		EmailOnComments *bool `json:"email_on_comments" validate:"omitempty"`
+		EmailOnMentions *bool `json:"email_on_mentions" validate:"omitempty"`
+		EmailOnFollower *bool `json:"email_on_followers" validate:"omitempty"`
+		EmailOnBadge    *bool `json:"email_on_badge" validate:"omitempty"`
+		EmailOnUnread   *bool `json:"email_on_unread" validate:"omitempty"`
+		EmailOnNewPosts *bool `json:"email_on_new_posts" validate:"omitempty"`
+	}
+
+	updateData := new(UpdateData)
+	if err := c.BodyParser(&updateData); err != nil {
+		logger.Log.WithFields(logrus.Fields{
+			"error": err,
+			"model": "usermodel",
+		}).Error("Parsing Update account body failed")
+		// Return bad request status
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status": fiber.StatusBadRequest,
+			"error":  "Failed to parse notification body",
+		})
+	}
+
+	// Validate updateData
+	validator := utils.NewValidator()
+	if err := validator.Validate(updateData); err != nil {
+		logger.Log.WithFields(logrus.Fields{
+			"error":  err,
+			"userid": userid,
+		}).Error("User notification update validation failed while registering")
+		// Return unprocessable entity status
+		return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{
+			"errors": err,
+			"status": fiber.StatusUnprocessableEntity,
+		})
+	}
+
+	// Find user in the database
+	notificationPrefs, err := uc.userSystem.NotificationPreBy("user_id = $1", userid)
+	if err != nil {
+		// Return internal server error status
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"status": fiber.StatusInternalServerError,
+			"error":  "Failed to update profile",
+		})
+	}
+
+	if notificationPrefs.ID.String() == "00000000-0000-0000-0000-000000000000" {
+		logger.Log.WithFields(logrus.Fields{
+			"error": "Notification Preferences not found",
+		}).Warn("Unauthorized access attempt")
+	}
+
+	if updateData.EmailOnLikes != nil {
+		notificationPrefs.EmailOnLikes = *updateData.EmailOnLikes
+	}
+	if updateData.EmailOnComments != nil {
+		notificationPrefs.EmailOnComments = *updateData.EmailOnComments
+	}
+	if updateData.EmailOnMentions != nil {
+		notificationPrefs.EmailOnMentions = *updateData.EmailOnMentions
+	}
+	if updateData.EmailOnFollower != nil {
+		notificationPrefs.EmailOnFollower = *updateData.EmailOnFollower
+	}
+	if updateData.EmailOnBadge != nil {
+		notificationPrefs.EmailOnBadge = *updateData.EmailOnBadge
+	}
+	if updateData.EmailOnUnread != nil {
+		notificationPrefs.EmailOnUnread = *updateData.EmailOnUnread
+	}
+	if updateData.EmailOnNewPosts != nil {
+		notificationPrefs.EmailOnNewPosts = *updateData.EmailOnNewPosts
+	}
+
+	if err := uc.userSystem.UpdateNotificationPref("id = $1", notificationPrefs.ID, &notificationPrefs); err != nil {
+		logger.Log.WithFields(logrus.Fields{
+			"error":  err,
+			"userid": userid,
+		}).Error("Update failed")
+		// Return bad request status
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Failed to update users Notification preferences",
+		})
+	}
+
+	// Return success message
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"status":  fiber.StatusOK,
+		"message": "User's notification preferences Updated successfully!!",
+	})
 }
 
 func (uc *UserController) DeleteUser(c *fiber.Ctx) error {

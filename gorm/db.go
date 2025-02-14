@@ -29,10 +29,6 @@ func Connect(co *cfg.Postgres) *gorm.DB {
 	// Migrate the schema
 	if err = client.AutoMigrate(
 		&models.User{},
-		&models.Badge{},
-		&models.Notification{},
-		&models.NotificationPrefrences{},
-		&models.Role{},
 	); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,

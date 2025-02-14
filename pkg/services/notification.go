@@ -97,3 +97,23 @@ func (us *UserSystem) UpdateNotification(condition string, userid uuid.UUID, upd
 	}).Info("User updated Successfully!!")
 	return nil
 }
+
+// Update Users Notification preferences updates by ID
+func (us *UserSystem) UpdateNotificationPref(condition string, notifid uuid.UUID, updates interface{}) error {
+	// an empty instance for user model
+	var notificationpre models.NotificationPrefrences
+
+	// delete user data using id
+	if err := us.crud.Update(&notificationpre, "id = ?", []interface{}{notifid}, updates); err != nil {
+		// log if failed
+		logger.Log.WithFields(logrus.Fields{
+			"error": err,
+			"id":    notifid,
+		}).Error("Failed to update users notification preferences")
+		return errors.New("failed to update users notification preferences")
+	}
+	logger.Log.WithFields(logrus.Fields{
+		"id": notifid,
+	}).Info("Users Notification Preferences updated Successfully!!")
+	return nil
+}
