@@ -52,24 +52,43 @@ type User struct {
 }
 
 type Skill struct {
-	ID   uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
-	Name string    `gorm:"size:100;not null" json:"name"`
+	ID        uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
+	Name      string    `gorm:"size:100;not null" json:"name"`
+	CreatedAt time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
+	UpdatedAt time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"updated_at"`
 }
 
 type Role struct {
-	ID   uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
-	Name string    `gorm:"size:50;not null;unique" json:"name"`
+	ID        uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
+	Name      string    `gorm:"size:50;not null;unique" json:"name"`
+	CreatedAt time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
+	UpdatedAt time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"updated_at"`
 }
 
 type Interest struct {
-	ID   uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
-	Name string    `gorm:"size:100;not null;unique" json:"name"`
+	ID        uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
+	Name      string    `gorm:"size:100;not null;unique" json:"name"`
+	CreatedAt time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
+	UpdatedAt time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"updated_at"`
 }
 
 type Badge struct {
-	ID    uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
-	Name  string    `gorm:"size:100;not null;unique" json:"name"`
-	Image string    `gorm:"size:100;not null" json:"image"`
+	ID        uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
+	Name      string    `gorm:"size:100;not null;unique" json:"name"`
+	Image     string    `gorm:"size:100;not null" json:"image"`
+	CreatedAt time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
+	UpdatedAt time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"updated_at"`
+}
+
+type BaseReadingFont struct {
+	ID            uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
+	UserID        uuid.UUID `gorm:"type:uuid;not null;unique" json:"user_id" validate:"required"`
+	FontSize      int       `gorm:"type:int;not null;default:16" json:"font_size" validate:"gte=10,lte=72"`
+	FontStyle     string    `gorm:"type:varchar(50);not null;default:'sans-serif'" json:"font_style" validate:"oneof=sans-serif serif monospace cursive fantasy"`
+	LineHeight    float64   `gorm:"type:numeric;not null;default:1.5" json:"line_height" validate:"gte=1.0,lte=3.0"`
+	LetterSpacing float64   `gorm:"type:numeric;not null;default:0.0" json:"letter_spacing" validate:"gte=0.0,lte=5.0"`
+	CreatedAt     time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
+	UpdatedAt     time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"updated_at"`
 }
 
 type Notification struct {
@@ -91,6 +110,8 @@ type NotificationPrefrences struct {
 	EmailOnBadge    bool      `gorm:"default:false" json:"email_on_badge"`
 	EmailOnUnread   bool      `gorm:"default:false" json:"email_on_unread"`
 	EmailOnNewPosts bool      `gorm:"default:false" json:"email_on_new_posts"`
+	CreatedAt       time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
+	UpdatedAt       time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"updated_at"`
 }
 
 type UpdateUser struct {

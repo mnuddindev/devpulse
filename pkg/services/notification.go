@@ -142,7 +142,7 @@ func (us *UserSystem) UpdateNotificationPref(condition string, notifid uuid.UUID
 	var notificationpre models.NotificationPrefrences
 
 	// delete user data using id
-	if err := us.crud.Update(&notificationpre, "id = ?", []interface{}{notifid}, updates); err != nil {
+	if err := us.crud.Update(&notificationpre, condition, []interface{}{notifid}, updates); err != nil {
 		// log if failed
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,

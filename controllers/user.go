@@ -26,7 +26,7 @@ func (uc *UserController) UserProfile(c *fiber.Ctx) error {
 	}
 
 	// Fetch user profile from the database
-	user, err := uc.userSystem.UserBy("id = $1", userId)
+	user, err := uc.userSystem.UserBy("id = ?", userId)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -132,7 +132,7 @@ func (uc *UserController) UpdateUserProfile(c *fiber.Ctx) error {
 	}
 
 	// Find user in the database
-	user, err := uc.userSystem.UserBy("id = $1", userid)
+	user, err := uc.userSystem.UserBy("id = ?", userid)
 	if err != nil {
 		// Return internal server error status
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -211,7 +211,7 @@ func (uc *UserController) UpdateUserProfile(c *fiber.Ctx) error {
 	updates["updated_at"] = time.Now()
 
 	// Update user in the database
-	if err := uc.userSystem.UpdateUser("id = $1", user.ID, updates); err != nil {
+	if err := uc.userSystem.UpdateUser("id = ?", user.ID, updates); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 			"model": "usermodel",
@@ -219,7 +219,7 @@ func (uc *UserController) UpdateUserProfile(c *fiber.Ctx) error {
 	}
 
 	// Fetch updated user profile from the database
-	uu, err := uc.userSystem.UserBy("id = $1", userid)
+	uu, err := uc.userSystem.UserBy("id = ?", userid)
 	if err != nil {
 		// Return internal server error status
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -318,7 +318,7 @@ func (uc *UserController) UpdateUserAccount(c *fiber.Ctx) error {
 	}
 
 	// Find user in the database
-	user, err := uc.userSystem.UserBy("id = $1", userid)
+	user, err := uc.userSystem.UserBy("id = ?", userid)
 	if err != nil {
 		// Return internal server error status
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -353,7 +353,7 @@ func (uc *UserController) UpdateUserAccount(c *fiber.Ctx) error {
 	}
 
 	// Update user password in the database
-	if err := uc.userSystem.UpdateUser("id = $1", user.ID, updates); err != nil {
+	if err := uc.userSystem.UpdateUser("id = ?", user.ID, updates); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 			"model": "usermodel",
@@ -371,7 +371,7 @@ func (uc *UserController) UpdateUserAccount(c *fiber.Ctx) error {
 	})
 }
 
-func (uc *UserController) UpdateUserNotifications(c *fiber.Ctx) error {
+func (uc *UserController) UpdateUserNotificationsPref(c *fiber.Ctx) error {
 	userid, ok := c.Locals("user_id").(uuid.UUID)
 	if !ok {
 		logger.Log.WithFields(logrus.Fields{
@@ -422,7 +422,7 @@ func (uc *UserController) UpdateUserNotifications(c *fiber.Ctx) error {
 	}
 
 	// Find user in the database
-	notificationPrefs, err := uc.userSystem.NotificationPreBy("user_id = $1", userid)
+	notificationPrefs, err := uc.userSystem.NotificationPreBy("user_id = ?", userid)
 	if err != nil {
 		// Return internal server error status
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -437,42 +437,68 @@ func (uc *UserController) UpdateUserNotifications(c *fiber.Ctx) error {
 		}).Warn("Unauthorized access attempt")
 	}
 
+	updates := map[string]interface{}{}
 	if updateData.EmailOnLikes != nil {
-		notificationPrefs.EmailOnLikes = *updateData.EmailOnLikes
+		updates["email_on_likes"] = *updateData.EmailOnLikes
 	}
 	if updateData.EmailOnComments != nil {
-		notificationPrefs.EmailOnComments = *updateData.EmailOnComments
+		updates["email_on_comments"] = *updateData.EmailOnComments
 	}
 	if updateData.EmailOnMentions != nil {
-		notificationPrefs.EmailOnMentions = *updateData.EmailOnMentions
+		updates["email_on_mentions"] = *updateData.EmailOnMentions
 	}
 	if updateData.EmailOnFollower != nil {
-		notificationPrefs.EmailOnFollower = *updateData.EmailOnFollower
+		updates["email_on_followers"] = *updateData.EmailOnFollower
 	}
 	if updateData.EmailOnBadge != nil {
-		notificationPrefs.EmailOnBadge = *updateData.EmailOnBadge
+		updates["email_on_badge"] = *updateData.EmailOnBadge
 	}
 	if updateData.EmailOnUnread != nil {
-		notificationPrefs.EmailOnUnread = *updateData.EmailOnUnread
+		updates["email_on_unread"] = *updateData.EmailOnUnread
 	}
 	if updateData.EmailOnNewPosts != nil {
-		notificationPrefs.EmailOnNewPosts = *updateData.EmailOnNewPosts
+		updates["email_on_new_posts"] = *updateData.EmailOnNewPosts
 	}
 
-	if err := uc.userSystem.UpdateNotificationPref("id = $1", notificationPrefs.ID, &notificationPrefs); err != nil {
-		logger.Log.WithFields(logrus.Fields{
-			"error":  err,
-			"userid": userid,
-		}).Error("Update failed")
-		// Return bad request status
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Failed to update users Notification preferences",
-		})
+	if len(updates) > 0 {
+		if err := uc.userSystem.UpdateNotificationPref("user_id = ?", notificationPrefs.UserID, updates); err != nil {
+			logger.Log.WithFields(logrus.Fields{
+				"error":  err,
+				"userid": userid,
+			}).Error("Update failed")
+			// Return bad request status
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Failed to update users Notification preferences",
+			})
+		}
+
+		if updateData.EmailOnLikes != nil {
+			notificationPrefs.EmailOnLikes = *updateData.EmailOnLikes
+		}
+		if updateData.EmailOnComments != nil {
+			notificationPrefs.EmailOnComments = *updateData.EmailOnComments
+		}
+		if updateData.EmailOnMentions != nil {
+			notificationPrefs.EmailOnMentions = *updateData.EmailOnMentions
+		}
+		if updateData.EmailOnFollower != nil {
+			notificationPrefs.EmailOnFollower = *updateData.EmailOnFollower
+		}
+		if updateData.EmailOnBadge != nil {
+			notificationPrefs.EmailOnBadge = *updateData.EmailOnBadge
+		}
+		if updateData.EmailOnUnread != nil {
+			notificationPrefs.EmailOnUnread = *updateData.EmailOnUnread
+		}
+		if updateData.EmailOnNewPosts != nil {
+			notificationPrefs.EmailOnNewPosts = *updateData.EmailOnNewPosts
+		}
 	}
 
 	// Return success message
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"status":  fiber.StatusOK,
+		"updates": notificationPrefs,
 		"message": "User's notification preferences Updated successfully!!",
 	})
 }

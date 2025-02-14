@@ -61,6 +61,7 @@ func NewRoutes(app *fiber.App, config *config.ServerConfig, system *controllers.
 	user.Get("/profile", system.Usercontroller.UserProfile)
 	user.Put("/update/profile/me", system.Usercontroller.UpdateUserProfile)
 	user.Put("/update/account/me", system.Usercontroller.UpdateUserAccount)
+	user.Put("/update/notification/me", system.Usercontroller.UpdateUserNotificationsPref)
 	user.Delete("/account/delete/me", system.Usercontroller.DeleteUser)
 
 	// Protected routes

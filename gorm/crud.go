@@ -110,7 +110,7 @@ func (g *GormDB) GetByCondition(model interface{}, condition string, args []inte
 // Update a record by ID
 func (g *GormDB) Update(model interface{}, condition string, args []interface{}, updates interface{}) error {
 	// Perform the update
-	result := g.DB.Model(model).Clauses(clause.Returning{}).Where(condition, args...).Updates(updates)
+	result := g.DB.Model(model).Clauses(clause.Returning{}).Where(condition, args...).Updates(updates).Update("updated_at", gorm.Expr("NOW()"))
 	if result.Error != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error":     result.Error,
