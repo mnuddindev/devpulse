@@ -9,6 +9,36 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// CreateUser creates a new user in the system after validation and password hashing.
+func (us *UserSystem) CreateNotificationPref(userid uuid.UUID) error {
+	notificationpref := map[string]interface{}{
+		"user_id":            userid,
+		"email_on_likes":     true,
+		"email_on_comments":  true,
+		"email_on_mentions":  true,
+		"email_on_followers": true,
+		"email_on_badge":     true,
+		"email_on_unread":    true,
+		"email_on_new_posts": true,
+	}
+	// Attempt to create the user in the database. If creation fails, log the error and return an error.
+	if err := us.crud.Create(notificationpref); err != nil {
+		logger.Log.WithFields(logrus.Fields{
+			"error":  err,
+			"userid": userid,
+		}).Error("failed to register user")
+		return errors.New("failed to input default notification prefrences")
+	}
+
+	// Log the successful creation of the user.
+	logger.Log.WithFields(logrus.Fields{
+		"userid": userid,
+	}).Info("Notification Preferences added successfully!!")
+
+	// Return the created user and no error.
+	return nil
+}
+
 // UserBy will fetch and filter out any data by given condition Like GetByLocation
 func (us *UserSystem) NotificationBy(condition string, args ...interface{}) (*models.Notification, error) {
 	// an empty instance of user model
@@ -78,23 +108,41 @@ func (uc *UserSystem) Notification() ([]models.Notification, error) {
 	return noti, nil
 }
 
+func (uc *UserSystem) NotificationPref() ([]models.NotificationPrefrences, error) {
+	// an empty instance of user model
+	var noti []models.NotificationPrefrences
+
+	// check for users in db
+	if err := uc.crud.GetAll(&noti); err != nil {
+		// log if failed to get data
+		logger.Log.WithFields(logrus.Fields{
+			"error": err,
+		}).Error("Failed to fetch all Notification Preferences")
+		return nil, errors.New("failed to fetch all Notification Preferences")
+	}
+
+	//log if succed
+	logger.Log.Info("All users fetched successfully!!")
+	return noti, nil
+}
+
 // Update Users updates user by ID
-func (us *UserSystem) UpdateNotification(condition string, userid uuid.UUID, updates interface{}) error {
+func (us *UserSystem) UpdateNotification(condition string, notid uuid.UUID, updates interface{}) error {
 	// an empty instance for user model
-	var user models.User
+	var notification models.Notification
 
 	// delete user data using id
-	if err := us.crud.Update(&user, "id = ?", []interface{}{userid}, updates); err != nil {
+	if err := us.crud.Update(&notification, "id = ?", []interface{}{notid}, updates); err != nil {
 		// log if failed
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
-			"id":    userid,
-		}).Error("Failed to delete user")
-		return errors.New("failed to delete user")
+			"id":    notid,
+		}).Error("Failed to update User's notificatio")
+		return errors.New("failed to update User's notificatio")
 	}
 	logger.Log.WithFields(logrus.Fields{
-		"id": userid,
-	}).Info("User updated Successfully!!")
+		"id": notid,
+	}).Info("Notification updated Successfully!!")
 	return nil
 }
 

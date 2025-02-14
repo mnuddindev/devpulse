@@ -44,12 +44,22 @@ func (uc *UserController) Registration(c *fiber.Ctx) error {
 		}).Error("OTP Generation failed")
 	}
 	user.OTP = otp
-	fmt.Println(user)
 	newUser, err := uc.userSystem.CreateUser(&user)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 		}).Error("Failed to register user")
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":  err.Error(),
+			"status": fiber.StatusInternalServerError,
+		})
+	}
+
+	err = uc.userSystem.CreateNotificationPref(newUser.ID)
+	if err != nil {
+		logger.Log.WithFields(logrus.Fields{
+			"error": err,
+		}).Error("Failed to add default notification preferences to user")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":  err.Error(),
 			"status": fiber.StatusInternalServerError,
