@@ -48,14 +48,15 @@ func (v *Validator) Validate(str interface{}) *ErrorResponse {
 		return nil
 	}
 	response := ErrorResponse{Errors: make([]Error, 0, len(err.(validator.ValidationErrors)))}
-	for _, err := range err.(validator.ValidationErrors) {
-		field := err.Field()                                // get the field that caused the error
-		tag := err.Tag()                                    // get the tag that caused the error
-		message := getErrorMessage(field, tag, err.Param()) // get the error message
-		// append the error to the response
-		response.Errors = append(response.Errors, Error{Field: field, Msg: message})
+	if validationErrors, ok := err.(validator.ValidationErrors); ok {
+		for _, err := range validationErrors {
+			field := err.Field()                                // get the field that caused the error
+			tag := err.Tag()                                    // get the tag that caused the error
+			message := getErrorMessage(field, tag, err.Param()) // get the error message
+			// append the error to the response
+			response.Errors = append(response.Errors, Error{Field: field, Msg: message})
+		}
 	}
-
 	return &response
 }
 
@@ -70,6 +71,8 @@ func getErrorMessage(field, tag, param string) string {
 		return fmt.Sprintf("%s must be a valid URL", field)
 	case "email":
 		return fmt.Sprintf("%s must be a valid email address", field)
+	case "oneof":
+		return fmt.Sprintf("%s must be one of the following values: %s", field, param)
 	case "eqfiled":
 		return fmt.Sprintf("%s must be equal to %s", field, param)
 	default:

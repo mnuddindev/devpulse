@@ -176,12 +176,3 @@ func (g *GormDB) Transaction(fn func(tx *gorm.DB) error) error {
 	logger.Log.Info("Transaction committed successfully")
 	return nil
 }
-
-// Many2Many update many2many connections
-func (g *GormDB) UpdateManyToMany(model interface{}, assoc string, userdata interface{}) error {
-	if err := g.DB.Model(model).Association(assoc).Replace(userdata); err != nil {
-		logger.Log.WithError(err).Error("Failed to update ManyToMany")
-		return err
-	}
-	return nil
-}

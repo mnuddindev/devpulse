@@ -40,6 +40,24 @@ func Connect(co *cfg.Postgres) *gorm.DB {
 
 	logger.Log.Info("Schema auto migrated successfully")
 
+	SeedRoles(client)
+
 	// Return the database connection
 	return client
+}
+
+func SeedRoles(db *gorm.DB) {
+	roles := []string{"member", "moderator", "author", "trusted_member", "admin"}
+
+	for _, role := range roles {
+		var count int64
+		db.Model(&models.Role{}).Where("name = ?", role).Count(&count)
+
+		if count == 0 {
+			db.Create(&models.Role{Name: role})
+			fmt.Println("✅ Created role:", role)
+		} else {
+			return
+		}
+	}
 }

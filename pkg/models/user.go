@@ -35,7 +35,6 @@ type User struct {
 	LikesCount         int            `gorm:"default:0" json:"likes_count"`
 	BookmarksCount     int            `gorm:"default:0" json:"bookmarks_count"`
 	LastSeen           time.Time      `gorm:"default:CURRENT_TIMESTAMP" json:"last_seen"`
-	Role               string         `gorm:"size:50;default:'user'" json:"role"`
 	ThemePreference    string         `gorm:"default:light" json:"theme_preference" validator:"oneof=Light Dark"`
 	BaseFont           string         `gorm:"default:sans-serif" json:"base_font" validator:"oneof=sans-serif sans jetbrainsmono hind-siliguri comic-sans"`
 	SiteNavbar         string         `gorm:"default:fixed" json:"site_navbar" validator:"oneof=fixed static"`

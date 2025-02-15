@@ -11,11 +11,18 @@ import (
 	grm "gorm.io/gorm"
 )
 
-// CreateUser creates a new user in the system after validation and password hashing.
-func (us *UserSystem) CreateUser(user *models.User) (*models.User, error) {
+func (us *UserSystem) BeforeCreate(client *grm.DB, user *models.User) (*models.User, error) {
+	var memberRole models.Role
+	if err := client.Where("name = ?", "member").First(&memberRole).Error; err != nil {
+		logger.Log.WithFields(logrus.Fields{
+			"error": err,
+			"user":  "member",
+		}).Error("User role can't be added")
+		return nil, err
+	}
+
 	// Initialize a new validator instance.
 	validate := utils.NewValidator()
-
 	// Validate the user data. If validation fails, log the error and return an error.
 	if err := validate.Validate(user); err != nil {
 		logger.Log.WithFields(logrus.Fields{
@@ -35,7 +42,18 @@ func (us *UserSystem) CreateUser(user *models.User) (*models.User, error) {
 	}
 
 	// Set the hashed password back to the user.
+	user.Roles = append(user.Roles, memberRole)
 	user.Password = hashedPassword
+
+	return user, nil
+}
+
+// CreateUser creates a new user in the system after validation and password hashing.
+func (us *UserSystem) CreateUser(user *models.User) (*models.User, error) {
+	user, err := us.BeforeCreate(us.crud.DB, user)
+	if err != nil {
+		return nil, err
+	}
 	user.NotificationsPreferences = []models.NotificationPrefrences{
 		models.NotificationPrefrences{
 			UserID:          user.ID,
