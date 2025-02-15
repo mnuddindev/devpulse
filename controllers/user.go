@@ -199,9 +199,6 @@ func (uc *UserController) UpdateUserProfile(c *fiber.Ctx) error {
 	if updateData.BrandColor != nil {
 		updates["brand_color"] = updateData.BrandColor
 	}
-	if updateData.ThemePreference != nil {
-		updates["theme_preference"] = updateData.ThemePreference
-	}
 	if updateData.Skills != nil {
 		updates["skills"] = updateData.Skills
 	}
@@ -257,7 +254,6 @@ func (uc *UserController) UpdateUserProfile(c *fiber.Ctx) error {
 		"notifications":             uu.Notifications,
 		"notifications_preferences": uu.NotificationsPreferences,
 		"is_active":                 uu.IsActive,
-		"theme_preference":          uu.ThemePreference,
 		"created_at":                uu.CreatedAt,
 		"updated_at":                uu.UpdatedAt,
 	}
@@ -268,8 +264,7 @@ func (uc *UserController) UpdateUserProfile(c *fiber.Ctx) error {
 	})
 }
 
-func (uc *UserController) UpdateUserAccount(c *fiber.Ctx) error {
-	// Get user ID from context
+func (uc *UserController) UpdateUserCustomization(c *fiber.Ctx) error {
 	userid, ok := c.Locals("user_id").(uuid.UUID)
 	if !ok {
 		logger.Log.WithFields(logrus.Fields{
@@ -282,24 +277,24 @@ func (uc *UserController) UpdateUserAccount(c *fiber.Ctx) error {
 		})
 	}
 
-	// Define struct for update data
 	type UpdateData struct {
-		CurrentPassword string `json:"current_password" validate:"required,min=6"`
-		Password        string `json:"password" validate:"required,min=6,eqfield=ConfirmPassword"`
-		ConfirmPassword string `json:"confirm_password" validate:"required,min=6"`
+		ThemePreference *string `json:"theme_preference" validator:"oneof=Light Dark"`
+		BaseFont        *string `json:"base_font" validator:"oneof=sans-serif sans jetbrainsmono hind-siliguri comic-sans"`
+		SiteNavbar      *string `json:"site_navbar" validator:"oneof=fixed static"`
+		ContentEditor   *string `json:"content_editor" validator:"oneof=rich basic"`
+		ContentMode     *int    `json:"content_mode" validator:"oneof=1 2 3 4 5"`
 	}
 
-	// Parse request body into updateData struct
 	updateData := new(UpdateData)
 	if err := c.BodyParser(&updateData); err != nil {
 		logger.Log.WithFields(logrus.Fields{
-			"error": err,
-			"model": "usermodel",
+			"error":  err,
+			"userid": userid,
 		}).Error("Parsing Update account body failed")
 		// Return bad request status
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"status": fiber.StatusBadRequest,
-			"error":  "Failed to parse account body",
+			"error":  "Failed to parse notification body",
 		})
 	}
 
@@ -309,7 +304,7 @@ func (uc *UserController) UpdateUserAccount(c *fiber.Ctx) error {
 		logger.Log.WithFields(logrus.Fields{
 			"error":  err,
 			"userid": userid,
-		}).Error("User profile update validation failed while registering")
+		}).Error("User Customization update validation failed while updating")
 		// Return unprocessable entity status
 		return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{
 			"errors": err,
@@ -329,45 +324,69 @@ func (uc *UserController) UpdateUserAccount(c *fiber.Ctx) error {
 
 	if user.ID.String() == "00000000-0000-0000-0000-000000000000" {
 		logger.Log.WithFields(logrus.Fields{
-			"error": "User not found",
+			"error": "Notification Preferences not found",
 		}).Warn("Unauthorized access attempt")
 	}
 
-	// Compare current password with stored password
-	if err := utils.ComparePasswords(user.Password, updateData.CurrentPassword); err != nil {
-		logger.Log.WithFields(logrus.Fields{
-			"error": err,
-			"user":  userid,
-		}).Error("Old password doesn't matched")
-		// Return bad request status
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"status": fiber.StatusBadRequest,
-			"error":  "Old Password mismatched",
-		})
+	updates := map[string]interface{}{}
+	if updateData.ThemePreference != nil {
+		updates["theme_preference"] = *updateData.ThemePreference
+	}
+	if updateData.BaseFont != nil {
+		updates["base_font"] = *updateData.BaseFont
+	}
+	if updateData.SiteNavbar != nil {
+		updates["site_navbar"] = *updateData.SiteNavbar
+	}
+	if updateData.ContentEditor != nil {
+		updates["content_editor"] = *updateData.ContentEditor
+	}
+	if updateData.ContentMode != nil {
+		updates["content_mode"] = *updateData.ContentMode
 	}
 
-	// Hash new password
-	password, _ := utils.HashPassword(updateData.Password)
-	updates := map[string]interface{}{
-		"password": password,
+	if len(updates) > 0 {
+		if err := uc.userSystem.UpdateUser("id = ?", user.ID, updates); err != nil {
+			logger.Log.WithFields(logrus.Fields{
+				"error":  err,
+				"userid": userid,
+			}).Error("Update failed")
+			// Return bad request status
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Failed to update users Customization",
+			})
+		}
+
+		if updateData.ThemePreference != nil {
+			user.ThemePreference = *updateData.ThemePreference
+		}
+		if updateData.BaseFont != nil {
+			user.BaseFont = *updateData.BaseFont
+		}
+		if updateData.SiteNavbar != nil {
+			user.SiteNavbar = *updateData.SiteNavbar
+		}
+		if updateData.ContentEditor != nil {
+			user.ContentEditor = *updateData.ContentEditor
+		}
+		if updateData.ContentMode != nil {
+			user.ContentMode = *updateData.ContentMode
+		}
 	}
 
-	// Update user password in the database
-	if err := uc.userSystem.UpdateUser("id = ?", user.ID, updates); err != nil {
-		logger.Log.WithFields(logrus.Fields{
-			"error": err,
-			"model": "usermodel",
-		}).Error("Update failed")
-		// Return bad request status
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Failed to update user Password",
-		})
+	uu := map[string]interface{}{
+		"theme_preference": user.ThemePreference,
+		"base_font":        user.BaseFont,
+		"site_navbar":      user.SiteNavbar,
+		"content_editor":   user.ContentEditor,
+		"content_mode":     user.ContentMode,
 	}
 
 	// Return success message
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"status":  fiber.StatusOK,
-		"message": "Password Updated successfully!!",
+		"updates": uu,
+		"message": "User's customization Updated successfully!!",
 	})
 }
 
@@ -500,6 +519,109 @@ func (uc *UserController) UpdateUserNotificationsPref(c *fiber.Ctx) error {
 		"status":  fiber.StatusOK,
 		"updates": notificationPrefs,
 		"message": "User's notification preferences Updated successfully!!",
+	})
+}
+
+func (uc *UserController) UpdateUserAccount(c *fiber.Ctx) error {
+	// Get user ID from context
+	userid, ok := c.Locals("user_id").(uuid.UUID)
+	if !ok {
+		logger.Log.WithFields(logrus.Fields{
+			"error": "User ID missing or invalid type in context",
+		}).Warn("Unauthorized access attempt")
+		// Return unauthorized status
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error":  "Unauthorized",
+			"status": fiber.StatusUnauthorized,
+		})
+	}
+
+	// Define struct for update data
+	type UpdateData struct {
+		CurrentPassword string `json:"current_password" validate:"required,min=6"`
+		Password        string `json:"password" validate:"required,min=6,eqfield=ConfirmPassword"`
+		ConfirmPassword string `json:"confirm_password" validate:"required,min=6"`
+	}
+
+	// Parse request body into updateData struct
+	updateData := new(UpdateData)
+	if err := c.BodyParser(&updateData); err != nil {
+		logger.Log.WithFields(logrus.Fields{
+			"error": err,
+			"model": "usermodel",
+		}).Error("Parsing Update account body failed")
+		// Return bad request status
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status": fiber.StatusBadRequest,
+			"error":  "Failed to parse account body",
+		})
+	}
+
+	// Validate updateData
+	validator := utils.NewValidator()
+	if err := validator.Validate(updateData); err != nil {
+		logger.Log.WithFields(logrus.Fields{
+			"error":  err,
+			"userid": userid,
+		}).Error("User profile update validation failed while registering")
+		// Return unprocessable entity status
+		return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{
+			"errors": err,
+			"status": fiber.StatusUnprocessableEntity,
+		})
+	}
+
+	// Find user in the database
+	user, err := uc.userSystem.UserBy("id = ?", userid)
+	if err != nil {
+		// Return internal server error status
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"status": fiber.StatusInternalServerError,
+			"error":  "Failed to update profile",
+		})
+	}
+
+	if user.ID.String() == "00000000-0000-0000-0000-000000000000" {
+		logger.Log.WithFields(logrus.Fields{
+			"error": "User not found",
+		}).Warn("Unauthorized access attempt")
+	}
+
+	// Compare current password with stored password
+	if err := utils.ComparePasswords(user.Password, updateData.CurrentPassword); err != nil {
+		logger.Log.WithFields(logrus.Fields{
+			"error": err,
+			"user":  userid,
+		}).Error("Old password doesn't matched")
+		// Return bad request status
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"status": fiber.StatusBadRequest,
+			"error":  "Old Password mismatched",
+		})
+	}
+
+	// Hash new password
+	password, _ := utils.HashPassword(updateData.Password)
+	updates := map[string]interface{}{
+		"password": password,
+	}
+
+	// Update user password in the database
+	if err := uc.userSystem.UpdateUser("id = ?", user.ID, updates); err != nil {
+		logger.Log.WithFields(logrus.Fields{
+			"error": err,
+			"model": "usermodel",
+		}).Error("Update failed")
+		// Return bad request status
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Failed to update user Password",
+		})
+	}
+
+	// Return success message
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"status":  fiber.StatusOK,
+		"message": "Password Updated successfully!!",
 	})
 }
 

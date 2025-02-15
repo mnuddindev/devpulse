@@ -36,7 +36,11 @@ type User struct {
 	BookmarksCount     int            `gorm:"default:0" json:"bookmarks_count"`
 	LastSeen           time.Time      `gorm:"default:CURRENT_TIMESTAMP" json:"last_seen"`
 	Role               string         `gorm:"size:50;default:'user'" json:"role"`
-	ThemePreference    string         `gorm:"default:light" json:"theme_preference"`
+	ThemePreference    string         `gorm:"default:light" json:"theme_preference" validator:"oneof=Light Dark"`
+	BaseFont           string         `gorm:"default:sans-serif" json:"base_font" validator:"oneof=sans-serif sans jetbrainsmono hind-siliguri comic-sans"`
+	SiteNavbar         string         `gorm:"default:fixed" json:"site_navbar" validator:"oneof=fixed static"`
+	ContentEditor      string         `gorm:"default:rich" json:"content_editor" validator:"oneof=rich basic"`
+	ContentMode        int            `gorm:"default:1" json:"content_mode" validator:"oneof=1 2 3 4 5"`
 	CreatedAt          time.Time      `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
 	UpdatedAt          time.Time      `gorm:"default:CURRENT_TIMESTAMP" json:"updated_at"`
 	DeletedAt          gorm.DeletedAt `gorm:"index" json:"-"`
@@ -78,17 +82,6 @@ type Badge struct {
 	Image     string    `gorm:"size:100;not null" json:"image"`
 	CreatedAt time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
 	UpdatedAt time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"updated_at"`
-}
-
-type BaseReadingFont struct {
-	ID            uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
-	UserID        uuid.UUID `gorm:"type:uuid;not null;unique" json:"user_id" validate:"required"`
-	FontSize      int       `gorm:"type:int;not null;default:16" json:"font_size" validate:"gte=10,lte=72"`
-	FontStyle     string    `gorm:"type:varchar(50);not null;default:'sans-serif'" json:"font_style" validate:"oneof=sans-serif serif monospace cursive fantasy"`
-	LineHeight    float64   `gorm:"type:numeric;not null;default:1.5" json:"line_height" validate:"gte=1.0,lte=3.0"`
-	LetterSpacing float64   `gorm:"type:numeric;not null;default:0.0" json:"letter_spacing" validate:"gte=0.0,lte=5.0"`
-	CreatedAt     time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
-	UpdatedAt     time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"updated_at"`
 }
 
 type Notification struct {
