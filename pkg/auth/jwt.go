@@ -22,6 +22,7 @@ var (
 type Claims struct {
 	UserID uuid.UUID `json:"user_id"`
 	Email  string    `json:"email"`
+	Role   string    `json:"role"`
 	jwt.RegisteredClaims
 }
 
