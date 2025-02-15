@@ -105,7 +105,7 @@ func (uc *UserController) UpdateUserProfile(c *fiber.Ctx) error {
 
 	// Parse request body into updateData struct
 	updateData := new(models.UpdateUser)
-	if err := c.BodyParser(&updateData); err != nil {
+	if err := StrictBodyParser(c, &updateData); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error":  err,
 			"userid": userid,
@@ -284,7 +284,7 @@ func (uc *UserController) UpdateUserCustomization(c *fiber.Ctx) error {
 	}
 
 	updateData := new(UpdateData)
-	if err := c.BodyParser(&updateData); err != nil {
+	if err := StrictBodyParser(c, &updateData); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error":  err,
 			"userid": userid,
@@ -412,7 +412,7 @@ func (uc *UserController) UpdateUserNotificationsPref(c *fiber.Ctx) error {
 	}
 
 	updateData := new(UpdateData)
-	if err := c.BodyParser(&updateData); err != nil {
+	if err := StrictBodyParser(c, &updateData); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 			"model": "usermodel",
@@ -543,7 +543,7 @@ func (uc *UserController) UpdateUserAccount(c *fiber.Ctx) error {
 
 	// Parse request body into updateData struct
 	updateData := new(UpdateData)
-	if err := c.BodyParser(&updateData); err != nil {
+	if err := StrictBodyParser(c, &updateData); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 			"model": "usermodel",

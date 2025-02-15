@@ -16,7 +16,7 @@ import (
 // Registration handles user registration
 func (uc *UserController) Registration(c *fiber.Ctx) error {
 	var user models.User
-	if err := c.BodyParser(&user); err != nil {
+	if err := StrictBodyParser(c, &user); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 		}).Error("Invalid request payload")
@@ -73,7 +73,7 @@ func (uc *UserController) ActiveUser(c *fiber.Ctx) error {
 		Otp int64 `json:"otp"`
 	}
 	var body Body
-	if err := c.BodyParser(&body); err != nil {
+	if err := StrictBodyParser(c, &body); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 		}).Error("Failed to parse request body")
@@ -181,7 +181,7 @@ func (uc *UserController) Login(c *fiber.Ctx) error {
 	}
 	// parse request body
 	var login Login
-	if err := c.BodyParser(&login); err != nil {
+	if err := StrictBodyParser(c, &login); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 		}).Error("Failed to parse request body")

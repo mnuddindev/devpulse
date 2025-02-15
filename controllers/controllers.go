@@ -1,6 +1,10 @@
 package controllers
 
 import (
+	"bytes"
+	"encoding/json"
+
+	"github.com/gofiber/fiber/v2"
 	"github.com/mnuddindev/devpulse/config"
 	"github.com/mnuddindev/devpulse/gorm"
 	"github.com/mnuddindev/devpulse/pkg/logger"
@@ -32,4 +36,13 @@ func StartServices(config *config.Postgres) (*CentralSystem, error) {
 		DB:             db,
 		Usercontroller: userController,
 	}, nil
+}
+
+func StrictBodyParser(c *fiber.Ctx, out interface{}) error {
+	decoder := json.NewDecoder(bytes.NewReader(c.Body()))
+	decoder.DisallowUnknownFields() // Reject unknown fields
+	if err := decoder.Decode(out); err != nil {
+		return err
+	}
+	return nil
 }
