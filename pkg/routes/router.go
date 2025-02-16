@@ -39,9 +39,7 @@ func NewRoutes(app *fiber.App, config *config.ServerConfig, system *controllers.
 	// userservice to access crud
 	userService := services.NewUserSystem(system.DB)
 
-	// refresh token middleware
-	app.Use(auth.RefreshTokenMiddleware(userService))
-
+	// for guest users
 	// home router
 	app.Get("/", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
@@ -54,20 +52,25 @@ func NewRoutes(app *fiber.App, config *config.ServerConfig, system *controllers.
 	app.Post("/register", system.Usercontroller.Registration)
 	app.Post("/user/:userid/activate", system.Usercontroller.ActiveUser)
 	app.Post("/login", system.Usercontroller.Login)
-	app.Post("/logout", system.Usercontroller.Logout)
 
-	user := app.Group("/user", auth.IsAuth())
-	user.Get("/profile", auth.RoleAuth("all"), system.Usercontroller.UserProfile)
-	user.Put("/update/profile/me", auth.RoleAuth("all"), system.Usercontroller.UpdateUserProfile)
-	user.Put("/update/notification/me", auth.RoleAuth("all"), system.Usercontroller.UpdateUserNotificationsPref)
-	user.Put("/update/customization/me", auth.RoleAuth("all"), system.Usercontroller.UpdateUserCustomization)
-	user.Put("/update/account/me", auth.RoleAuth("all"), system.Usercontroller.UpdateUserAccount)
-	user.Delete("/account/delete/me", auth.RoleAuth("all"), system.Usercontroller.DeleteUser)
+	// for the guests
+	app.Get("/users/id/:userid", system.Usercontroller.UserByID)
 
-	users := app.Group("/users")
-	users.Get("/:userid", system.Usercontroller.UserByID)
-	users.Put("/update/profile/me", auth.RoleAuth("admin", "moderator"), system.Usercontroller.UpdateUserProfile)
-	users.Delete("/account/delete/me", auth.RoleAuth("admin"), system.Usercontroller.DeleteUser)
+	app.Post("/logout", auth.IsAuth(), auth.RefreshTokenMiddleware(userService), auth.RoleAuth("all"), system.Usercontroller.Logout)
+
+	authgroup := app.Group("/", auth.IsAuth(), auth.RefreshTokenMiddleware(userService))
+	user := authgroup.Group("/user")
+	user.Get("/profile", auth.IsAuth(), auth.RoleAuth("all"), system.Usercontroller.UserProfile)
+	user.Put("/update/profile/me", auth.IsAuth(), auth.RoleAuth("all"), system.Usercontroller.UpdateUserProfile)
+	user.Put("/update/notification/me", auth.IsAuth(), auth.RoleAuth("all"), system.Usercontroller.UpdateUserNotificationsPref)
+	user.Put("/update/customization/me", auth.IsAuth(), auth.RoleAuth("all"), system.Usercontroller.UpdateUserCustomization)
+	user.Put("/update/account/me", auth.IsAuth(), auth.RoleAuth("all"), system.Usercontroller.UpdateUserAccount)
+	user.Delete("/account/delete/me", auth.IsAuth(), auth.RoleAuth("all"), system.Usercontroller.DeleteUser)
+
+	// protected routes
+	users := authgroup.Group("/users")
+	users.Put("/update/profile/me", auth.IsAuth(), auth.RoleAuth("admin", "moderator"), system.Usercontroller.UpdateUserProfile)
+	users.Delete("/account/delete/me", auth.IsAuth(), auth.RoleAuth("admin"), system.Usercontroller.DeleteUser)
 
 	// Protected routes
 	app.Get("/protected", auth.IsAuth(), func(c *fiber.Ctx) error {
