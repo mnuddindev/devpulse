@@ -101,26 +101,26 @@ func (uc *UserController) UpdateUserByID(c *fiber.Ctx) error {
 		Password           *string    `json:"password,omitempty" validate:"omitempty,min=6"`
 		FirstName          *string    `json:"first_name" validate:"omitempty,min=3"`
 		LastName           *string    `json:"last_name" validate:"omitempty,min=3"`
-		Bio                *string    `json:"bio,omitempty" validate:"max=255"`
+		Bio                *string    `json:"bio,omitempty" validate:"omitempty,max=255"`
 		AvatarUrl          *string    `json:"avatar_url,omitempty" validate:"omitempty,url"`
-		JobTitle           *string    `json:"job_title,omitempty" validate:"max=100"`
-		Employer           *string    `json:"employer,omitempty" validate:"max=100"`
-		Location           *string    `json:"location,omitempty" validate:"max=100"`
+		JobTitle           *string    `json:"job_title,omitempty" validate:"omitempty,max=100"`
+		Employer           *string    `json:"employer,omitempty" validate:"omitempty,max=100"`
+		Location           *string    `json:"location,omitempty" validate:"omitempty,max=100"`
 		GithubUrl          *string    `json:"github_url,omitempty" validate:"omitempty,url"`
 		Website            *string    `json:"website,omitempty" validate:"omitempty,url"`
-		CurrentLearning    *string    `json:"current_learning,omitempty" validate:"max=200"`
-		AvailableFor       *string    `json:"available_for,omitempty" validate:"max=200"`
-		CurrentlyHackingOn *string    `json:"currently_hacking_on,omitempty" validate:"max=200"`
-		Pronouns           *string    `json:"pronouns,omitempty" validate:"max=100"`
-		Education          *string    `json:"education,omitempty" validate:"max=100"`
-		BrandColor         *string    `json:"brand_color,omitempty" validate:"max=7"`
+		CurrentLearning    *string    `json:"current_learning,omitempty" validate:"omitempty,max=200"`
+		AvailableFor       *string    `json:"available_for,omitempty" validate:"omitempty,max=200"`
+		CurrentlyHackingOn *string    `json:"currently_hacking_on,omitempty" validate:"omitempty,max=200"`
+		Pronouns           *string    `json:"pronouns,omitempty" validate:"omitempty,max=100"`
+		Education          *string    `json:"education,omitempty" validate:"omitempty,max=100"`
+		BrandColor         *string    `json:"brand_color,omitempty" validate:"omitempty,max=7"`
 		IsActive           *bool      `json:"is_active"`
 		IsEmailVerified    *bool      `json:"is_email_verified"`
-		ThemePreference    *string    `json:"theme_preference" validate:"oneof=Light Dark"`
-		BaseFont           *string    `json:"base_font" validate:"oneof=sans-serif sans jetbrainsmono hind-siliguri comic-sans"`
-		SiteNavbar         *string    `json:"site_navbar" validate:"oneof=fixed static"`
-		ContentEditor      *string    `json:"content_editor" validate:"oneof=rich basic"`
-		ContentMode        *int       `json:"content_mode" validate:"oneof=1 2 3 4 5"`
+		ThemePreference    *string    `json:"theme_preference" validate:"omitempty,oneof=Light Dark"`
+		BaseFont           *string    `json:"base_font" validate:"omitempty,oneof=sans-serif sans jetbrainsmono hind-siliguri comic-sans"`
+		SiteNavbar         *string    `json:"site_navbar" validate:"omitempty,oneof=fixed static"`
+		ContentEditor      *string    `json:"content_editor" validate:"omitempty,oneof=rich basic"`
+		ContentMode        *int       `json:"content_mode" validate:"omitempty,oneof=1 2 3 4 5"`
 		UpdatedAt          *time.Time `json:"updated_at"`
 
 		Skills    *string         `json:"skills"`
