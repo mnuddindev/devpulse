@@ -41,8 +41,12 @@ func IsAuth() fiber.Handler {
 			})
 		}
 
+		// Extract roles
+		roles := claims.Roles
+
 		// Attach user ID to context
 		c.Locals("user_id", claims.UserID)
+		c.Locals("roles", roles)
 
 		// Secure cookie settings
 		c.Cookie(&fiber.Cookie{

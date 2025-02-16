@@ -240,7 +240,7 @@ func (uc *UserController) Login(c *fiber.Ctx) error {
 	}
 
 	// Generate JWT tokens
-	atoken, rtoken, err := auth.GenerateJWT(user.ID, user.Email)
+	atoken, rtoken, err := auth.GenerateJWT(*user)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,

@@ -58,12 +58,12 @@ func NewRoutes(app *fiber.App, config *config.ServerConfig, system *controllers.
 
 	user := app.Group("/user", auth.IsAuth())
 
-	user.Get("/profile", system.Usercontroller.UserProfile)
-	user.Put("/update/profile/me", system.Usercontroller.UpdateUserProfile)
-	user.Put("/update/notification/me", system.Usercontroller.UpdateUserNotificationsPref)
-	user.Put("/update/customization/me", system.Usercontroller.UpdateUserCustomization)
-	user.Put("/update/account/me", system.Usercontroller.UpdateUserAccount)
-	user.Delete("/account/delete/me", system.Usercontroller.DeleteUser)
+	user.Get("/profile", auth.RoleAuth("all"), system.Usercontroller.UserProfile)
+	user.Put("/update/profile/me", auth.RoleAuth("all"), system.Usercontroller.UpdateUserProfile)
+	user.Put("/update/notification/me", auth.RoleAuth("all"), system.Usercontroller.UpdateUserNotificationsPref)
+	user.Put("/update/customization/me", auth.RoleAuth("all"), system.Usercontroller.UpdateUserCustomization)
+	user.Put("/update/account/me", auth.RoleAuth("all"), system.Usercontroller.UpdateUserAccount)
+	user.Delete("/account/delete/me", auth.RoleAuth("admin"), system.Usercontroller.DeleteUser)
 
 	// Protected routes
 	app.Get("/protected", auth.IsAuth(), func(c *fiber.Ctx) error {

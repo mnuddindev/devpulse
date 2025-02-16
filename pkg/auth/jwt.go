@@ -10,6 +10,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/mnuddindev/devpulse/pkg/logger"
+	"github.com/mnuddindev/devpulse/pkg/models"
 	"github.com/sirupsen/logrus"
 )
 
@@ -22,14 +23,15 @@ var (
 type Claims struct {
 	UserID uuid.UUID `json:"user_id"`
 	Email  string    `json:"email"`
-	Role   string    `json:"role"`
+	Roles  []string  `json:"roles"`
 	jwt.RegisteredClaims
 }
 
-func GenerateAccessToken(userID uuid.UUID, email string) (string, error) {
+func GenerateAccessToken(userID uuid.UUID, email string, roles []string) (string, error) {
 	claims := Claims{
 		UserID: userID,
 		Email:  email,
+		Roles:  roles,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(15 * time.Minute)), // Access token expires in 15 minutes
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -83,14 +85,19 @@ func GenerateRefreshToken(userID uuid.UUID) (string, error) {
 }
 
 // Generate JWT Tokens
-func GenerateJWT(userID uuid.UUID, email string) (string, string, error) {
-	atoken, err := GenerateAccessToken(userID, email)
+func GenerateJWT(user models.User) (string, string, error) {
+	var rolenames []string
+	for _, role := range user.Roles {
+		rolenames = append(rolenames, role.Name)
+	}
+
+	atoken, err := GenerateAccessToken(user.ID, user.Email, rolenames)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 		}).Error("Failed to generate JWT access token")
 	}
-	rtoken, err := GenerateRefreshToken(userID)
+	rtoken, err := GenerateRefreshToken(user.ID)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
