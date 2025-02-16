@@ -5,10 +5,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/mnuddindev/devpulse/pkg/models"
-	"gorm.io/gorm"
 )
 
-func (us *UserSystem) AssignRole(db *gorm.DB, userID uuid.UUID, roleName []string) error {
+func (us *UserSystem) AssignRole(userID uuid.UUID, roleName []string) error {
 	var role []models.Role
 	if err := us.crud.GetByCondition(&role, "name IN ?", []interface{}{roleName}, []string{}, "", 0, 0); err != nil {
 		return err
@@ -26,7 +25,7 @@ func (us *UserSystem) AssignRole(db *gorm.DB, userID uuid.UUID, roleName []strin
 	return us.crud.AddManyToMany(&user, "Roles", &role)
 }
 
-func (us *UserSystem) GetUserRoles(db *gorm.DB, userID uuid.UUID) ([]string, error) {
+func (us *UserSystem) GetUserRoles(userID uuid.UUID) ([]string, error) {
 	var user models.User
 	if err := us.crud.GetByCondition(&user, "id = ?", []interface{}{userID}, []string{"Roles"}, "", 0, 0); err != nil {
 		return nil, err
@@ -40,22 +39,21 @@ func (us *UserSystem) GetUserRoles(db *gorm.DB, userID uuid.UUID) ([]string, err
 	return roleNames, nil
 }
 
-func (us *UserSystem) HasRole(userid uuid.UUID, roleName []string) (bool, error) {
-	var count int64
-	err := us.crud.DB.Model(&models.User{}).
-		Joins("JOIN user_roles ON user_roles.user_id = users.id").
-		Joins("JOIN roles ON roles.id = user_roles.role_id").
-		Where("users.id = ? AND roles.name IN ?", userid, roleName).
-		Count(&count).Error
-
-	if err != nil {
+func (us *UserSystem) HasRole(userid uuid.UUID, roleName string) (bool, error) {
+	var user models.User
+	if err := us.crud.GetByCondition(&user, "id = ?", []interface{}{userid}, []string{"Roles"}, "", 0, 0); err != nil {
 		return false, err
 	}
 
-	return count == int64(len(roleName)), nil
+	for _, role := range user.Roles {
+		if role.Name == roleName {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
-func (us *UserSystem) UpdateRole(db *gorm.DB, userID uuid.UUID, roleName []string) error {
+func (us *UserSystem) UpdateRole(userID uuid.UUID, roleName []string) error {
 	var role []models.Role
 	if err := us.crud.GetByCondition(&role, "name IN ?", []interface{}{roleName}, []string{}, "", 0, 0); err != nil {
 		return err
