@@ -41,6 +41,7 @@ func Connect(co *cfg.Postgres) *gorm.DB {
 	logger.Log.Info("Schema auto migrated successfully")
 
 	SeedRoles(client)
+	SeedBadges(client)
 
 	// Return the database connection
 	return client
@@ -56,6 +57,54 @@ func SeedRoles(db *gorm.DB) {
 		if count == 0 {
 			db.Create(&models.Role{Name: role})
 			fmt.Println("✅ Created role:", role)
+		} else {
+			return
+		}
+	}
+}
+
+func SeedBadges(db *gorm.DB) {
+	badges := []string{
+		"One Year Club",
+		"Two Year Club",
+		"Three Year Club",
+		"Four Year Club",
+		"Six Year Club",
+		"Seven Year Club",
+		"Eight Year Club",
+		"Beloved Comment",
+		"Warm Welcome",
+		"Writing Debut",
+		"Writing Streak",
+		"Top 7",
+		"Big Thread",
+		"Fab 5",
+	}
+
+	image := []string{
+		"https://localhost/badge.png",
+		"https://localhost/badge.png",
+		"https://localhost/badge.png",
+		"https://localhost/badge.png",
+		"https://localhost/badge.png",
+		"https://localhost/badge.png",
+		"https://localhost/badge.png",
+		"https://localhost/badge.png",
+		"https://localhost/badge.png",
+		"https://localhost/badge.png",
+		"https://localhost/badge.png",
+		"https://localhost/badge.png",
+		"https://localhost/badge.png",
+		"https://localhost/badge.png",
+	}
+
+	for i, badge := range badges {
+		var count int64
+		db.Model(&models.Badge{}).Where("name = ?", badge).Count(&count)
+
+		if count == 0 {
+			db.Create(&models.Badge{Name: badge, Image: image[i]})
+			fmt.Println("✅ Created badge:", badge)
 		} else {
 			return
 		}
