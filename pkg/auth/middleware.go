@@ -87,8 +87,14 @@ func handleTokenRefresh(c *fiber.Ctx, uc *services.UserSystem) error {
 		})
 	}
 
+	// Extracting roles from User
+	var rolenames []string
+	for _, role := range user.Roles {
+		rolenames = append(rolenames, role.Name)
+	}
+
 	// Generate new tokens (access + refresh)
-	newAccessToken, err := GenerateAccessToken(user.ID, user.Email)
+	newAccessToken, err := GenerateAccessToken(user.ID, user.Email, rolenames)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
