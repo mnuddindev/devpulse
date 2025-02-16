@@ -521,63 +521,96 @@ func (uc *UserController) UpdateUserProfile(c *fiber.Ctx) error {
 	}
 	updates["updated_at"] = time.Now()
 
-	// Update user in the database
-	if err := uc.userSystem.UpdateUser("id = ?", user.ID, updates); err != nil {
-		logger.Log.WithFields(logrus.Fields{
-			"error": err,
-			"model": "usermodel",
-		}).Error("Update failed")
-	}
+	if len(updates) > 0 {
+		// Update user in the database
+		if err := uc.userSystem.UpdateUser("id = ?", user.ID, updates); err != nil {
+			logger.Log.WithFields(logrus.Fields{
+				"error": err,
+				"model": "usermodel",
+			}).Error("Update failed")
+		}
 
-	// Fetch updated user profile from the database
-	uu, err := uc.userSystem.UserBy("id = ?", userid)
-	if err != nil {
-		// Return internal server error status
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to update profile",
-		})
+		if updateData.Username != nil {
+			user.Username = *updateData.Username
+		}
+		if updateData.Email != nil {
+			user.Email = *updateData.Email
+		}
+		if updateData.FirstName != nil {
+			user.FirstName = *updateData.FirstName
+		}
+		if updateData.LastName != nil {
+			user.LastName = *updateData.LastName
+		}
+		if updateData.Bio != nil {
+			user.Bio = *updateData.Bio
+		}
+		if updateData.AvatarUrl != nil {
+			user.AvatarUrl = *updateData.AvatarUrl
+		}
+		if updateData.JobTitle != nil {
+			user.JobTitle = *updateData.JobTitle
+		}
+		if updateData.Employer != nil {
+			user.Employer = *updateData.Employer
+		}
+		if updateData.Location != nil {
+			user.Location = *updateData.Location
+		}
+		if updateData.GithubUrl != nil {
+			user.GithubUrl = *updateData.GithubUrl
+		}
+		if updateData.Website != nil {
+			user.Website = *updateData.Website
+		}
+		if updateData.CurrentLearning != nil {
+			user.CurrentLearning = *updateData.CurrentLearning
+		}
+		if updateData.AvailableFor != nil {
+			user.AvailableFor = *updateData.AvailableFor
+		}
+		if updateData.CurrentlyHackingOn != nil {
+			user.CurrentlyHackingOn = *updateData.CurrentlyHackingOn
+		}
+		if updateData.Pronouns != nil {
+			user.Pronouns = *updateData.Pronouns
+		}
+		if updateData.Education != nil {
+			user.Education = *updateData.Education
+		}
+		if updateData.BrandColor != nil {
+			user.BrandColor = *updateData.BrandColor
+		}
+		if updateData.Skills != nil {
+			user.Skills = *updateData.Skills
+		}
+		if updateData.Interests != nil {
+			user.Interests = *updateData.Interests
+		}
 	}
 
 	// Prepare updated user profile response
 	profileResponse := fiber.Map{
-		"id":                       uu.ID,
-		"username":                 uu.Username,
-		"email":                    uu.Email,
-		"first_name":               uu.FirstName,
-		"last_name":                uu.LastName,
-		"bio":                      uu.Bio,
-		"avatar_url":               uu.AvatarUrl,
-		"job_title":                uu.JobTitle,
-		"employer":                 uu.Employer,
-		"location":                 uu.Location,
-		"github_url":               uu.GithubUrl,
-		"website":                  uu.Website,
-		"current_learning":         uu.CurrentLearning,
-		"available_for":            uu.AvailableFor,
-		"currently_hacking_on":     uu.CurrentlyHackingOn,
-		"pronouns":                 uu.Pronouns,
-		"education":                uu.Education,
-		"brand_color":              uu.BrandColor,
-		"posts_count":              uu.PostsCount,
-		"comments_count":           uu.CommentsCount,
-		"likes_count":              uu.LikesCount,
-		"bookmarks_count":          uu.BookmarksCount,
-		"last_seen":                uu.LastSeen,
-		"theme_preference":         uu.ThemePreference,
-		"base_font":                uu.BaseFont,
-		"site_navbar":              uu.SiteNavbar,
-		"content_editor":           uu.ContentEditor,
-		"content_mode":             uu.ContentMode,
-		"created_at":               uu.CreatedAt,
-		"updated_at":               uu.UpdatedAt,
-		"skills":                   uu.Skills,
-		"interests":                uu.Interests,
-		"badges":                   uu.Badges,
-		"roles":                    uu.Roles,
-		"followers":                uu.Followers,
-		"following":                uu.Following,
-		"notifications":            uu.Notifications,
-		"notification_preferences": uu.NotificationsPreferences,
+		"id":                   user.ID,
+		"username":             user.Username,
+		"email":                user.Email,
+		"first_name":           user.FirstName,
+		"last_name":            user.LastName,
+		"bio":                  user.Bio,
+		"avatar_url":           user.AvatarUrl,
+		"job_title":            user.JobTitle,
+		"employer":             user.Employer,
+		"location":             user.Location,
+		"github_url":           user.GithubUrl,
+		"website":              user.Website,
+		"current_learning":     user.CurrentLearning,
+		"available_for":        user.AvailableFor,
+		"currently_hacking_on": user.CurrentlyHackingOn,
+		"pronouns":             user.Pronouns,
+		"education":            user.Education,
+		"brand_color":          user.BrandColor,
+		"skills":               user.Skills,
+		"interests":            user.Interests,
 	}
 
 	// Return updated user profile response

@@ -54,7 +54,7 @@ func NewRoutes(app *fiber.App, config *config.ServerConfig, system *controllers.
 	app.Post("/login", system.Usercontroller.Login)
 
 	// for the guests
-	app.Get("/users/id/:userid", system.Usercontroller.UserByID)
+	app.Get("/users/profile/id/:userid", system.Usercontroller.UserByID)
 
 	app.Post("/logout", auth.IsAuth(), auth.RefreshTokenMiddleware(userService), auth.RoleAuth("all"), system.Usercontroller.Logout)
 
@@ -69,8 +69,8 @@ func NewRoutes(app *fiber.App, config *config.ServerConfig, system *controllers.
 
 	// protected routes
 	users := authgroup.Group("/users")
-	users.Put("/update/profile/me", auth.IsAuth(), auth.RoleAuth("admin", "moderator"), system.Usercontroller.UpdateUserProfile)
-	users.Delete("/account/delete/me", auth.IsAuth(), auth.RoleAuth("admin"), system.Usercontroller.DeleteUser)
+	users.Put("/account/update/:userid", auth.RoleAuth("admin", "moderator"), system.Usercontroller.UpdateUserProfile)
+	users.Delete("/account/delete/:userid", auth.RoleAuth("admin"), system.Usercontroller.DeleteUser)
 
 	// Protected routes
 	app.Get("/protected", auth.IsAuth(), func(c *fiber.Ctx) error {
