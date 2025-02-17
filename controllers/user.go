@@ -253,7 +253,6 @@ func (uc *UserController) Login(c *fiber.Ctx) error {
 	at := fiber.Cookie{
 		Name:     "access_token",
 		Value:    atoken,
-		Expires:  time.Now().Add(15 * time.Minute),
 		HTTPOnly: true,
 	}
 	rt := fiber.Cookie{

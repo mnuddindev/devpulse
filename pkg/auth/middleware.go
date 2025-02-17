@@ -2,7 +2,6 @@ package auth
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/mnuddindev/devpulse/pkg/logger"
@@ -110,7 +109,6 @@ func handleTokenRefresh(c *fiber.Ctx, uc *services.UserSystem) error {
 	c.Cookie(&fiber.Cookie{
 		Name:     "access_token",
 		Value:    newAccessToken,
-		Expires:  time.Now().Add(15 * time.Minute),
 		HTTPOnly: true,
 	})
 
