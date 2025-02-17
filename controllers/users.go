@@ -95,6 +95,16 @@ func (uc *UserController) UpdateUserByID(c *fiber.Ctx) error {
 		})
 	}
 
+	type NotificationPref struct {
+		EmailOnLikes    *bool `json:"email_on_likes" validate:"omitempty"`
+		EmailOnComments *bool `json:"email_on_comments" validate:"omitempty"`
+		EmailOnMentions *bool `json:"email_on_mentions" validate:"omitempty"`
+		EmailOnFollower *bool `json:"email_on_followers" validate:"omitempty"`
+		EmailOnBadge    *bool `json:"email_on_badge" validate:"omitempty"`
+		EmailOnUnread   *bool `json:"email_on_unread" validate:"omitempty"`
+		EmailOnNewPosts *bool `json:"email_on_new_posts" validate:"omitempty"`
+	}
+
 	type UpdateUser struct {
 		Username           *string    `json:"username" validate:"omitempty,min=3"`
 		Email              *string    `json:"email" validate:"omitempty,email"`
@@ -123,10 +133,11 @@ func (uc *UserController) UpdateUserByID(c *fiber.Ctx) error {
 		ContentMode        *int       `json:"content_mode" validate:"omitempty,oneof=1 2 3 4 5"`
 		UpdatedAt          *time.Time `json:"updated_at"`
 
-		Skills    *string         `json:"skills"`
-		Interests *string         `json:"interests"`
-		Badges    *[]models.Badge `json:"badges"`
-		Roles     *[]models.Role  `json:"roles"`
+		Skills                   *string             `json:"skills"`
+		Interests                *string             `json:"interests"`
+		Badges                   *[]models.Badge     `json:"badges"`
+		Roles                    *[]models.Role      `json:"roles"`
+		NotificationsPreferences *[]NotificationPref `json:"notifipre"`
 	}
 
 	// Parse request body into updateData struct
@@ -178,6 +189,10 @@ func (uc *UserController) UpdateUserByID(c *fiber.Ctx) error {
 	}
 	if updateData.Email != nil {
 		updates["email"] = updateData.Email
+	}
+	if updateData.Password != nil {
+		hashedPassword, _ := utils.HashPassword(*updateData.Password)
+		updates["password"] = hashedPassword
 	}
 	if updateData.FirstName != nil {
 		updates["first_name"] = updateData.FirstName
@@ -253,7 +268,7 @@ func (uc *UserController) UpdateUserByID(c *fiber.Ctx) error {
 	}
 
 	// Handle badges before update
-	if len(*updateData.Badges) > 0 {
+	if updateData.Badges != nil && len(*updateData.Badges) > 0 {
 		var newBadges []string
 		for _, badge := range *updateData.Badges {
 			newBadges = append(newBadges, badge.Name)
@@ -264,7 +279,7 @@ func (uc *UserController) UpdateUserByID(c *fiber.Ctx) error {
 		}
 	}
 
-	if len(*updateData.Roles) > 0 {
+	if updateData.Roles != nil && len(*updateData.Roles) > 0 {
 		var newRoles []string
 		for _, role := range *updateData.Roles {
 			newRoles = append(newRoles, role.Name)
@@ -272,6 +287,51 @@ func (uc *UserController) UpdateUserByID(c *fiber.Ctx) error {
 		if err := uc.userSystem.UpdateRole(userid, newRoles); err != nil {
 			logrus.Error("Failed to update roles: ", err)
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update roles"})
+		}
+	}
+
+	prefUpdate := map[string]interface{}{}
+	if updateData.NotificationsPreferences != nil && len(*updateData.NotificationsPreferences) > 0 {
+		updates := map[string]interface{}{}
+
+		for _, newPref := range *updateData.NotificationsPreferences {
+			if newPref.EmailOnLikes != nil {
+				updates["email_on_likes"] = *newPref.EmailOnLikes
+				prefUpdate["email_on_likes"] = *newPref.EmailOnLikes
+			}
+			if newPref.EmailOnComments != nil {
+				updates["email_on_comments"] = *newPref.EmailOnComments
+				prefUpdate["email_on_comments"] = *newPref.EmailOnComments
+			}
+			if newPref.EmailOnMentions != nil {
+				updates["email_on_mentions"] = *newPref.EmailOnMentions
+				prefUpdate["email_on_mentions"] = *newPref.EmailOnMentions
+			}
+			if newPref.EmailOnFollower != nil {
+				updates["email_on_followers"] = *newPref.EmailOnFollower
+				prefUpdate["email_on_followers"] = *newPref.EmailOnFollower
+			}
+			if newPref.EmailOnBadge != nil {
+				updates["email_on_badge"] = *newPref.EmailOnBadge
+				prefUpdate["email_on_badge"] = *newPref.EmailOnBadge
+			}
+			if newPref.EmailOnUnread != nil {
+				updates["email_on_unread"] = *newPref.EmailOnUnread
+				prefUpdate["email_on_unread"] = *newPref.EmailOnUnread
+			}
+			if newPref.EmailOnNewPosts != nil {
+				updates["email_on_new_posts"] = *newPref.EmailOnNewPosts
+				prefUpdate["email_on_new_posts"] = *newPref.EmailOnNewPosts
+			}
+		}
+		if err := uc.userSystem.UpdateNotificationPref("user_id = ?", user.ID, updates); err != nil {
+			logger.Log.WithFields(logrus.Fields{
+				"error":   err,
+				"user_id": user.ID,
+			}).Error("Failed to update notification preferences")
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Failed to update notification preferences",
+			})
 		}
 	}
 
@@ -374,39 +434,70 @@ func (uc *UserController) UpdateUserByID(c *fiber.Ctx) error {
 
 	// Prepare updated user profile response
 	profileResponse := fiber.Map{
-		"id":                   user.ID,
-		"username":             user.Username,
-		"email":                user.Email,
-		"first_name":           user.FirstName,
-		"last_name":            user.LastName,
-		"bio":                  user.Bio,
-		"avatar_url":           user.AvatarUrl,
-		"job_title":            user.JobTitle,
-		"employer":             user.Employer,
-		"location":             user.Location,
-		"github_url":           user.GithubUrl,
-		"website":              user.Website,
-		"current_learning":     user.CurrentLearning,
-		"available_for":        user.AvailableFor,
-		"currently_hacking_on": user.CurrentlyHackingOn,
-		"pronouns":             user.Pronouns,
-		"education":            user.Education,
-		"brand_color":          user.BrandColor,
-		"is_active":            user.IsActive,
-		"is_email_verified":    user.IsEmailVerified,
-		"theme_preference":     user.ThemePreference,
-		"base_font":            user.BaseFont,
-		"site_navbar":          user.SiteNavbar,
-		"content_editor":       user.ContentEditor,
-		"content_mode":         user.ContentMode,
-		"skills":               user.Skills,
-		"interests":            user.Interests,
-		"badges":               user.Badges,
-		"roles":                user.Roles,
+		"id":                       user.ID,
+		"username":                 user.Username,
+		"email":                    user.Email,
+		"first_name":               user.FirstName,
+		"last_name":                user.LastName,
+		"bio":                      user.Bio,
+		"avatar_url":               user.AvatarUrl,
+		"job_title":                user.JobTitle,
+		"employer":                 user.Employer,
+		"location":                 user.Location,
+		"github_url":               user.GithubUrl,
+		"website":                  user.Website,
+		"current_learning":         user.CurrentLearning,
+		"available_for":            user.AvailableFor,
+		"currently_hacking_on":     user.CurrentlyHackingOn,
+		"pronouns":                 user.Pronouns,
+		"education":                user.Education,
+		"brand_color":              user.BrandColor,
+		"is_active":                user.IsActive,
+		"is_email_verified":        user.IsEmailVerified,
+		"theme_preference":         user.ThemePreference,
+		"base_font":                user.BaseFont,
+		"site_navbar":              user.SiteNavbar,
+		"content_editor":           user.ContentEditor,
+		"content_mode":             user.ContentMode,
+		"skills":                   user.Skills,
+		"interests":                user.Interests,
+		"badges":                   user.Badges,
+		"roles":                    user.Roles,
+		"notification_preferences": prefUpdate,
 	}
 
 	// Return updated user profile response
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"user": profileResponse,
+	})
+}
+
+func (uc *UserController) DeleteUserByID(c *fiber.Ctx) error {
+	// Get user ID from context
+	userid, err := uuid.Parse(c.Params("userid"))
+	if err != nil {
+		logger.Log.WithFields(logrus.Fields{
+			"error": "Invalid user id",
+		}).Error("Invalid user id")
+		return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{
+			"status":   fiber.StatusUnprocessableEntity,
+			"messagee": "Inavlid user id, failed to find user",
+		})
+	}
+
+	if err := uc.userSystem.DeleteUser(userid); err != nil {
+		logger.Log.WithFields(logrus.Fields{
+			"error": "User deletation failed",
+		}).Warn("User can't be deleted")
+		// Return unauthorized status
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":  "Unauthorized",
+			"status": fiber.StatusInternalServerError,
+		})
+	}
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"status":  fiber.StatusOK,
+		"message": "User deleted successfully!!",
 	})
 }

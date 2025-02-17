@@ -70,7 +70,7 @@ func NewRoutes(app *fiber.App, config *config.ServerConfig, system *controllers.
 	// protected routes
 	users := authgroup.Group("/users")
 	users.Put("/account/update/:userid", auth.RoleAuth("admin", "moderator"), system.Usercontroller.UpdateUserByID)
-	users.Delete("/account/delete/:userid", auth.RoleAuth("admin"), system.Usercontroller.DeleteUser)
+	users.Delete("/account/delete/:userid", auth.RoleAuth("admin"), system.Usercontroller.DeleteUserByID)
 
 	// Protected routes
 	app.Get("/protected", auth.IsAuth(), func(c *fiber.Ctx) error {
