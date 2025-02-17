@@ -34,6 +34,16 @@ func (uc *UserController) UserByID(c *fiber.Ctx) error {
 		})
 	}
 
+	if user.ID.String() == "00000000-0000-0000-0000-000000000000" {
+		logger.Log.WithFields(logrus.Fields{
+			"error": "User not found",
+		}).Warn("Unauthorized access attempt")
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"status":  fiber.StatusNotFound,
+			"message": "User not found!!",
+		})
+	}
+
 	// Prepare user profile response
 	profileResponse := fiber.Map{
 		"id":                       user.ID,
@@ -180,6 +190,10 @@ func (uc *UserController) UpdateUserByID(c *fiber.Ctx) error {
 		logger.Log.WithFields(logrus.Fields{
 			"error": "User not found",
 		}).Warn("Unauthorized access attempt")
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"status":  fiber.StatusNotFound,
+			"message": "User not found!!",
+		})
 	}
 
 	// Prepare updates map with non-nil fields from updateData
@@ -482,6 +496,25 @@ func (uc *UserController) DeleteUserByID(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{
 			"status":   fiber.StatusUnprocessableEntity,
 			"messagee": "Inavlid user id, failed to find user",
+		})
+	}
+
+	// Find user in the database
+	user, err := uc.userSystem.UserBy("id = ?", userid)
+	if err != nil {
+		// Return internal server error status
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to update profile",
+		})
+	}
+
+	if user.ID.String() == "00000000-0000-0000-0000-000000000000" {
+		logger.Log.WithFields(logrus.Fields{
+			"error": "User not found",
+		}).Warn("Unauthorized access attempt")
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"status":  fiber.StatusNotFound,
+			"message": "User not found!!",
 		})
 	}
 

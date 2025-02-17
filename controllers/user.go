@@ -458,6 +458,10 @@ func (uc *UserController) UpdateUserProfile(c *fiber.Ctx) error {
 		logger.Log.WithFields(logrus.Fields{
 			"error": "User not found",
 		}).Warn("Unauthorized access attempt")
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"status":  fiber.StatusNotFound,
+			"message": "User not found!!",
+		})
 	}
 
 	// Prepare updates map with non-nil fields from updateData
@@ -679,8 +683,12 @@ func (uc *UserController) UpdateUserCustomization(c *fiber.Ctx) error {
 
 	if user.ID.String() == "00000000-0000-0000-0000-000000000000" {
 		logger.Log.WithFields(logrus.Fields{
-			"error": "Notification Preferences not found",
+			"error": "User not found",
 		}).Warn("Unauthorized access attempt")
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"status":  fiber.StatusNotFound,
+			"message": "User not found!!",
+		})
 	}
 
 	updates := map[string]interface{}{}
@@ -809,6 +817,10 @@ func (uc *UserController) UpdateUserNotificationsPref(c *fiber.Ctx) error {
 		logger.Log.WithFields(logrus.Fields{
 			"error": "Notification Preferences not found",
 		}).Warn("Unauthorized access attempt")
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"status":  fiber.StatusNotFound,
+			"message": "Notification Preferences not found!!",
+		})
 	}
 
 	updates := map[string]interface{}{}
@@ -940,6 +952,10 @@ func (uc *UserController) UpdateUserAccount(c *fiber.Ctx) error {
 		logger.Log.WithFields(logrus.Fields{
 			"error": "User not found",
 		}).Warn("Unauthorized access attempt")
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"status":  fiber.StatusNotFound,
+			"message": "User not found!!",
+		})
 	}
 
 	// Compare current password with stored password
@@ -991,6 +1007,25 @@ func (uc *UserController) DeleteUser(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error":  "Unauthorized",
 			"status": fiber.StatusUnauthorized,
+		})
+	}
+
+	// Find user in the database
+	user, err := uc.userSystem.UserBy("id = ?", userid)
+	if err != nil {
+		// Return internal server error status
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to update profile",
+		})
+	}
+
+	if user.ID.String() == "00000000-0000-0000-0000-000000000000" {
+		logger.Log.WithFields(logrus.Fields{
+			"error": "User not found",
+		}).Warn("Unauthorized access attempt")
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"status":  fiber.StatusNotFound,
+			"message": "User not found!!",
 		})
 	}
 
