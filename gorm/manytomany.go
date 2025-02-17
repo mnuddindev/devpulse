@@ -11,6 +11,15 @@ func (g *GormDB) AddManyToMany(model interface{}, assoc string, userdata interfa
 	return nil
 }
 
+// Many2Many Find many2many connections
+func (g *GormDB) FindManyToMany(model interface{}, assoc string, savemodel interface{}) error {
+	if err := g.DB.Model(model).Association(assoc).Find(savemodel); err != nil {
+		logger.Log.WithError(err).Error("Failed to Find ManyToMany")
+		return err
+	}
+	return nil
+}
+
 // Many2Many update many2many connections
 func (g *GormDB) UpdateManyToMany(model interface{}, assoc string, userdata interface{}) error {
 	if err := g.DB.Model(model).Association(assoc).Replace(userdata); err != nil {

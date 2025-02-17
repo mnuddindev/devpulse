@@ -69,6 +69,10 @@ func NewRoutes(app *fiber.App, config *config.ServerConfig, system *controllers.
 
 	// protected routes
 	users := authgroup.Group("/users")
+	users.Post("/:userid/follow")
+	users.Delete("/:userid/unfollow")
+	users.Get("/:userid/followers")
+	users.Get("/:userid/following")
 	users.Put("/account/update/:userid", auth.RoleAuth("admin", "moderator"), system.Usercontroller.UpdateUserByID)
 	users.Delete("/account/delete/:userid", auth.RoleAuth("admin"), system.Usercontroller.DeleteUserByID)
 
