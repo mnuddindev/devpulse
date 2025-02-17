@@ -8,36 +8,36 @@ import (
 )
 
 // Follow used to follow a user
-func (us *UserSystem) Follow(followerid, followingid uuid.UUID) error {
+func (us *UserSystem) Follow(followerid, followingid uuid.UUID) (string, string, error) {
 	var follower, following models.User
 
 	// Check before following
 	if err := us.crud.GetByID(&follower, followerid.String()); err != nil {
-		return errors.New("follower not found")
+		return "", "", errors.New("follower not found")
 	}
 	if err := us.crud.GetByID(&following, followingid.String()); err != nil {
-		return errors.New("following not found")
+		return "", "", errors.New("following not found")
 	}
 
 	// check if users exist
 	if follower.ID.String() == "00000000-0000-0000-0000-000000000000" {
-		return errors.New("follower not found")
+		return "", "", errors.New("follower not found")
 	}
 	if following.ID.String() == "00000000-0000-0000-0000-000000000000" {
-		return errors.New("user to unfollow not found")
+		return "", "", errors.New("user to unfollow not found")
 	}
 
 	// prevent a user from following themselves
 	if followerid == followingid {
-		return errors.New("you cannot follow yourself")
+		return "", "", errors.New("you cannot follow yourself")
 	}
 
 	// add follow relationship in the join table
 	if err := us.crud.AddManyToMany(&follower, "Following", &following); err != nil {
-		return err
+		return "", "", err
 	}
 
-	return nil
+	return (follower.FirstName + " " + follower.LastName), (following.FirstName + " " + following.LastName), nil
 }
 
 // Unfollow uses to unfollow a user
