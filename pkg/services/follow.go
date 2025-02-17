@@ -12,10 +12,10 @@ func (us *UserSystem) Follow(followerid, followingid uuid.UUID) (string, string,
 	var follower, following models.User
 
 	// Check before following
-	if err := us.crud.GetByID(&follower, followerid.String()); err != nil {
+	if err := us.crud.GetByCondition(&follower, "id = ?", []interface{}{followerid.String()}, []string{}, "", 0, 0); err != nil {
 		return "", "", errors.New("follower not found")
 	}
-	if err := us.crud.GetByID(&following, followingid.String()); err != nil {
+	if err := us.crud.GetByCondition(&following, "id = ?", []interface{}{followingid.String()}, []string{}, "", 0, 0); err != nil {
 		return "", "", errors.New("following not found")
 	}
 
@@ -24,7 +24,7 @@ func (us *UserSystem) Follow(followerid, followingid uuid.UUID) (string, string,
 		return "", "", errors.New("follower not found")
 	}
 	if following.ID.String() == "00000000-0000-0000-0000-000000000000" {
-		return "", "", errors.New("user to unfollow not found")
+		return "", "", errors.New("user not found")
 	}
 
 	// prevent a user from following themselves
@@ -32,12 +32,17 @@ func (us *UserSystem) Follow(followerid, followingid uuid.UUID) (string, string,
 		return "", "", errors.New("you cannot follow yourself")
 	}
 
+	// Prevent duplicate follows
+	if us.crud.DB.Model(&follower).Where("id = ?", followingid).Association("Following").Count() > 0 {
+		return "", "", errors.New("already following this user")
+	}
+
 	// add follow relationship in the join table
 	if err := us.crud.AddManyToMany(&follower, "Following", &following); err != nil {
 		return "", "", err
 	}
 
-	return (follower.FirstName + " " + follower.LastName), (following.FirstName + " " + following.LastName), nil
+	return (follower.Username), (following.Username), nil
 }
 
 // Unfollow uses to unfollow a user
@@ -64,7 +69,7 @@ func (us *UserSystem) Unfollow(followerid, followingid uuid.UUID) (string, strin
 		return "", "", err
 	}
 
-	return (follower.FirstName + " " + follower.LastName), (following.FirstName + " " + following.LastName), nil
+	return (follower.Username), (following.Username), nil
 }
 
 // GetFollowers find all followers of a user and returns it

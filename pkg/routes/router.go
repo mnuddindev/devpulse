@@ -56,16 +56,16 @@ func NewRoutes(app *fiber.App, config *config.ServerConfig, system *controllers.
 	// for the guests
 	app.Get("/users/profile/id/:userid", system.Usercontroller.UserByID)
 
-	app.Post("/logout", auth.IsAuth(), auth.RefreshTokenMiddleware(userService), auth.RoleAuth("all"), system.Usercontroller.Logout)
+	app.Post("/logout", auth.RefreshTokenMiddleware(userService), auth.IsAuth(userService), auth.RoleAuth("all"), system.Usercontroller.Logout)
 
-	authgroup := app.Group("/", auth.IsAuth(), auth.RefreshTokenMiddleware(userService))
+	authgroup := app.Group("/", auth.RefreshTokenMiddleware(userService), auth.IsAuth(userService))
 	user := authgroup.Group("/user")
-	user.Get("/profile", auth.IsAuth(), auth.RoleAuth("all"), system.Usercontroller.UserProfile)
-	user.Put("/update/profile/me", auth.IsAuth(), auth.RoleAuth("all"), system.Usercontroller.UpdateUserProfile)
-	user.Put("/update/notification/me", auth.IsAuth(), auth.RoleAuth("all"), system.Usercontroller.UpdateUserNotificationsPref)
-	user.Put("/update/customization/me", auth.IsAuth(), auth.RoleAuth("all"), system.Usercontroller.UpdateUserCustomization)
-	user.Put("/update/account/me", auth.IsAuth(), auth.RoleAuth("all"), system.Usercontroller.UpdateUserAccount)
-	user.Delete("/account/delete/me", auth.IsAuth(), auth.RoleAuth("all"), system.Usercontroller.DeleteUser)
+	user.Get("/profile", auth.IsAuth(userService), auth.RoleAuth("all"), system.Usercontroller.UserProfile)
+	user.Put("/update/profile/me", auth.IsAuth(userService), auth.RoleAuth("all"), system.Usercontroller.UpdateUserProfile)
+	user.Put("/update/notification/me", auth.IsAuth(userService), auth.RoleAuth("all"), system.Usercontroller.UpdateUserNotificationsPref)
+	user.Put("/update/customization/me", auth.IsAuth(userService), auth.RoleAuth("all"), system.Usercontroller.UpdateUserCustomization)
+	user.Put("/update/account/me", auth.IsAuth(userService), auth.RoleAuth("all"), system.Usercontroller.UpdateUserAccount)
+	user.Delete("/account/delete/me", auth.IsAuth(userService), auth.RoleAuth("all"), system.Usercontroller.DeleteUser)
 
 	// protected routes
 	users := authgroup.Group("/users")
@@ -77,7 +77,7 @@ func NewRoutes(app *fiber.App, config *config.ServerConfig, system *controllers.
 	users.Delete("/account/delete/:userid", auth.RoleAuth("admin"), system.Usercontroller.DeleteUserByID)
 
 	// Protected routes
-	app.Get("/protected", auth.IsAuth(), func(c *fiber.Ctx) error {
+	app.Get("/protected", auth.IsAuth(userService), func(c *fiber.Ctx) error {
 		userID := c.Locals("user_id")
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{
 			"message": "This is private data!",

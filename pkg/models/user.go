@@ -48,8 +48,8 @@ type User struct {
 	Interests                string                   `gorm:"type:text" json:"interests"`
 	Badges                   []Badge                  `gorm:"many2many:user_badges;" json:"badges"`
 	Roles                    []Role                   `gorm:"many2many:user_roles;" json:"roles"`
-	Followers                []User                   `gorm:"many2many:user_followers;association_jointable_foreignkey:follower_id" json:"followers"`
-	Following                []User                   `gorm:"many2many:user_following;association_jointable_foreignkey:following_id" json:"following"`
+	Followers                []User                   `gorm:"many2many:user_followers;joinForeignKey:following_id;joinReferences:follower_id" json:"followers"`
+	Following                []User                   `gorm:"many2many:user_followers;joinForeignKey:follower_id;joinReferences:following_id" json:"following"`
 	Notifications            []Notification           `gorm:"foreignKey:UserID" json:"notifications"`
 	NotificationsPreferences []NotificationPrefrences `gorm:"foreignKey:UserID" json:"notifipre"`
 }

@@ -5,10 +5,11 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/mnuddindev/devpulse/pkg/logger"
+	"github.com/mnuddindev/devpulse/pkg/services"
 	"github.com/sirupsen/logrus"
 )
 
-func IsAuth() fiber.Handler {
+func IsAuth(uc *services.UserSystem) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		accessToken := c.Cookies("access_token")
 		if accessToken == "" {
@@ -25,19 +26,23 @@ func IsAuth() fiber.Handler {
 				logger.Log.WithFields(logrus.Fields{
 					"error": "Expired token",
 				}).Warn("Access denied: Token expired")
-				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-					"error":  "Token expired. Please log in again.",
-					"status": fiber.StatusUnauthorized,
-				})
-			}
+				if err := handleTokenRefresh(c, uc); err != nil {
+					return err
+				}
 
-			logger.Log.WithFields(logrus.Fields{
-				"error": err,
-			}).Error("Invalid token")
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error":  "Invalid token",
-				"status": fiber.StatusUnauthorized,
-			})
+				// Retry extracting claims after refresh
+				newAccessToken := c.Cookies("access_token")
+				claims, err = VerifyToken(newAccessToken)
+				if err != nil {
+					logger.Log.WithFields(logrus.Fields{
+						"error": err,
+					}).Error("Invalid refreshed token")
+					return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+						"error":  "Unauthorized",
+						"status": fiber.StatusUnauthorized,
+					})
+				}
+			}
 		}
 
 		// Extract roles
@@ -46,15 +51,6 @@ func IsAuth() fiber.Handler {
 		// Attach user ID to context
 		c.Locals("user_id", claims.UserID)
 		c.Locals("roles", roles)
-
-		// Secure cookie settings
-		c.Cookie(&fiber.Cookie{
-			Name:     "access_token",
-			Value:    accessToken,
-			Secure:   true,
-			HTTPOnly: true,
-			SameSite: "Strict",
-		})
 
 		return c.Next()
 	}
