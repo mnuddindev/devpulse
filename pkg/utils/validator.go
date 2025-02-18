@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/go-playground/validator/v10"
-	"github.com/mnuddindev/devpulse/pkg/logger"
-	"github.com/sirupsen/logrus"
+	"github.com/google/uuid"
+	"github.com/mnuddindev/devpulse/pkg/models"
 )
 
 // ErrResponse represents the structure of the error response.
@@ -31,11 +31,7 @@ type Validator struct {
 func NewValidator() *Validator {
 	v := validator.New()
 
-	if err := v.RegisterValidation("slug", CustomValidationForSlug); err != nil {
-		logger.Log.WithFields(logrus.Fields{
-			"error": err,
-		}).Error("Error registering custom validation")
-	}
+	CustomValidation(v)
 
 	// Register custom validation functions here
 	v.RegisterTagNameFunc(func(fld reflect.StructField) string {
@@ -93,9 +89,20 @@ func getErrorMessage(field, tag, param string) string {
 	}
 }
 
-func CustomValidationForSlug(fl validator.FieldLevel) bool {
-	slug := fl.Field().String()
-	regExp := `^[a-z0-9]+(?:-[a-z0-9]+)*$`
-	validate := regexp.MustCompile(regExp).MatchString(slug)
-	return validate
+func CustomValidation(v *validator.Validate) {
+	v.RegisterValidation("slug", func(fl validator.FieldLevel) bool {
+		slug := fl.Field().String()
+		regExp := `^[a-z0-9]+(?:-[a-z0-9]+)*$`
+		validate := regexp.MustCompile(regExp).MatchString(slug)
+		return validate
+	})
+	v.RegisterValidation("valid_mentions", func(fl validator.FieldLevel) bool {
+		mentions := fl.Field().Interface().([]models.User)
+		for _, user := range mentions {
+			if user.ID == uuid.Nil {
+				return false
+			}
+		}
+		return true
+	})
 }

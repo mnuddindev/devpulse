@@ -46,17 +46,31 @@ type Posts struct {
 	ReviewedAt     *time.Time `json:"reviewed_at"`
 
 	Author        User               `gorm:"foreignKey:AuthorID" json:"author" validate:"-"`
-	Organization  Organization       `gorm:"foreignKey:OrganizationID" json:"organization" validate:"-"`
 	Series        Series             `gorm:"foreignKey:SeriesID" json:"series" validate:"-"`
 	Tags          []Tag              `gorm:"many2many:post_tags;" json:"tags" validate:"max=4,dive"`
 	Comments      []Comment          `gorm:"foreignKey:PostID" json:"comments" validate:"-"`
 	Reactions     []Reaction         `gorm:"foreignKey:PostID" json:"reactions" validate:"-"`
 	Bookmarks     []Bookmark         `gorm:"foreignKey:PostID" json:"bookmarks" validate:"-"`
 	SocialPreview SocialMediaPreview `gorm:"embedded;embeddedPrefix:social_preview_" json:"social_preview"`
-	Mentions      []User             `gorm:"many2many:post_mentions;" json:"mentions" validate:"-"`
-	CoAuthors     []User             `gorm:"many2many:post_co_authors;" json:"co_authors" validate:"max=3,dive"`
+	Mentions      []User             `gorm:"many2many:post_mentions;" json:"mentions" validate:"valid_mentions,-"`
+	CoAuthors     []User             `gorm:"many2many:post_co_authors;" json:"co_authors" validate:"valid_mentions,max=3,dive"`
 
 	CreatedAt time.Time      `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
 	UpdatedAt time.Time      `gorm:"default:CURRENT_TIMESTAMP" json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+type Series struct {
+	ID            uuid.UUID      `gorm:"type:uuid;primary_key;default:uuid_generate_v4()" json:"id"`
+	Title         string         `gorm:"size:200;not null;uniqueIndex" json:"title" validate:"required,min=5,max=200"`
+	Description   string         `gorm:"type:text" json:"description" validate:"max=500"`
+	CoverImageURL string         `gorm:"size:500" json:"cover_image_url" validate:"omitempty,url,max=500"`
+	AuthorID      uuid.UUID      `gorm:"type:uuid;not null" json:"author_id"`
+	Author        User           `gorm:"foreignKey:AuthorID" json:"author" validate:"-"`
+	CreatedAt     time.Time      `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
+	UpdatedAt     time.Time      `gorm:"default:CURRENT_TIMESTAMP" json:"updated_at"`
+	DeletedAt     gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+type Reaction struct {
 }
