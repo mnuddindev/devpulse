@@ -12,7 +12,7 @@ import (
 func RefreshTokenMiddleware(uc *services.UserSystem) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		// Skip token refresh for specific routes (e.g., /refresh, /login)
-		if c.Path() == "/refresh" || c.Path() == "/login" || c.Path() == "/register" || fiber.RoutePatternMatch(c.Path(), "/user/:userid/activate") {
+		if c.Path() == "/refresh" || c.Path() == "/login" || c.Path() == "/logout" || c.Path() == "/register" || fiber.RoutePatternMatch(c.Path(), "/user/:userid/activate") {
 			return c.Next()
 		}
 

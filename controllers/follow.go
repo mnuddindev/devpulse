@@ -116,8 +116,8 @@ func (uc *UserController) GetAllFollowers(c *fiber.Ctx) error {
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"status":  fiber.StatusOK,
-		"message": followers,
+		"status":    fiber.StatusOK,
+		"followers": followers,
 	})
 }
 
@@ -146,7 +146,7 @@ func (uc *UserController) GetAllFollowing(c *fiber.Ctx) error {
 	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"status":  fiber.StatusOK,
-		"message": following,
+		"status":    fiber.StatusOK,
+		"following": following,
 	})
 }

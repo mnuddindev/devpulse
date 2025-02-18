@@ -3,9 +3,12 @@ package utils
 import (
 	"fmt"
 	"reflect"
+	"regexp"
 	"strings"
 
 	"github.com/go-playground/validator/v10"
+	"github.com/mnuddindev/devpulse/pkg/logger"
+	"github.com/sirupsen/logrus"
 )
 
 // ErrResponse represents the structure of the error response.
@@ -27,6 +30,12 @@ type Validator struct {
 // NewValidator is a function that returns a new instance of the Validator struct
 func NewValidator() *Validator {
 	v := validator.New()
+
+	if err := v.RegisterValidation("slug", CustomValidationForSlug); err != nil {
+		logger.Log.WithFields(logrus.Fields{
+			"error": err,
+		}).Error("Error registering custom validation")
+	}
 
 	// Register custom validation functions here
 	v.RegisterTagNameFunc(func(fld reflect.StructField) string {
@@ -67,6 +76,8 @@ func getErrorMessage(field, tag, param string) string {
 		return fmt.Sprintf("%s is required", field)
 	case "min":
 		return fmt.Sprintf("%s must be at least %s characters long", field, param)
+	case "max":
+		return fmt.Sprintf("%s must be at most %s characters long", field, param)
 	case "url":
 		return fmt.Sprintf("%s must be a valid URL", field)
 	case "email":
@@ -75,7 +86,16 @@ func getErrorMessage(field, tag, param string) string {
 		return fmt.Sprintf("%s must be one of the following values: %s", field, param)
 	case "eqfiled":
 		return fmt.Sprintf("%s must be equal to %s", field, param)
+	case "slug":
+		return fmt.Sprintf("%s must contain only lowercase letters, numbers, and hyphens, and cannot start or end with a hyphen %s", field, param)
 	default:
 		return fmt.Sprintf("something wrong on %s; %s", field, tag)
 	}
+}
+
+func CustomValidationForSlug(fl validator.FieldLevel) bool {
+	slug := fl.Field().String()
+	regExp := `^[a-z0-9]+(?:-[a-z0-9]+)*$`
+	validate := regexp.MustCompile(regExp).MatchString(slug)
+	return validate
 }

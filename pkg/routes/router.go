@@ -56,7 +56,7 @@ func NewRoutes(app *fiber.App, config *config.ServerConfig, system *controllers.
 	// for the guests
 	app.Get("/users/profile/id/:userid", system.Usercontroller.UserByID)
 
-	app.Post("/logout", auth.RefreshTokenMiddleware(userService), auth.IsAuth(userService), auth.RoleAuth("all"), system.Usercontroller.Logout)
+	app.Post("/logout", auth.RoleAuth("all"), system.Usercontroller.Logout)
 
 	authgroup := app.Group("/", auth.RefreshTokenMiddleware(userService), auth.IsAuth(userService))
 	user := authgroup.Group("/user")
