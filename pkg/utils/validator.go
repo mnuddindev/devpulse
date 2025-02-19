@@ -105,4 +105,8 @@ func CustomValidation(v *validator.Validate) {
 		}
 		return true
 	})
+	v.RegisterValidation("hexcolor", func(fl validator.FieldLevel) bool {
+		color := fl.Field().String()
+		return regexp.MustCompile(`^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$`).MatchString(color)
+	})
 }

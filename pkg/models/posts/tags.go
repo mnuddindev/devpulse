@@ -12,7 +12,7 @@ type Tag struct {
 	ID               uuid.UUID      `gorm:"type:uuid;primary_key;default:uuid_generate_v4()" json:"id"`
 	Name             string         `gorm:"size:30;not null;uniqueIndex" json:"name" validate:"required,min=2,max=30,alphanumunicode"`
 	Slug             string         `gorm:"size:35;not null;uniqueIndex" json:"slug" validate:"required,slug,max=35"`
-	Description      string         `gorm:"size:200" json:"description" validate:"max=200"`
+	Deescription     string         `gorm:"size:200" json:"description" validate:"max=200"`
 	ShortDescription string         `gorm:"size:100" json:"short_description" validate:"max=100"`
 	IconURL          string         `gorm:"size:500" json:"icon_url" validate:"omitempty,url,max=500"`
 	BackgroundURL    string         `gorm:"size:500" json:"background_url" validate:"omitempty,url,max=500"`
@@ -29,10 +29,10 @@ type Tag struct {
 	DeletedAt        gorm.DeletedAt `gorm:"index" json:"-"`
 
 	// Relationships
-	Posts      []Post       `gorm:"many2many:post_tags;" json:"posts" validate:"-"`
+	Posts      []Posts      `gorm:"many2many:post_tags;" json:"posts" validate:"-"`
 	Followers  []User       `gorm:"many2many:tag_followers;" json:"followers" validate:"-"`
 	Moderators []User       `gorm:"many2many:tag_moderators;" json:"moderators" validate:"-"`
-	Analytics  TagAnalytics `gorm:"foreignKey:TagID" json:"analytics" validate:"-"`
+	Analytics  *TagAnalytics `gorm:"foreignKey:TagID" json:"analytics" validate:"-"`
 }
 
 // TagAnalytics represents analytics data for a tag
@@ -57,7 +57,7 @@ type TagFollower struct {
 	UserID    uuid.UUID `gorm:"type:uuid;primaryKey" json:"user_id"`
 	CreatedAt time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
 
-	Tag  Tag  `gorm:"foreignKey:TagID" json:"tag" validate:"-"`
+	Tag  *Tag  `gorm:"foreignKey:TagID" json:"tag" validate:"-"`
 	User User `gorm:"foreignKey:UserID" json:"user" validate:"-"`
 }
 
@@ -67,6 +67,6 @@ type TagModerator struct {
 	UserID    uuid.UUID `gorm:"type:uuid;primaryKey" json:"user_id"`
 	CreatedAt time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
 
-	Tag  Tag  `gorm:"foreignKey:TagID" json:"tag" validate:"-"`
+	Tag  *Tag  `gorm:"foreignKey:TagID" json:"tag" validate:"-"`
 	User User `gorm:"foreignKey:UserID" json:"user" validate:"-"`
 }

@@ -20,29 +20,17 @@ type Comment struct {
 	Edited          bool       `gorm:"default:false" json:"edited"`
 	Pinned          bool       `gorm:"default:false" json:"pinned"`
 
-	Author        User              `gorm:"foreignKey:AuthorID" json:"author" validate:"-"`
-	Post          Posts             `gorm:"foreignKey:PostID" json:"post" validate:"-"`
-	ParentComment *Comment          `gorm:"foreignKey:ParentCommentID" json:"parent_comment" validate:"-"`
-	Replies       []Comment         `gorm:"foreignKey:ParentCommentID" json:"replies" validate:"-"`
-	Mentions      []User            `gorm:"many2many:comment_mentions;" json:"mentions" validate:"valid_mentions,max=5,dive"`
-	Reactions     []CommentReaction `gorm:"foreignKey:CommentID" json:"reactions" validate:"-"`
-	Flags         []CommentFlag     `gorm:"foreignKey:CommentID" json:"flags" validate:"-"`
+	Author        User          `gorm:"foreignKey:AuthorID" json:"author" validate:"-"`
+	Post          Posts         `gorm:"foreignKey:PostID" json:"post" validate:"-"`
+	ParentComment *Comment      `gorm:"foreignKey:ParentCommentID" json:"parent_comment" validate:"-"`
+	Replies       []Comment     `gorm:"foreignKey:ParentCommentID" json:"replies" validate:"-"`
+	Mentions      []User        `gorm:"many2many:comment_mentions;" json:"mentions" validate:"valid_mentions,max=5,dive"`
+	Reactions     []Reaction    `gorm:"foreignKey:ReactableID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;polymorphic:Reactable;" json:"reactions" validate:"-"`
+	Flags         []CommentFlag `gorm:"foreignKey:CommentID" json:"flags" validate:"-"`
 
 	CreatedAt time.Time      `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
 	UpdatedAt time.Time      `gorm:"default:CURRENT_TIMESTAMP" json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
-}
-
-// CommentReaction represents reactions to a comment (e.g., like, dislike, etc.)
-type CommentReaction struct {
-	ID        uuid.UUID `gorm:"type:uuid;primary_key;default:uuid_generate_v4()" json:"id"`
-	CommentID uuid.UUID `gorm:"type:uuid;not null;index" json:"comment_id" validate:"required"`
-	UserID    uuid.UUID `gorm:"type:uuid;not null" json:"user_id" validate:"required"`
-	Type      string    `gorm:"size:20;not null" json:"type" validate:"required,oneof=like dislike heart laugh angry"`
-	CreatedAt time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
-
-	User    User    `gorm:"foreignKey:UserID" json:"user" validate:"-"`
-	Comment Comment `gorm:"foreignKey:CommentID" json:"comment" validate:"-"`
 }
 
 // CommentFlag represents flags/reports on a comment (e.g., spam, inappropriate, etc.)

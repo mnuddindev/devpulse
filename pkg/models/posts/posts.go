@@ -20,6 +20,7 @@ type Posts struct {
 	LikesCount         int        `gorm:"default:0" json:"likes_count"`
 	BookmarksCount     int        `gorm:"default:0" json:"bookmarks_count"`
 	ReadingTimeMinutes int        `gorm:"default:1" json:"reading_time_minutes" validate:"min=1"`
+	Status             string     `gorm:"type:varchar(20);default:'draft'" json:"status" validate:"required,oneof=draft published unpublished public private"`
 	ViewsCount         int        `gorm:"default:0" json:"views_count"`
 	ShareCount         int        `gorm:"default:0" json:"share_count"`
 	ContentFormat      string     `gorm:"size:20;default:markdown" json:"content_format" validate:"oneof=markdown html"`
@@ -49,7 +50,7 @@ type Posts struct {
 	Series        Series             `gorm:"foreignKey:SeriesID" json:"series" validate:"-"`
 	Tags          []Tag              `gorm:"many2many:post_tags;" json:"tags" validate:"max=4,dive"`
 	Comments      []Comment          `gorm:"foreignKey:PostID" json:"comments" validate:"-"`
-	Reactions     []Reaction         `gorm:"foreignKey:PostID" json:"reactions" validate:"-"`
+	Reactions     []Reaction         `gorm:"foreignKey:ReactableID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;polymorphic:Reactable;polymorphicValue:post" json:"reactions" validate:"-"`
 	Bookmarks     []Bookmark         `gorm:"foreignKey:PostID" json:"bookmarks" validate:"-"`
 	SocialPreview SocialMediaPreview `gorm:"embedded;embeddedPrefix:social_preview_" json:"social_preview"`
 	Mentions      []User             `gorm:"many2many:post_mentions;" json:"mentions" validate:"valid_mentions,-"`
@@ -70,7 +71,4 @@ type Series struct {
 	CreatedAt     time.Time      `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
 	UpdatedAt     time.Time      `gorm:"default:CURRENT_TIMESTAMP" json:"updated_at"`
 	DeletedAt     gorm.DeletedAt `gorm:"index" json:"-"`
-}
-
-type Reaction struct {
 }
