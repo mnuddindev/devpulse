@@ -61,14 +61,48 @@ type Posts struct {
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
+// Series represents a collection of related posts
 type Series struct {
 	ID            uuid.UUID      `gorm:"type:uuid;primary_key;default:uuid_generate_v4()" json:"id"`
-	Title         string         `gorm:"size:200;not null;uniqueIndex" json:"title" validate:"required,min=5,max=200"`
-	Description   string         `gorm:"type:text" json:"description" validate:"max=500"`
-	CoverImageURL string         `gorm:"size:500" json:"cover_image_url" validate:"omitempty,url,max=500"`
-	AuthorID      uuid.UUID      `gorm:"type:uuid;not null" json:"author_id"`
-	Author        User           `gorm:"foreignKey:AuthorID" json:"author" validate:"-"`
+	Title         string         `gorm:"size:120;not null;uniqueIndex" json:"title" validate:"required,min=5,max=120"`
+	Slug          string         `gorm:"size:140;not null;uniqueIndex" json:"slug" validate:"required,slug,max=140"`
+	Description   string         `gorm:"type:text;not null" json:"description" validate:"required,min=50,max=1000"`
+	CoverImageURL string         `gorm:"size:500" json:"cover_image_url" validate:"omitempty,url,max=500,image_url"`
+	AuthorID      uuid.UUID      `gorm:"type:uuid;not null;index" json:"author_id" validate:"required"`
+	IsPublished   bool           `gorm:"default:false" json:"is_published"`
+	TotalPosts    int            `gorm:"default:0" json:"total_posts" validate:"min=0"`
 	CreatedAt     time.Time      `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
 	UpdatedAt     time.Time      `gorm:"default:CURRENT_TIMESTAMP" json:"updated_at"`
 	DeletedAt     gorm.DeletedAt `gorm:"index" json:"-"`
+
+	// Relationships
+	Author    User            `gorm:"foreignKey:AuthorID" json:"author" validate:"-"`
+	Posts     []SeriesPost    `gorm:"foreignKey:SeriesID" json:"posts" validate:"-"`
+	Analytics SeriesAnalytics `gorm:"foreignKey:SeriesID" json:"analytics" validate:"-"`
+}
+
+// SeriesPost represents a post in a series with ordering
+type SeriesPost struct {
+	ID        uuid.UUID `gorm:"type:uuid;primary_key;default:uuid_generate_v4()" json:"id"`
+	SeriesID  uuid.UUID `gorm:"type:uuid;not null;index" json:"series_id" validate:"required"`
+	PostID    uuid.UUID `gorm:"type:uuid;not null;uniqueIndex" json:"post_id" validate:"required"`
+	Position  int       `gorm:"not null;index:idx_series_position" json:"position" validate:"min=1"`
+	CreatedAt time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
+	UpdatedAt time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"updated_at"`
+
+	// Relationships
+	Post   Posts  `gorm:"foreignKey:PostID" json:"post" validate:"-"`
+	Series Series `gorm:"foreignKey:SeriesID" json:"series" validate:"-"`
+}
+
+// SeriesAnalytics tracks performance metrics for the series
+type SeriesAnalytics struct {
+	ID              uuid.UUID `gorm:"type:uuid;primary_key;default:uuid_generate_v4()" json:"id"`
+	SeriesID        uuid.UUID `gorm:"type:uuid;not null;uniqueIndex" json:"series_id" validate:"required"`
+	TotalViews      int       `gorm:"default:0" json:"total_views" validate:"min=0"`
+	TotalReactions  int       `gorm:"default:0" json:"total_reactions" validate:"min=0"`
+	AverageReadTime float64   `gorm:"default:0.0" json:"average_read_time" validate:"min=0.0"`
+	CompletionRate  float64   `gorm:"default:0.0" json:"completion_rate" validate:"min=0.0,max=1.0"`
+	CreatedAt       time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
+	UpdatedAt       time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"updated_at"`
 }
