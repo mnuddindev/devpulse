@@ -5,11 +5,11 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/mnuddindev/devpulse/pkg/logger"
-	"github.com/mnuddindev/devpulse/pkg/services"
+	"github.com/mnuddindev/devpulse/pkg/services/users"
 	"github.com/sirupsen/logrus"
 )
 
-func RefreshTokenMiddleware(uc *services.UserSystem) fiber.Handler {
+func RefreshTokenMiddleware(uc *users.UserSystem) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		// Skip token refresh for specific routes (e.g., /refresh, /login)
 		if c.Path() == "/refresh" || c.Path() == "/login" || c.Path() == "/logout" || c.Path() == "/register" || fiber.RoutePatternMatch(c.Path(), "/user/:userid/activate") {
@@ -50,7 +50,7 @@ func RefreshTokenMiddleware(uc *services.UserSystem) fiber.Handler {
 	}
 }
 
-func handleTokenRefresh(c *fiber.Ctx, uc *services.UserSystem) error {
+func handleTokenRefresh(c *fiber.Ctx, uc *users.UserSystem) error {
 	// Extract refresh token from cookie
 	refreshToken := c.Cookies("refresh_token")
 	if refreshToken == "" {

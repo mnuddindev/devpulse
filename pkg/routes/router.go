@@ -12,7 +12,7 @@ import (
 	"github.com/mnuddindev/devpulse/config"
 	"github.com/mnuddindev/devpulse/controllers"
 	"github.com/mnuddindev/devpulse/pkg/auth"
-	"github.com/mnuddindev/devpulse/pkg/services"
+	"github.com/mnuddindev/devpulse/pkg/services/users"
 )
 
 func NewRoutes(app *fiber.App, config *config.ServerConfig, system *controllers.CentralSystem) {
@@ -37,7 +37,7 @@ func NewRoutes(app *fiber.App, config *config.ServerConfig, system *controllers.
 	)
 
 	// userservice to access crud
-	userService := services.NewUserSystem(system.DB)
+	userService := users.NewUserSystem(system.DB)
 
 	// for guest users
 	// home router
@@ -49,32 +49,32 @@ func NewRoutes(app *fiber.App, config *config.ServerConfig, system *controllers.
 			"message:":     "the page you are looking for is getting ready.Please try again leter.",
 		})
 	})
-	app.Post("/register", system.Usercontroller.Registration)
-	app.Post("/user/:userid/activate", system.Usercontroller.ActiveUser)
-	app.Post("/login", system.Usercontroller.Login)
+	app.Post("/register", system.UserController.Registration)
+	app.Post("/user/:userid/activate", system.UserController.ActiveUser)
+	app.Post("/login", system.UserController.Login)
 
 	// for the guests
-	app.Get("/users/profile/id/:userid", system.Usercontroller.UserByID)
+	app.Get("/users/profile/id/:userid", system.UserController.UserByID)
 
-	app.Post("/logout", auth.RoleAuth("all"), system.Usercontroller.Logout)
+	app.Post("/logout", auth.RoleAuth("all"), system.UserController.Logout)
 
 	authgroup := app.Group("/", auth.RefreshTokenMiddleware(userService), auth.IsAuth(userService))
 	user := authgroup.Group("/user")
-	user.Get("/profile", auth.IsAuth(userService), auth.RoleAuth("all"), system.Usercontroller.UserProfile)
-	user.Put("/update/profile/me", auth.IsAuth(userService), auth.RoleAuth("all"), system.Usercontroller.UpdateUserProfile)
-	user.Put("/update/notification/me", auth.IsAuth(userService), auth.RoleAuth("all"), system.Usercontroller.UpdateUserNotificationsPref)
-	user.Put("/update/customization/me", auth.IsAuth(userService), auth.RoleAuth("all"), system.Usercontroller.UpdateUserCustomization)
-	user.Put("/update/account/me", auth.IsAuth(userService), auth.RoleAuth("all"), system.Usercontroller.UpdateUserAccount)
-	user.Delete("/account/delete/me", auth.IsAuth(userService), auth.RoleAuth("all"), system.Usercontroller.DeleteUser)
+	user.Get("/profile", auth.IsAuth(userService), auth.RoleAuth("all"), system.UserController.UserProfile)
+	user.Put("/update/profile/me", auth.IsAuth(userService), auth.RoleAuth("all"), system.UserController.UpdateUserProfile)
+	user.Put("/update/notification/me", auth.IsAuth(userService), auth.RoleAuth("all"), system.UserController.UpdateUserNotificationsPref)
+	user.Put("/update/customization/me", auth.IsAuth(userService), auth.RoleAuth("all"), system.UserController.UpdateUserCustomization)
+	user.Put("/update/account/me", auth.IsAuth(userService), auth.RoleAuth("all"), system.UserController.UpdateUserAccount)
+	user.Delete("/account/delete/me", auth.IsAuth(userService), auth.RoleAuth("all"), system.UserController.DeleteUser)
 
 	// protected routes
 	users := authgroup.Group("/users")
-	users.Post("/:userid/follow", auth.RoleAuth("all"), system.Usercontroller.FollowUser)
-	users.Delete("/:userid/unfollow", auth.RoleAuth("all"), system.Usercontroller.UnfollowUser)
-	users.Get("/:userid/followers", auth.RoleAuth("all"), system.Usercontroller.GetAllFollowers)
-	users.Get("/:userid/following", auth.RoleAuth("all"), system.Usercontroller.GetAllFollowing)
-	users.Put("/account/update/:userid", auth.RoleAuth("admin", "moderator"), system.Usercontroller.UpdateUserByID)
-	users.Delete("/account/delete/:userid", auth.RoleAuth("admin"), system.Usercontroller.DeleteUserByID)
+	users.Post("/:userid/follow", auth.RoleAuth("all"), system.UserController.FollowUser)
+	users.Delete("/:userid/unfollow", auth.RoleAuth("all"), system.UserController.UnfollowUser)
+	users.Get("/:userid/followers", auth.RoleAuth("all"), system.UserController.GetAllFollowers)
+	users.Get("/:userid/following", auth.RoleAuth("all"), system.UserController.GetAllFollowing)
+	users.Put("/account/update/:userid", auth.RoleAuth("admin", "moderator"), system.UserController.UpdateUserByID)
+	users.Delete("/account/delete/:userid", auth.RoleAuth("admin"), system.UserController.DeleteUserByID)
 
 	// Protected routes
 	app.Get("/protected", auth.IsAuth(userService), func(c *fiber.Ctx) error {

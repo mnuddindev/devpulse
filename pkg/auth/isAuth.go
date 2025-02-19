@@ -5,11 +5,11 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/mnuddindev/devpulse/pkg/logger"
-	"github.com/mnuddindev/devpulse/pkg/services"
+	"github.com/mnuddindev/devpulse/pkg/services/users"
 	"github.com/sirupsen/logrus"
 )
 
-func IsAuth(uc *services.UserSystem) fiber.Handler {
+func IsAuth(uc *users.UserSystem) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		accessToken := c.Cookies("access_token")
 		if accessToken == "" {

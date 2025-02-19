@@ -1,4 +1,4 @@
-package controllers
+package users
 
 import (
 	"fmt"
@@ -16,7 +16,7 @@ import (
 // Registration handles user registration
 func (uc *UserController) Registration(c *fiber.Ctx) error {
 	var user models.User
-	if err := StrictBodyParser(c, &user); err != nil {
+	if err := utils.StrictBodyParser(c, &user); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 		}).Error("Invalid request payload")
@@ -73,7 +73,7 @@ func (uc *UserController) ActiveUser(c *fiber.Ctx) error {
 		Otp int64 `json:"otp"`
 	}
 	var body Body
-	if err := StrictBodyParser(c, &body); err != nil {
+	if err := utils.StrictBodyParser(c, &body); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 		}).Error("Failed to parse request body")
@@ -181,7 +181,7 @@ func (uc *UserController) Login(c *fiber.Ctx) error {
 	}
 	// parse request body
 	var login Login
-	if err := StrictBodyParser(c, &login); err != nil {
+	if err := utils.StrictBodyParser(c, &login); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 		}).Error("Failed to parse request body")
@@ -419,7 +419,7 @@ func (uc *UserController) UpdateUserProfile(c *fiber.Ctx) error {
 
 	// Parse request body into updateData struct
 	updateData := new(models.UpdateUser)
-	if err := StrictBodyParser(c, &updateData); err != nil {
+	if err := utils.StrictBodyParser(c, &updateData); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error":  err,
 			"userid": userid,
@@ -644,7 +644,7 @@ func (uc *UserController) UpdateUserCustomization(c *fiber.Ctx) error {
 	}
 
 	updateData := new(UpdateData)
-	if err := StrictBodyParser(c, &updateData); err != nil {
+	if err := utils.StrictBodyParser(c, &updateData); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error":  err,
 			"userid": userid,
@@ -776,7 +776,7 @@ func (uc *UserController) UpdateUserNotificationsPref(c *fiber.Ctx) error {
 	}
 
 	updateData := new(UpdateData)
-	if err := StrictBodyParser(c, &updateData); err != nil {
+	if err := utils.StrictBodyParser(c, &updateData); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 			"model": "usermodel",
@@ -911,7 +911,7 @@ func (uc *UserController) UpdateUserAccount(c *fiber.Ctx) error {
 
 	// Parse request body into updateData struct
 	updateData := new(UpdateData)
-	if err := StrictBodyParser(c, &updateData); err != nil {
+	if err := utils.StrictBodyParser(c, &updateData); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 			"model": "usermodel",

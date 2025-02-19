@@ -1,9 +1,12 @@
 package utils
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"reflect"
 
+	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/mnuddindev/devpulse/pkg/logger"
 	"github.com/sirupsen/logrus"
@@ -70,4 +73,13 @@ func UUIDsFromStrings(strUUIDs []string) []uuid.UUID {
 		uuids[i] = parsedUUID
 	}
 	return uuids
+}
+
+func StrictBodyParser(c *fiber.Ctx, out interface{}) error {
+	decoder := json.NewDecoder(bytes.NewReader(c.Body()))
+	decoder.DisallowUnknownFields() // Reject unknown fields
+	if err := decoder.Decode(out); err != nil {
+		return err
+	}
+	return nil
 }

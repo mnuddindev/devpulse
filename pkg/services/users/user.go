@@ -1,15 +1,28 @@
-package services
+package users
 
 import (
 	"errors"
 
 	"github.com/google/uuid"
+	"github.com/mnuddindev/devpulse/gorm"
 	"github.com/mnuddindev/devpulse/pkg/logger"
 	"github.com/mnuddindev/devpulse/pkg/models"
 	"github.com/mnuddindev/devpulse/pkg/utils"
 	"github.com/sirupsen/logrus"
 	grm "gorm.io/gorm"
 )
+
+// UserSystem struct that holds a reference to the CRUD operations using Gorm.
+type UserSystem struct {
+	crud *gorm.GormDB
+}
+
+// NewUserSystem initializes a new UserSystem with a given database connection.
+func NewUserSystem(db *grm.DB) *UserSystem {
+	return &UserSystem{
+		crud: gorm.NewGormDB(db),
+	}
+}
 
 func (us *UserSystem) BeforeCreate(client *grm.DB, user *models.User) (*models.User, error) {
 	var memberRole models.Role

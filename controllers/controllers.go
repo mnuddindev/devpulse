@@ -1,48 +1,26 @@
 package controllers
 
 import (
-	"bytes"
-	"encoding/json"
-
-	"github.com/gofiber/fiber/v2"
 	"github.com/mnuddindev/devpulse/config"
+	"github.com/mnuddindev/devpulse/controllers/users"
 	"github.com/mnuddindev/devpulse/gorm"
 	"github.com/mnuddindev/devpulse/pkg/logger"
-	"github.com/mnuddindev/devpulse/pkg/services"
+	usr "github.com/mnuddindev/devpulse/pkg/services/users"
 	grm "gorm.io/gorm"
 )
 
 type CentralSystem struct {
 	DB             *grm.DB
-	Usercontroller *UserController
-}
-
-type UserController struct {
-	userSystem *services.UserSystem
-}
-
-func NewUserController(userSystem *services.UserSystem) *UserController {
-	return &UserController{
-		userSystem: userSystem,
-	}
+	UserController *users.UserController
 }
 
 func StartServices(config *config.Postgres) (*CentralSystem, error) {
 	logger.Log.Info("Initializing application system")
 	db := gorm.Connect(config)
-	userSystem := services.NewUserSystem(db)
-	userController := NewUserController(userSystem)
+	userSystem := usr.NewUserSystem(db)
+	userController := users.NewUserController(userSystem)
 	return &CentralSystem{
 		DB:             db,
-		Usercontroller: userController,
+		UserController: userController,
 	}, nil
-}
-
-func StrictBodyParser(c *fiber.Ctx, out interface{}) error {
-	decoder := json.NewDecoder(bytes.NewReader(c.Body()))
-	decoder.DisallowUnknownFields() // Reject unknown fields
-	if err := decoder.Decode(out); err != nil {
-		return err
-	}
-	return nil
 }

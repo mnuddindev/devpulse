@@ -1,4 +1,4 @@
-package controllers
+package users
 
 import (
 	"time"
@@ -7,9 +7,20 @@ import (
 	"github.com/google/uuid"
 	"github.com/mnuddindev/devpulse/pkg/logger"
 	"github.com/mnuddindev/devpulse/pkg/models"
+	"github.com/mnuddindev/devpulse/pkg/services/users"
 	"github.com/mnuddindev/devpulse/pkg/utils"
 	"github.com/sirupsen/logrus"
 )
+
+type UserController struct {
+	userSystem *users.UserSystem
+}
+
+func NewUserController(userSystem *users.UserSystem) *UserController {
+	return &UserController{
+		userSystem: userSystem,
+	}
+}
 
 func (uc *UserController) UserByID(c *fiber.Ctx) error {
 	userinfo, err := uuid.Parse(c.Params("userid"))
@@ -152,7 +163,7 @@ func (uc *UserController) UpdateUserByID(c *fiber.Ctx) error {
 
 	// Parse request body into updateData struct
 	updateData := new(UpdateUser)
-	if err := StrictBodyParser(c, &updateData); err != nil {
+	if err := utils.StrictBodyParser(c, &updateData); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error":  err,
 			"userid": userid,
