@@ -66,8 +66,12 @@ func (g *GormDB) GetByID(model interface{}, id string) error {
 }
 
 // GetAll records
-func (g *GormDB) GetAll(model interface{}) error {
-	if err := g.DB.Find(model).Error; err != nil {
+func (g *GormDB) GetAll(model interface{}, preloads []string) error {
+	var query *gorm.DB
+	for _, preload := range preloads {
+		query = query.Preload(preload)
+	}
+	if err := query.Find(&model).Error; err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 		}).Error("Failed to fetch all records!!")

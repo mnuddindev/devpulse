@@ -85,7 +85,7 @@ func (uc *UserSystem) Notification() ([]models.Notification, error) {
 	var noti []models.Notification
 
 	// check for users in db
-	if err := uc.crud.GetAll(&noti); err != nil {
+	if err := uc.crud.GetAll(&noti, []string{}); err != nil {
 		// log if failed to get data
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -103,7 +103,7 @@ func (uc *UserSystem) NotificationPref() ([]models.NotificationPrefrences, error
 	var noti []models.NotificationPrefrences
 
 	// check for users in db
-	if err := uc.crud.GetAll(&noti); err != nil {
+	if err := uc.crud.GetAll(&noti, []string{}); err != nil {
 		// log if failed to get data
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,

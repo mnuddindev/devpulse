@@ -96,7 +96,7 @@ func (us *UserSystem) RemoveAllBadges(userid uuid.UUID) error {
 
 func (us *UserSystem) GetAllBadges() ([]models.Badge, error) {
 	var badges []models.Badge
-	if err := us.crud.GetAll(&badges); err != nil {
+	if err := us.crud.GetAll(&badges, []string{}); err != nil {
 		return nil, err
 	}
 	return badges, nil

@@ -218,7 +218,7 @@ func (us *UserSystem) Users() ([]models.User, error) {
 	var users []models.User
 
 	// check for users in db
-	if err := us.crud.GetAll(&users); err != nil {
+	if err := us.crud.GetAll(&users, []string{"Badges", "Roles", "Followers", "Following", "Notifications", "NotificationsPreferences"}); err != nil {
 		// log if failed to get data
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,

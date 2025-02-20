@@ -96,7 +96,7 @@ func (us *UserSystem) RemoveAllRoles(userid uuid.UUID) error {
 
 func (us *UserSystem) GetAllRoles() ([]models.Role, error) {
 	var roles []models.Role
-	if err := us.crud.GetAll(&roles); err != nil {
+	if err := us.crud.GetAll(&roles, []string{}); err != nil {
 		return nil, err
 	}
 	return roles, nil
