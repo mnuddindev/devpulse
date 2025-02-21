@@ -8,23 +8,17 @@ import (
 )
 
 type Posts struct {
-	ID                 uuid.UUID  `gorm:"type:uuid;primary_key;default:uuid_generate_v4()" json:"id"`
-	Title              string     `gorm:"size:200;not null;index" json:"title" validate:"required,min=10,max=200"`
-	Slug               string     `gorm:"size:220;not null;uniqueIndex" json:"slug" validate:"required,slug,max=220"`
-	Content            string     `gorm:"type:text;not null" json:"content" validate:"required,min=100"`
-	Excerpt            string     `gorm:"size:300" json:"excerpt" validate:"max=300"`
-	FeaturedImageUrl   string     `gorm:"size:500" json:"featured_image_url" validate:"omitempty,url,max=500"`
-	Published          bool       `gorm:"default:false" json:"published"`
-	PublishedAt        *time.Time `json:"published_at"`
-	CommentsCount      int        `gorm:"default:0" json:"comments_count"`
-	LikesCount         int        `gorm:"default:0" json:"likes_count"`
-	BookmarksCount     int        `gorm:"default:0" json:"bookmarks_count"`
-	ReadingTimeMinutes int        `gorm:"default:1" json:"reading_time_minutes" validate:"min=1"`
-	Status             string     `gorm:"type:varchar(20);default:'draft'" json:"status" validate:"required,oneof=draft published unpublished public private"`
-	ViewsCount         int        `gorm:"default:0" json:"views_count"`
-	ShareCount         int        `gorm:"default:0" json:"share_count"`
-	ContentFormat      string     `gorm:"size:20;default:markdown" json:"content_format" validate:"oneof=markdown html"`
-	CanonicalURL       string     `gorm:"size:500" json:"canonical_url" validate:"omitempty,url,max=500"`
+	ID               uuid.UUID  `gorm:"type:uuid;primary_key;default:uuid_generate_v4()" json:"id"`
+	Title            string     `gorm:"size:200;not null;index" json:"title" validate:"required,min=10,max=200"`
+	Slug             string     `gorm:"size:220;not null;uniqueIndex" json:"slug" validate:"required,slug,max=220"`
+	Content          string     `gorm:"type:text;not null" json:"content" validate:"required,min=100"`
+	Excerpt          string     `gorm:"size:300" json:"excerpt" validate:"max=300"`
+	FeaturedImageUrl string     `gorm:"size:500" json:"featured_image_url" validate:"omitempty,url,max=500"`
+	Published        bool       `gorm:"default:false" json:"published"`
+	PublishedAt      *time.Time `json:"published_at"`
+	Status           string     `gorm:"type:varchar(20);default:'draft'" json:"status" validate:"required,oneof=draft published unpublished public private"`
+	ContentFormat    string     `gorm:"size:20;default:markdown" json:"content_format" validate:"oneof=markdown html"`
+	CanonicalURL     string     `gorm:"size:500" json:"canonical_url" validate:"omitempty,url,max=500"`
 
 	// SEO & Social Metadata
 	MetaTitle          string `gorm:"size:200" json:"meta_title" validate:"max=200"`
@@ -55,10 +49,30 @@ type Posts struct {
 	SocialPreview SocialMediaPreview `gorm:"embedded;embeddedPrefix:social_preview_" json:"social_preview"`
 	Mentions      []User             `gorm:"many2many:post_mentions;" json:"mentions" validate:"valid_mentions,-"`
 	CoAuthors     []User             `gorm:"many2many:post_co_authors;" json:"co_authors" validate:"valid_mentions,max=3,dive"`
+	PostAnalytics PostAnalytics      `gorm:"foreignKey:PostID" json:"analytics" validate:"-"`
 
 	CreatedAt time.Time      `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
 	UpdatedAt time.Time      `gorm:"default:CURRENT_TIMESTAMP" json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+// PostAnalytics represents analytics data for a post
+type PostAnalytics struct {
+	ID        uuid.UUID  `gorm:"type:uuid;primary_key;default:uuid_generate_v4()" json:"id"`
+	PostID    uuid.UUID  `gorm:"type:uuid;not null;uniqueIndex" json:"post_id" validate:"required"`
+	SeriesID  *uuid.UUID `gorm:"type:uuid" json:"series_id" validate:"omitempty"`
+	IpAddress string     `gorm:"size:45" json:"ip_address" validate:"omitempty,ipv4"`
+
+	CommentsCount      int `gorm:"default:0" json:"comments_count"`
+	LikesCount         int `gorm:"default:0" json:"likes_count"`
+	BookmarksCount     int `gorm:"default:0" json:"bookmarks_count"`
+	CompleteCount      int `gorm:"default:0" json:"complete_count"`
+	ReadingTimeMinutes int `gorm:"default:1" json:"reading_time_minutes" validate:"min=1"`
+	ViewsCount         int `gorm:"default:0" json:"views_count"`
+	ShareCount         int `gorm:"default:0" json:"share_count"`
+
+	CreatedAt time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
+	UpdatedAt time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"updated_at"`
 }
 
 // Series represents a collection of related posts
@@ -97,12 +111,14 @@ type SeriesPost struct {
 
 // SeriesAnalytics tracks performance metrics for the series
 type SeriesAnalytics struct {
-	ID              uuid.UUID `gorm:"type:uuid;primary_key;default:uuid_generate_v4()" json:"id"`
-	SeriesID        uuid.UUID `gorm:"type:uuid;not null;uniqueIndex" json:"series_id" validate:"required"`
-	TotalViews      int       `gorm:"default:0" json:"total_views" validate:"min=0"`
-	TotalReactions  int       `gorm:"default:0" json:"total_reactions" validate:"min=0"`
-	AverageReadTime float64   `gorm:"default:0.0" json:"average_read_time" validate:"min=0.0"`
-	CompletionRate  float64   `gorm:"default:0.0" json:"completion_rate" validate:"min=0.0,max=1.0"`
-	CreatedAt       time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
-	UpdatedAt       time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"updated_at"`
+	ID       uuid.UUID `gorm:"type:uuid;primary_key;default:uuid_generate_v4()" json:"id"`
+	SeriesID uuid.UUID `gorm:"type:uuid;not null;uniqueIndex" json:"series_id" validate:"required"`
+
+	TotalViews      int     `gorm:"default:0" json:"total_views" validate:"min=0"`
+	TotalReactions  int     `gorm:"default:0" json:"total_reactions" validate:"min=0"`
+	AverageReadTime float64 `gorm:"default:0.0" json:"average_read_time" validate:"min=0.0"`
+	CompletionRate  float64 `gorm:"default:0.0" json:"completion_rate" validate:"min=0.0,max=1.0"`
+
+	CreatedAt time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
+	UpdatedAt time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"updated_at"`
 }
