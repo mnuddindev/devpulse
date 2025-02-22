@@ -75,6 +75,7 @@ func UUIDsFromStrings(strUUIDs []string) []uuid.UUID {
 	return uuids
 }
 
+// StrictBodyParser parses the request body strictly and returns an error if the body contains unknown fields.
 func StrictBodyParser(c *fiber.Ctx, out interface{}) error {
 	decoder := json.NewDecoder(bytes.NewReader(c.Body()))
 	decoder.DisallowUnknownFields() // Reject unknown fields
@@ -82,4 +83,14 @@ func StrictBodyParser(c *fiber.Ctx, out interface{}) error {
 		return err
 	}
 	return nil
+}
+
+// Contains checks if a string exists in a slice of strings.
+func Contains(arr []string, str string) bool {
+	for _, a := range arr {
+		if a == str {
+			return true
+		}
+	}
+	return false
 }

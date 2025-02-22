@@ -26,8 +26,7 @@ func Connect(co *cfg.Postgres) *gorm.DB {
 	// Print a message if the connection is successful
 	logger.Log.Info("Connected to database")
 
-	// Migrate the schema
-	if err = client.Debug().AutoMigrate(
+	models := []interface{}{
 		&models.User{},
 		&models.Notification{},
 		&models.NotificationPrefrences{},
@@ -43,11 +42,26 @@ func Connect(co *cfg.Postgres) *gorm.DB {
 		&models.SocialMediaPreview{},
 		&models.Tag{},
 		&models.TagAnalytics{},
-	); err != nil {
-		logger.Log.WithFields(logrus.Fields{
-			"error": err.Error(),
-		}).Fatal("Error while migrating the schema")
-		return nil
+	}
+
+	// Iterate over the model list and migrate only if the table doesn’t exist
+	for _, model := range models {
+		if !client.Migrator().HasTable(model) {
+			if err := client.Debug().AutoMigrate(model); err != nil {
+				logger.Log.WithFields(logrus.Fields{
+					"error": err.Error(),
+					"model": model, // Log the model causing the error
+				}).Error("Error while migrating the schema for a specific model")
+				return nil
+			}
+			logger.Log.WithFields(logrus.Fields{
+				"model": model,
+			}).Info("Table created successfully")
+		} else {
+			logger.Log.WithFields(logrus.Fields{
+				"model": model,
+			}).Info("Table already exists, skipping migration")
+		}
 	}
 
 	logger.Log.Info("Schema auto migrated successfully")
