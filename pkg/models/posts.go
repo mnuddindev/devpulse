@@ -40,16 +40,16 @@ type Posts struct {
 	ReviewedByID   *uuid.UUID `gorm:"type:uuid" json:"reviewed_by_id"`
 	ReviewedAt     *time.Time `json:"reviewed_at"`
 
-	Author        User               `gorm:"foreignKey:AuthorID" json:"author" validate:"-"`
-	Series        Series             `gorm:"foreignKey:SeriesID" json:"series" validate:"-"`
-	Tags          []Tag              `gorm:"many2many:post_tags;" json:"tags" validate:"max=4,dive"`
-	Comments      []Comment          `gorm:"foreignKey:PostID" json:"comments" validate:"-"`
-	Reactions     []Reaction         `gorm:"foreignKey:ReactableID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;polymorphic:Reactable;polymorphicValue:post" json:"reactions" validate:"-"`
-	Bookmarks     []Bookmark         `gorm:"foreignKey:PostID" json:"bookmarks" validate:"-"`
-	SocialPreview SocialMediaPreview `gorm:"embedded;embeddedPrefix:social_preview_" json:"social_preview"`
-	Mentions      []User             `gorm:"many2many:post_mentions;" json:"mentions" validate:"valid_mentions,-"`
-	CoAuthors     []User             `gorm:"many2many:post_co_authors;" json:"co_authors" validate:"valid_mentions,max=3,dive"`
-	PostAnalytics PostAnalytics      `gorm:"foreignKey:PostID" json:"analytics" validate:"-"`
+	Author    User       `gorm:"foreignKey:AuthorID" json:"author" validate:"-"`
+	Series    Series     `gorm:"foreignKey:SeriesID" json:"series" validate:"-"`
+	Tags      []Tag      `gorm:"many2many:post_tags;" json:"tags" validate:"max=4,dive"`
+	Comments  []Comment  `gorm:"foreignKey:PostID" json:"comments" validate:"-"`
+	Reactions []Reaction `gorm:"foreignKey:ReactableID" json:"reactions" validate:"-"`
+	Bookmarks []Bookmark `gorm:"foreignKey:PostID" json:"bookmarks" validate:"-"`
+	// SocialPreview SocialMediaPreview `gorm:"embedded;embeddedPrefix:social_preview_" json:"social_preview"`
+	Mentions      []User         `gorm:"many2many:post_mentions;" json:"mentions" validate:"valid_mentions,-"`
+	CoAuthors     []User         `gorm:"many2many:post_co_authors;" json:"co_authors" validate:"valid_mentions,max=3,dive"`
+	PostAnalytics *PostAnalytics `gorm:"foreignKey:PostID" json:"analytics" validate:"-"`
 
 	CreatedAt time.Time      `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
 	UpdatedAt time.Time      `gorm:"default:CURRENT_TIMESTAMP" json:"updated_at"`
@@ -90,16 +90,16 @@ type Series struct {
 	DeletedAt     gorm.DeletedAt `gorm:"index" json:"-"`
 
 	// Relationships
-	Author    User            `gorm:"foreignKey:AuthorID" json:"author" validate:"-"`
-	Posts     []SeriesPost    `gorm:"foreignKey:SeriesID" json:"posts" validate:"-"`
-	Analytics SeriesAnalytics `gorm:"foreignKey:SeriesID" json:"analytics" validate:"-"`
+	Author      User            `gorm:"foreignKey:AuthorID" json:"author" validate:"-"`
+	SeriesPosts []SeriesPost    `gorm:"foreignKey:SeriesID" json:"series_posts" validate:"-"`
+	Analytics   SeriesAnalytics `gorm:"foreignKey:SeriesID" json:"analytics" validate:"-"`
 }
 
 // SeriesPost represents a post in a series with ordering
 type SeriesPost struct {
 	ID        uuid.UUID `gorm:"type:uuid;primary_key;default:uuid_generate_v4()" json:"id"`
 	SeriesID  uuid.UUID `gorm:"type:uuid;not null;index" json:"series_id" validate:"required"`
-	PostID    uuid.UUID `gorm:"type:uuid;not null;uniqueIndex" json:"post_id" validate:"required"`
+	PostID    uuid.UUID `gorm:"type:uuid;not null;index" json:"post_id" validate:"required"`
 	Position  int       `gorm:"not null;index:idx_series_position" json:"position" validate:"min=1"`
 	CreatedAt time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
 	UpdatedAt time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"updated_at"`

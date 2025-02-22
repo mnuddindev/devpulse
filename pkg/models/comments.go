@@ -25,7 +25,7 @@ type Comment struct {
 	ParentComment *Comment      `gorm:"foreignKey:ParentCommentID" json:"parent_comment" validate:"-"`
 	Replies       []Comment     `gorm:"foreignKey:ParentCommentID" json:"replies" validate:"-"`
 	Mentions      []User        `gorm:"many2many:comment_mentions;" json:"mentions" validate:"valid_mentions,max=5,dive"`
-	Reactions     []Reaction    `gorm:"foreignKey:ReactableID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;polymorphic:Reactable;" json:"reactions" validate:"-"`
+	Reactions     []Reaction    `gorm:"foreignKey:ReactableID;" json:"reactions" validate:"-"`
 	Flags         []CommentFlag `gorm:"foreignKey:CommentID" json:"flags" validate:"-"`
 
 	CreatedAt time.Time      `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`

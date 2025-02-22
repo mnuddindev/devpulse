@@ -2,6 +2,7 @@ package postservices
 
 import (
 	"github.com/google/uuid"
+	"github.com/mnuddindev/devpulse/pkg/models"
 )
 
 // Increament increases count for a post
@@ -28,25 +29,10 @@ func (ps *PostSystem) IncreaseCount(postid uuid.UUID, ctype string) error {
 		return nil
 	}
 
-	posts, err = ps.UpdatePost(posts)
+	err = ps.crud.Update(&posts, "id = ? AND ip_address = ?", []interface{}{postid, posts.PostAnalytics.IpAddress}, posts)
 	if err != nil {
 		return err
 	}
-	return nil
-}
-
-// IncrementReadingTime increments the reading time for a post
-func (ps *PostSystem) ReadingTime(postID uuid.UUID, readingTime int) error {
-	posts, err := ps.GetPostBy("id = ?", postID)
-	if err != nil {
-		return err
-	}
-
-	_, err = ps.UpdatePost(posts)
-	if err != nil {
-		return err
-	}
-
 	return nil
 }
 
@@ -69,6 +55,16 @@ func (ps *PostSystem) SeriesCount(seriesID uuid.UUID, ctype string) error {
 	}
 
 	_, err = ps.UpdateSeries(series)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// PostsAnalytics updates analytics data for all posts
+func (ps *PostSystem) PostsAnalytics(input interface{}, ip string) error {
+	var analytics models.PostAnalytics
+	err := ps.crud.Update(&analytics, "id = ? AND ip_address = ?", []interface{}{input, ip}, analytics)
 	if err != nil {
 		return err
 	}

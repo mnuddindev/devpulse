@@ -92,7 +92,7 @@ func (ps *PostSystem) GetTags() ([]models.Tag, error) {
 	var tags []models.Tag
 
 	// get all tags from the database
-	if err := ps.crud.GetAll(&tags, []string{"Posts", "Follower", "Moderator", "Analytics"}, "", 0, 0); err != nil {
+	if err := ps.crud.GetAll(&tags, []string{"Posts", "Follower", "Moderator", "Analytics"}); err != nil {
 		// log if failed to fetch all tags
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,

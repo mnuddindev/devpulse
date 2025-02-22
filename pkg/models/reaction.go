@@ -10,6 +10,7 @@ import (
 type Reaction struct {
 	ID            uuid.UUID `gorm:"type:uuid;primary_key;default:uuid_generate_v4()" json:"id"`
 	UserID        uuid.UUID `gorm:"type:uuid;not null;index" json:"user_id" validate:"required"`
+	PostID        uuid.UUID `gorm:"type:uuid;not null;index" json:"post_id" validate:"required"`
 	ReactableID   uuid.UUID `gorm:"type:uuid;not null;index:idx_reactable" json:"reactable_id" validate:"required"`
 	ReactableType string    `gorm:"size:50;not null;index:idx_reactable" json:"reactable_type" validate:"required,oneof=post comment"`
 	Type          string    `gorm:"size:20;not null;index" json:"type" validate:"required,oneof=love unicorn explosion support fire"`
@@ -18,8 +19,8 @@ type Reaction struct {
 
 	// Relationships
 	User    User    `gorm:"foreignKey:UserID" json:"user" validate:"-"`
-	Post    Posts   `gorm:"foreignKey:ReactableID;polymorphic:Reactable" json:"post,omitempty" validate:"-"`
-	Comment Comment `gorm:"foreignKey:ReactableID;polymorphic:Reactable" json:"comment,omitempty" validate:"-"`
+	Post    Posts   `gorm:"foreignKey:ReactableID" json:"post,omitempty" validate:"-"`
+	Comment Comment `gorm:"foreignKey:ReactableID" json:"comment,omitempty" validate:"-"`
 }
 
 // ReadingListEntry represents a post saved to a user's reading list (specialized reaction)

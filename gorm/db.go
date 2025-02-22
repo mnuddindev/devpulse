@@ -27,13 +27,25 @@ func Connect(co *cfg.Postgres) *gorm.DB {
 	logger.Log.Info("Connected to database")
 
 	// Migrate the schema
-	if err = client.AutoMigrate(
+	if err = client.Debug().AutoMigrate(
 		&models.User{},
 		&models.Notification{},
 		&models.NotificationPrefrences{},
+		&models.Posts{},
+		&models.Comment{},
+		&models.Reaction{},
+		&models.Bookmark{},
+		&models.PostAnalytics{},
+		&models.Series{},
+		&models.SeriesAnalytics{},
+		&models.Collection{},
+		&models.CommentFlag{},
+		&models.SocialMediaPreview{},
+		&models.Tag{},
+		&models.TagAnalytics{},
 	); err != nil {
 		logger.Log.WithFields(logrus.Fields{
-			"error": err,
+			"error": err.Error(),
 		}).Fatal("Error while migrating the schema")
 		return nil
 	}
