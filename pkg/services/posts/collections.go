@@ -11,7 +11,7 @@ import (
 
 // CreateCollection creates a new collection in the database.
 func (ps *PostSystem) CreateCollection(collection *models.Collection) (*models.Collection, error) {
-	err := ps.crud.Create(collection)
+	err := ps.Crud.Create(collection)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -28,7 +28,7 @@ func (ps *PostSystem) GetCollectionBy(condition string, args ...interface{}) (*m
 	var collection models.Collection
 
 	// getting collection details by given condition
-	if err := ps.crud.GetByCondition(&collection, condition, args, []string{}, "", 0, 0); err != nil {
+	if err := ps.Crud.GetByCondition(&collection, condition, args, []string{}, "", 0, 0); err != nil {
 		// log if failed to fetch by condition
 		logger.Log.WithFields(logrus.Fields{
 			"error":     err,
@@ -49,7 +49,7 @@ func (ps *PostSystem) GetCollectionBy(condition string, args ...interface{}) (*m
 
 // UpdateCollection updates a collection in the database.
 func (ps *PostSystem) UpdateCollection(collection *models.Collection) (*models.Collection, error) {
-	err := ps.crud.Update(&collection, "id = ?", []interface{}{collection.ID}, collection)
+	err := ps.Crud.Update(&collection, "id = ?", []interface{}{collection.ID}, collection)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -58,7 +58,7 @@ func (ps *PostSystem) UpdateCollection(collection *models.Collection) (*models.C
 	}
 
 	// reload the bookmark to get the user, post and collection details using preload
-	err = ps.crud.GetByCondition(&collection, "id = ?", []interface{}{collection.ID}, []string{"User", "Bookmarks"}, "", 0, 0)
+	err = ps.Crud.GetByCondition(&collection, "id = ?", []interface{}{collection.ID}, []string{"User", "Bookmarks"}, "", 0, 0)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -71,7 +71,7 @@ func (ps *PostSystem) UpdateCollection(collection *models.Collection) (*models.C
 // DeleteCollection deletes a collection from the database.
 func (ps *PostSystem) DeleteCollection(id string) error {
 	collection := &models.Collection{}
-	err := ps.crud.Delete(collection, "id = ?", []interface{}{id})
+	err := ps.Crud.Delete(collection, "id = ?", []interface{}{id})
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -80,7 +80,7 @@ func (ps *PostSystem) DeleteCollection(id string) error {
 	}
 
 	// if a collection deleted, all its bookmarks should be deleted too
-	err = ps.crud.Delete(&models.Bookmark{}, "collection_id = ?", []interface{}{id})
+	err = ps.Crud.Delete(&models.Bookmark{}, "collection_id = ?", []interface{}{id})
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -93,7 +93,7 @@ func (ps *PostSystem) DeleteCollection(id string) error {
 
 // UpdateCollectionMany updates a many-to-many field in the database.
 func (ps *PostSystem) UpdateCollectionMany(collectionid uuid.UUID, field string, values []interface{}) error {
-	err := ps.crud.UpdateManyToMany(&models.Collection{ID: collectionid}, field, values)
+	err := ps.Crud.UpdateManyToMany(&models.Collection{ID: collectionid}, field, values)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -109,7 +109,7 @@ func (ps *PostSystem) GetCollections() ([]models.Collection, error) {
 	var collections []models.Collection
 
 	// getting all collections
-	if err := ps.crud.GetAll(&collections, []string{"User", "Bookmarks"}); err != nil {
+	if err := ps.Crud.GetAll(&collections, []string{"User", "Bookmarks"}); err != nil {
 		// log if failed to fetch all collections
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,

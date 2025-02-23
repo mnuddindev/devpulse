@@ -49,7 +49,7 @@ func (ps *PostSystem) IsModerator(tagID uuid.UUID, userid uuid.UUID) (bool, erro
 func (ps *PostSystem) GetUserModeratedTags(userid uuid.UUID) ([]models.Tag, error) {
 	// get all tags moderated by the user
 	var tags []models.Tag
-	if err := ps.crud.GetByCondition(&tags, "moderators.id = ?", []interface{}{userid}, []string{"Posts", "Followers", "Moderators", "Analytics"}, "", 0, 0); err != nil {
+	if err := ps.Crud.GetByCondition(&tags, "moderators.id = ?", []interface{}{userid}, []string{"Posts", "Followers", "Moderators", "Analytics"}, "", 0, 0); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 		}).Error("Error getting moderated tags")

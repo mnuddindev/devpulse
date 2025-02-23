@@ -29,7 +29,7 @@ func (ps *PostSystem) IncreaseCount(postid uuid.UUID, ctype string) error {
 		return nil
 	}
 
-	err = ps.crud.Update(&posts, "id = ? AND ip_address = ?", []interface{}{postid, posts.PostAnalytics.IpAddress}, posts)
+	err = ps.Crud.Update(&posts, "id = ? AND ip_address = ?", []interface{}{postid, posts.PostAnalytics.IpAddress}, posts)
 	if err != nil {
 		return err
 	}
@@ -64,7 +64,7 @@ func (ps *PostSystem) SeriesCount(seriesID uuid.UUID, ctype string) error {
 // PostsAnalytics updates analytics data for all posts
 func (ps *PostSystem) PostsAnalytics(input interface{}, ip string) error {
 	var analytics models.PostAnalytics
-	err := ps.crud.Update(&analytics, "id = ? AND ip_address = ?", []interface{}{input, ip}, analytics)
+	err := ps.Crud.Update(&analytics, "id = ? AND ip_address = ?", []interface{}{input, ip}, analytics)
 	if err != nil {
 		return err
 	}

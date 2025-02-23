@@ -11,7 +11,7 @@ import (
 
 // CreatesTag creates a new Tag in the database.
 func (ps *PostSystem) CreatesTag(tag *models.Tag) (*models.Tag, error) {
-	err := ps.crud.Create(tag)
+	err := ps.Crud.Create(tag)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -28,7 +28,7 @@ func (ps *PostSystem) GetTagBy(condition string, args ...interface{}) (*models.T
 	var tag models.Tag
 
 	// getting tag details by given condition
-	if err := ps.crud.GetByCondition(&tag, condition, args, []string{"Posts", "Follower", "Moderator", "Analytics"}, "", 0, 0); err != nil {
+	if err := ps.Crud.GetByCondition(&tag, condition, args, []string{"Posts", "Follower", "Moderator", "Analytics"}, "", 0, 0); err != nil {
 		// log if failed to fetch by condition
 		logger.Log.WithFields(logrus.Fields{
 			"error":     err,
@@ -50,7 +50,7 @@ func (ps *PostSystem) GetTagBy(condition string, args ...interface{}) (*models.T
 // UpdateTag updates a tag in the database.
 func (ps *PostSystem) UpdateTag(tag *models.Tag) (*models.Tag, error) {
 	// update the tag in the database
-	err := ps.crud.Update(&tag, "id = ?", []interface{}{tag.ID}, tag)
+	err := ps.Crud.Update(&tag, "id = ?", []interface{}{tag.ID}, tag)
 	if err != nil {
 		// log if failed to update the tag
 		logger.Log.WithFields(logrus.Fields{
@@ -60,7 +60,7 @@ func (ps *PostSystem) UpdateTag(tag *models.Tag) (*models.Tag, error) {
 	}
 
 	// reload the tag to get the details using preload
-	err = ps.crud.GetByCondition(&tag, "id = ?", []interface{}{tag.ID}, []string{"Posts", "Follower", "Moderator", "Analytics"}, "", 0, 0)
+	err = ps.Crud.GetByCondition(&tag, "id = ?", []interface{}{tag.ID}, []string{"Posts", "Follower", "Moderator", "Analytics"}, "", 0, 0)
 	if err != nil {
 		// log if failed to fetch the tag
 		logger.Log.WithFields(logrus.Fields{
@@ -74,7 +74,7 @@ func (ps *PostSystem) UpdateTag(tag *models.Tag) (*models.Tag, error) {
 // DeleteTag deletes a tag from the database.
 func (ps *PostSystem) DeleteTag(tag *models.Tag) error {
 	// delete the tag from the database
-	err := ps.crud.Delete(&tag, "id = ?", []interface{}{tag.ID})
+	err := ps.Crud.Delete(&tag, "id = ?", []interface{}{tag.ID})
 	if err != nil {
 		// log if failed to delete the tag
 		logger.Log.WithFields(logrus.Fields{
@@ -92,7 +92,7 @@ func (ps *PostSystem) GetTags() ([]models.Tag, error) {
 	var tags []models.Tag
 
 	// get all tags from the database
-	if err := ps.crud.GetAll(&tags, []string{"Posts", "Follower", "Moderator", "Analytics"}); err != nil {
+	if err := ps.Crud.GetAll(&tags, []string{"Posts", "Follower", "Moderator", "Analytics"}); err != nil {
 		// log if failed to fetch all tags
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -111,7 +111,7 @@ func (ps *PostSystem) GetTags() ([]models.Tag, error) {
 // UpdateTagsMany updates many-tp-many relationship of tags with posts.
 func (ps *PostSystem) UpdateTagsMany(tagid uuid.UUID, assoc string, value interface{}) error {
 	// update many-to-many relationship of tags with posts
-	err := ps.crud.UpdateManyToMany(&models.Tag{ID: tagid}, assoc, value)
+	err := ps.Crud.UpdateManyToMany(&models.Tag{ID: tagid}, assoc, value)
 	if err != nil {
 		// log if failed to update many-to-many relationship
 		logger.Log.WithFields(logrus.Fields{
@@ -126,7 +126,7 @@ func (ps *PostSystem) UpdateTagsMany(tagid uuid.UUID, assoc string, value interf
 // DeleteTagsMany deletes many-to-many relationship of tags with posts.
 func (ps *PostSystem) DeleteTagsMany(tagid uuid.UUID, assoc string, value interface{}) error {
 	// delete many-to-many relationship of tags with posts
-	err := ps.crud.DeleteManyToMany(&models.Tag{ID: tagid}, assoc, value)
+	err := ps.Crud.DeleteManyToMany(&models.Tag{ID: tagid}, assoc, value)
 	if err != nil {
 		// log if failed to delete many-to-many relationship
 		logger.Log.WithFields(logrus.Fields{

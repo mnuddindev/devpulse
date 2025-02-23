@@ -11,7 +11,7 @@ import (
 
 // CreateReaction creates a new react for post.
 func (ps *PostSystem) CreateReaction(reaction *models.Reaction) (*models.Reaction, error) {
-	err := ps.crud.Create(reaction)
+	err := ps.Crud.Create(reaction)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -28,7 +28,7 @@ func (ps *PostSystem) GetReactionBy(condition string, args ...interface{}) (*mod
 	var reaction models.Reaction
 
 	// getting reaction details by given condition
-	if err := ps.crud.GetByCondition(&reaction, condition, args, []string{"User", "Post"}, "", 0, 0); err != nil {
+	if err := ps.Crud.GetByCondition(&reaction, condition, args, []string{"User", "Post"}, "", 0, 0); err != nil {
 		// log if failed to fetch by condition
 		logger.Log.WithFields(logrus.Fields{
 			"error":     err,
@@ -43,7 +43,7 @@ func (ps *PostSystem) GetReactionBy(condition string, args ...interface{}) (*mod
 
 // UpdateReaction updates a reaction by a given condition.
 func (ps *PostSystem) UpdateReaction(reaction *models.Reaction) (*models.Reaction, error) {
-	err := ps.crud.Update(&reaction, "id = ?", []interface{}{reaction.ID}, reaction)
+	err := ps.Crud.Update(&reaction, "id = ?", []interface{}{reaction.ID}, reaction)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -52,7 +52,7 @@ func (ps *PostSystem) UpdateReaction(reaction *models.Reaction) (*models.Reactio
 	}
 
 	// return all field with preload using getconditionby
-	if err := ps.crud.GetByCondition(reaction, "id = ?", []interface{}{reaction.ID}, []string{"User", "Post"}, "", 0, 0); err != nil {
+	if err := ps.Crud.GetByCondition(reaction, "id = ?", []interface{}{reaction.ID}, []string{"User", "Post"}, "", 0, 0); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 		}).Error("Failed to fetch reaction by Condition")
@@ -64,7 +64,7 @@ func (ps *PostSystem) UpdateReaction(reaction *models.Reaction) (*models.Reactio
 
 // DeleteReaction deletes a reaction by a given condition.
 func (ps *PostSystem) DeleteReaction(condition string, args ...interface{}) error {
-	err := ps.crud.Delete(&models.Reaction{}, condition, args)
+	err := ps.Crud.Delete(&models.Reaction{}, condition, args)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error":     err,
@@ -83,7 +83,7 @@ func (ps *PostSystem) GetReactions() ([]models.Reaction, error) {
 	var reactions []models.Reaction
 
 	// getting all reactions
-	if err := ps.crud.GetAll(&reactions, []string{"User", "Post"}); err != nil {
+	if err := ps.Crud.GetAll(&reactions, []string{"User", "Post"}); err != nil {
 		// log if failed to fetch all reactions
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -96,7 +96,7 @@ func (ps *PostSystem) GetReactions() ([]models.Reaction, error) {
 
 // UpdateReactionsMany updates a many-to-many field in the database.
 func (ps *PostSystem) UpdateReactionsMany(reactionid uuid.UUID, field string, value interface{}) error {
-	err := ps.crud.UpdateManyToMany(&models.Reaction{ID: reactionid}, field, value)
+	err := ps.Crud.UpdateManyToMany(&models.Reaction{ID: reactionid}, field, value)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,

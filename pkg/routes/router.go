@@ -76,6 +76,9 @@ func NewRoutes(app *fiber.App, config *config.ServerConfig, system *controllers.
 	users.Put("/account/update/:userid", auth.RoleAuth("admin", "moderator"), system.UserController.UpdateUserByID)
 	users.Delete("/account/delete/:userid", auth.RoleAuth("admin"), system.UserController.DeleteUserByID)
 
+	postgroup := authgroup.Group("/posts")
+	postgroup.Post("/", auth.RoleAuth("all"), system.PostController.CreatePost)
+
 	// Protected routes
 	app.Get("/protected", auth.IsAuth(userService), func(c *fiber.Ctx) error {
 		userID := c.Locals("user_id")

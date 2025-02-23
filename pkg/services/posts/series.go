@@ -11,7 +11,7 @@ import (
 
 // CreateSeries creates a new series in the database.
 func (ps *PostSystem) CreateSeries(series *models.Series) (*models.Series, error) {
-	err := ps.crud.Create(series)
+	err := ps.Crud.Create(series)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -28,7 +28,7 @@ func (ps *PostSystem) GetSeriesBy(condition string, args ...interface{}) (*model
 	var series models.Series
 
 	// getting series details by given condition
-	if err := ps.crud.GetByCondition(&series, condition, args, []string{"Author", "Posts", "Analytics"}, "", 0, 0); err != nil {
+	if err := ps.Crud.GetByCondition(&series, condition, args, []string{"Author", "Posts", "Analytics"}, "", 0, 0); err != nil {
 		// log if failed to fetch by condition
 		logger.Log.WithFields(logrus.Fields{
 			"error":     err,
@@ -49,7 +49,7 @@ func (ps *PostSystem) GetSeriesBy(condition string, args ...interface{}) (*model
 
 // UpdateSeries updates a series in the database.
 func (ps *PostSystem) UpdateSeries(series *models.Series) (*models.Series, error) {
-	err := ps.crud.Update(&series, "id = ?", []interface{}{series.ID}, series)
+	err := ps.Crud.Update(&series, "id = ?", []interface{}{series.ID}, series)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -58,7 +58,7 @@ func (ps *PostSystem) UpdateSeries(series *models.Series) (*models.Series, error
 	}
 
 	// return all updated field with preload using getconditionby
-	if err := ps.crud.GetByCondition(series, "id = ?", []interface{}{series.ID}, []string{"Author", "Posts", "Analytics"}, "", 0, 0); err != nil {
+	if err := ps.Crud.GetByCondition(series, "id = ?", []interface{}{series.ID}, []string{"Author", "Posts", "Analytics"}, "", 0, 0); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 		}).Error("Failed to fetch series by Condition")
@@ -71,7 +71,7 @@ func (ps *PostSystem) UpdateSeries(series *models.Series) (*models.Series, error
 // DeleteSeries deletes a series from the database.
 func (ps *PostSystem) DeleteSeries(id string) error {
 	series := &models.Series{}
-	err := ps.crud.Delete(series, "id = ?", []interface{}{id})
+	err := ps.Crud.Delete(series, "id = ?", []interface{}{id})
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -84,7 +84,7 @@ func (ps *PostSystem) DeleteSeries(id string) error {
 // Series retrieves all series from the database.
 func (ps *PostSystem) Series() ([]models.Series, error) {
 	series := []models.Series{}
-	err := ps.crud.GetAll(&series, []string{"Author", "Posts", "Analytics"})
+	err := ps.Crud.GetAll(&series, []string{"Author", "Posts", "Analytics"})
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -96,7 +96,7 @@ func (ps *PostSystem) Series() ([]models.Series, error) {
 
 // UpdateSeriesMany updates a many-to-many field in the database.
 func (ps *PostSystem) UpdateSeriesMany(seriesID uuid.UUID, assoc string, data interface{}) error {
-	err := ps.crud.UpdateManyToMany(&models.Series{ID: seriesID}, assoc, data)
+	err := ps.Crud.UpdateManyToMany(&models.Series{ID: seriesID}, assoc, data)
 	if err != nil {
 		logger.Log.Error(err)
 		return errors.New("error updating many to many")

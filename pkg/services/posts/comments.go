@@ -11,7 +11,7 @@ import (
 
 // CreateComment creates a new comment in the database.
 func (ps *PostSystem) CreateComment(comment *models.Comment) (*models.Comment, error) {
-	err := ps.crud.Create(comment)
+	err := ps.Crud.Create(comment)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -28,7 +28,7 @@ func (ps *PostSystem) GetCommentBy(condition string, args ...interface{}) (*mode
 	var comment models.Comment
 
 	// getting comment details by given condition
-	if err := ps.crud.GetByCondition(&comment, condition, args, []string{"Author", "Post", "ParentComment", "Replies", "Mentions", "Reactions", "Flags"}, "", 0, 0); err != nil {
+	if err := ps.Crud.GetByCondition(&comment, condition, args, []string{"Author", "Post", "ParentComment", "Replies", "Mentions", "Reactions", "Flags"}, "", 0, 0); err != nil {
 		// log if failed to fetch by condition
 		logger.Log.WithFields(logrus.Fields{
 			"error":     err,
@@ -49,7 +49,7 @@ func (ps *PostSystem) GetCommentBy(condition string, args ...interface{}) (*mode
 
 // UpdateComment updates a comment in the database.
 func (ps *PostSystem) UpdateComment(comment *models.Comment) (*models.Comment, error) {
-	err := ps.crud.Update(&comment, "id = ?", []interface{}{comment.ID}, comment)
+	err := ps.Crud.Update(&comment, "id = ?", []interface{}{comment.ID}, comment)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -58,7 +58,7 @@ func (ps *PostSystem) UpdateComment(comment *models.Comment) (*models.Comment, e
 	}
 
 	// return all field with preload using getconditionby
-	err = ps.crud.GetByCondition(comment, "id = ?", []interface{}{comment.ID}, []string{"Author", "Post", "ParentComment", "Replies", "Mentions", "Reactions", "Flags"}, "", 0, 0)
+	err = ps.Crud.GetByCondition(comment, "id = ?", []interface{}{comment.ID}, []string{"Author", "Post", "ParentComment", "Replies", "Mentions", "Reactions", "Flags"}, "", 0, 0)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -71,7 +71,7 @@ func (ps *PostSystem) UpdateComment(comment *models.Comment) (*models.Comment, e
 // DeleteComment deletes a comment from the database.
 func (ps *PostSystem) DeleteComment(id string) error {
 	comment := &models.Comment{}
-	err := ps.crud.Delete(comment, "id = ?", []interface{}{id})
+	err := ps.Crud.Delete(comment, "id = ?", []interface{}{id})
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -84,7 +84,7 @@ func (ps *PostSystem) DeleteComment(id string) error {
 // Comments retrieves all comments from the database.
 func (ps *PostSystem) Comments() ([]models.Comment, error) {
 	comments := []models.Comment{}
-	err := ps.crud.GetAll(&comments, []string{"Author", "Post", "ParentComment", "Replies", "Mentions", "Reactions", "Flags"})
+	err := ps.Crud.GetAll(&comments, []string{"Author", "Post", "ParentComment", "Replies", "Mentions", "Reactions", "Flags"})
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -96,7 +96,7 @@ func (ps *PostSystem) Comments() ([]models.Comment, error) {
 
 // UpdateCommentMany updates a many-to-many field in the database.
 func (ps *PostSystem) UpdateCommentMany(commentid uuid.UUID, field string, values []interface{}) error {
-	err := ps.crud.UpdateManyToMany(&models.Comment{ID: commentid}, field, values)
+	err := ps.Crud.UpdateManyToMany(&models.Comment{ID: commentid}, field, values)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,

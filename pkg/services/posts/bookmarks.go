@@ -11,7 +11,7 @@ import (
 
 // CreateBookmark creates a new bookmark in the database.
 func (ps *PostSystem) CreateBookmark(bookmark *models.Bookmark) (*models.Bookmark, error) {
-	err := ps.crud.Create(bookmark)
+	err := ps.Crud.Create(bookmark)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -28,7 +28,7 @@ func (ps *PostSystem) GetBookmarkBy(condition string, args ...interface{}) (*mod
 	var bookmark models.Bookmark
 
 	// getting bookmark details by given condition
-	if err := ps.crud.GetByCondition(&bookmark, condition, args, []string{"User", "Post", "Collection"}, "", 0, 0); err != nil {
+	if err := ps.Crud.GetByCondition(&bookmark, condition, args, []string{"User", "Post", "Collection"}, "", 0, 0); err != nil {
 		// log if failed to fetch by condition
 		logger.Log.WithFields(logrus.Fields{
 			"error":     err,
@@ -49,7 +49,7 @@ func (ps *PostSystem) GetBookmarkBy(condition string, args ...interface{}) (*mod
 
 // UpdateBookmark updates a bookmark in the database.
 func (ps *PostSystem) UpdateBookmark(bookmark *models.Bookmark) (*models.Bookmark, error) {
-	err := ps.crud.Update(&bookmark, "id = ?", []interface{}{bookmark.ID}, bookmark)
+	err := ps.Crud.Update(&bookmark, "id = ?", []interface{}{bookmark.ID}, bookmark)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -58,7 +58,7 @@ func (ps *PostSystem) UpdateBookmark(bookmark *models.Bookmark) (*models.Bookmar
 	}
 
 	// return all field with preload using getconditionby
-	if err := ps.crud.GetByCondition(bookmark, "id = ?", []interface{}{bookmark.ID}, []string{"User", "Post", "Collection"}, "", 0, 0); err != nil {
+	if err := ps.Crud.GetByCondition(bookmark, "id = ?", []interface{}{bookmark.ID}, []string{"User", "Post", "Collection"}, "", 0, 0); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 		}).Error("Failed to fetch bookmarke by Condition")
@@ -71,7 +71,7 @@ func (ps *PostSystem) UpdateBookmark(bookmark *models.Bookmark) (*models.Bookmar
 // DeleteBookmark deletes a bookmark from the database.
 func (ps *PostSystem) DeleteBookmark(id string) error {
 	bookmark := &models.Bookmark{}
-	err := ps.crud.Delete(bookmark, "id = ?", []interface{}{id})
+	err := ps.Crud.Delete(bookmark, "id = ?", []interface{}{id})
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -83,7 +83,7 @@ func (ps *PostSystem) DeleteBookmark(id string) error {
 
 // UpdateBookmarkMany updates a many-to-many field in the database.
 func (ps *PostSystem) UpdateBookmarkMany(bookmarkid uuid.UUID, field string, values []interface{}) error {
-	err := ps.crud.UpdateManyToMany(&models.Bookmark{ID: bookmarkid}, field, values)
+	err := ps.Crud.UpdateManyToMany(&models.Bookmark{ID: bookmarkid}, field, values)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -99,7 +99,7 @@ func (ps *PostSystem) GetBookmarks() ([]models.Bookmark, error) {
 	var bookmarks []models.Bookmark
 
 	// getting all bookmarks
-	if err := ps.crud.GetAll(&bookmarks, []string{"User", "Post", "Collection"}); err != nil {
+	if err := ps.Crud.GetAll(&bookmarks, []string{"User", "Post", "Collection"}); err != nil {
 		// log if failed to fetch all bookmarks
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,

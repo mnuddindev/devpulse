@@ -13,19 +13,19 @@ import (
 
 // PostSystem struct that holds a reference to the CRUD operations using Gorm.
 type PostSystem struct {
-	crud *gorm.GormDB
+	Crud *gorm.GormDB
 }
 
 // NewPostSystem initializes a new UserSystem with a given database connection.
 func NewPostSystem(db *grm.DB) *PostSystem {
 	return &PostSystem{
-		crud: gorm.NewGormDB(db),
+		Crud: gorm.NewGormDB(db),
 	}
 }
 
 // CreatePost creates a new post in the database.
 func (ps *PostSystem) CreatePost(post *models.Posts) (*models.Posts, error) {
-	err := ps.crud.Create(post)
+	err := ps.Crud.Create(post)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -42,7 +42,7 @@ func (ps *PostSystem) GetPostBy(condition string, args ...interface{}) (*models.
 	var post models.Posts
 
 	// getting post details by given condition
-	if err := ps.crud.GetByCondition(&post, condition, args, []string{"Author", "Series", "Tags", "Comments", "Reactions", "Bookmarks", "Mentions", "CoAuthors"}, "", 0, 0); err != nil {
+	if err := ps.Crud.GetByCondition(&post, condition, args, []string{"Author", "Series", "Tags", "Comments", "Reactions", "Bookmarks", "Mentions", "CoAuthors"}, "", 0, 0); err != nil {
 		// log if failed to fetch by condition
 		logger.Log.WithFields(logrus.Fields{
 			"error":     err,
@@ -63,7 +63,7 @@ func (ps *PostSystem) GetPostBy(condition string, args ...interface{}) (*models.
 
 // UpdatePost updates a post in the database.
 func (ps *PostSystem) UpdatePost(post *models.Posts) (*models.Posts, error) {
-	err := ps.crud.Update(&post, "id = ?", []interface{}{post.ID}, post)
+	err := ps.Crud.Update(&post, "id = ?", []interface{}{post.ID}, post)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -72,7 +72,7 @@ func (ps *PostSystem) UpdatePost(post *models.Posts) (*models.Posts, error) {
 	}
 
 	// return all field with preload using getconditionby
-	if err := ps.crud.GetByCondition(post, "id = ?", []interface{}{post.ID}, []string{"Author", "Series", "Tags", "Comments", "Reactions", "Bookmarks", "Mentions", "CoAuthors"}, "", 0, 0); err != nil {
+	if err := ps.Crud.GetByCondition(post, "id = ?", []interface{}{post.ID}, []string{"Author", "Series", "Tags", "Comments", "Reactions", "Bookmarks", "Mentions", "CoAuthors"}, "", 0, 0); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 		}).Error("Failed to fetch post by Condition")
@@ -85,7 +85,7 @@ func (ps *PostSystem) UpdatePost(post *models.Posts) (*models.Posts, error) {
 // DeletePost deletes a post from the database.
 func (ps *PostSystem) DeletePost(id string) error {
 	post := &models.Posts{}
-	err := ps.crud.Delete(post, "id = ?", []interface{}{id})
+	err := ps.Crud.Delete(post, "id = ?", []interface{}{id})
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -98,7 +98,7 @@ func (ps *PostSystem) DeletePost(id string) error {
 // Posts retrieves all posts from the database.
 func (ps *PostSystem) Posts() ([]models.Posts, error) {
 	posts := []models.Posts{}
-	err := ps.crud.GetAll(&posts, []string{"Author", "Series", "Tags", "Comments", "Reactions", "Bookmarks", "Mentions", "CoAuthors"})
+	err := ps.Crud.GetAll(&posts, []string{"Author", "Series", "Tags", "Comments", "Reactions", "Bookmarks", "Mentions", "CoAuthors"})
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -110,10 +110,22 @@ func (ps *PostSystem) Posts() ([]models.Posts, error) {
 
 // UpdatePostMany updates a many-to-many field in the database.
 func (ps *PostSystem) UpdatePostMany(postID uuid.UUID, assoc string, data interface{}) error {
-	err := ps.crud.UpdateManyToMany(&models.Posts{ID: postID}, assoc, data)
+	err := ps.Crud.UpdateManyToMany(&models.Posts{ID: postID}, assoc, data)
 	if err != nil {
 		logger.Log.Error(err)
 		return errors.New("error updating many to many")
 	}
+	return nil
+}
+
+// checkSlugAvailability checks if a slug is available for use.
+func (ps *PostSystem) CheckSlugAvailable(slug string) error {
+	post := &models.Posts{}
+	err := ps.Crud.GetByCondition(post, "slug = ?", []interface{}{slug}, []string{}, "", 0, 0)
+	if err != nil {
+		// return true if slug is available
+		return errors.New("slug already exists")
+	}
+	// return false if slug is not available
 	return nil
 }

@@ -94,3 +94,11 @@ func Contains(arr []string, str string) bool {
 	}
 	return false
 }
+
+// TruncateString truncates a string to the given length
+func TruncateString(s string, length int) string {
+	if len(s) > length {
+		return s[:length] + "..."
+	}
+	return s
+}

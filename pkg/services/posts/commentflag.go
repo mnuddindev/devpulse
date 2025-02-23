@@ -11,7 +11,7 @@ import (
 
 // CreateCommentFlag creates a new comment flag in the database.
 func (ps *PostSystem) CreateCommentFlag(commentFlag *models.CommentFlag) (*models.CommentFlag, error) {
-	err := ps.crud.Create(commentFlag)
+	err := ps.Crud.Create(commentFlag)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -28,7 +28,7 @@ func (ps *PostSystem) GetCommentFlagBy(condition string, args ...interface{}) (*
 	var commentFlag models.CommentFlag
 
 	// getting comment flag details by given condition
-	if err := ps.crud.GetByCondition(&commentFlag, condition, args, []string{"User", "Comment"}, "", 0, 0); err != nil {
+	if err := ps.Crud.GetByCondition(&commentFlag, condition, args, []string{"User", "Comment"}, "", 0, 0); err != nil {
 		// log if failed to fetch by condition
 		logger.Log.WithFields(logrus.Fields{
 			"error":     err,
@@ -49,7 +49,7 @@ func (ps *PostSystem) GetCommentFlagBy(condition string, args ...interface{}) (*
 
 // UpdateCommentFlag updates an existing comment flag in the database.
 func (ps *PostSystem) UpdateCommentFlag(commentFlag *models.CommentFlag) (*models.CommentFlag, error) {
-	err := ps.crud.Update(&commentFlag, "id = ?", []interface{}{commentFlag.ID}, commentFlag)
+	err := ps.Crud.Update(&commentFlag, "id = ?", []interface{}{commentFlag.ID}, commentFlag)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -58,7 +58,7 @@ func (ps *PostSystem) UpdateCommentFlag(commentFlag *models.CommentFlag) (*model
 	}
 
 	// return all field with preload using getconditionby
-	if err := ps.crud.GetByCondition(commentFlag, "id = ?", []interface{}{commentFlag.ID}, []string{"User", "Comment"}, "", 0, 0); err != nil {
+	if err := ps.Crud.GetByCondition(commentFlag, "id = ?", []interface{}{commentFlag.ID}, []string{"User", "Comment"}, "", 0, 0); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 		}).Error("Failed to fetch comment flag by Condition")
@@ -70,7 +70,7 @@ func (ps *PostSystem) UpdateCommentFlag(commentFlag *models.CommentFlag) (*model
 
 // DeleteCommentFlag deletes a comment flag from the database.
 func (ps *PostSystem) DeleteCommentFlag(flagid uuid.UUID) error {
-	err := ps.crud.Delete(&models.CommentFlag{}, "id = ?", []interface{}{flagid})
+	err := ps.Crud.Delete(&models.CommentFlag{}, "id = ?", []interface{}{flagid})
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -84,7 +84,7 @@ func (ps *PostSystem) DeleteCommentFlag(flagid uuid.UUID) error {
 // GetCommentFlags retrieves all comment flags from the database.
 func (ps *PostSystem) GetCommentFlags() ([]models.CommentFlag, error) {
 	commentflag := []models.CommentFlag{}
-	err := ps.crud.GetAll(&commentflag, []string{"User", "Comment"})
+	err := ps.Crud.GetAll(&commentflag, []string{"User", "Comment"})
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -96,7 +96,7 @@ func (ps *PostSystem) GetCommentFlags() ([]models.CommentFlag, error) {
 
 // UpdateCommentFlagMany updates a many-to-many field in the database.
 func (ps *PostSystem) UpdateCommentFlagMany(flagID uuid.UUID, assoc string, data interface{}) error {
-	err := ps.crud.UpdateManyToMany(&models.CommentFlag{ID: flagID}, assoc, data)
+	err := ps.Crud.UpdateManyToMany(&models.CommentFlag{ID: flagID}, assoc, data)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,

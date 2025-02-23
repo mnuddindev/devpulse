@@ -22,8 +22,8 @@ func StartServices(config *config.Postgres) (*CentralSystem, error) {
 	db := gorm.Connect(config)
 	userSystem := usr.NewUserSystem(db)
 	postSystem := postservices.NewPostSystem(db)
-	postController := postscontroller.NewPostController(postSystem)
 	userController := users.NewUserController(userSystem)
+	postController := postscontroller.NewPostController(postSystem)
 	return &CentralSystem{
 		DB:             db,
 		UserController: userController,
