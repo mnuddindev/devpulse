@@ -129,3 +129,15 @@ func (ps *PostSystem) CheckSlugAvailable(slug string) error {
 	// return false if slug is not available
 	return nil
 }
+
+// CheckCanonicalURLAvailable checks if a canonical url is available for use.
+func (ps *PostSystem) CheckCanonicalURLAvailable(url string) error {
+	var post models.Posts
+	err := ps.Crud.GetByCondition(&post, "canonical_url = ?", []interface{}{url}, []string{}, "", 0, 0)
+	if err != nil {
+		// return true if slug is available
+		return errors.New("canonical url already exists")
+	}
+	// return false if slug is not available
+	return nil
+}

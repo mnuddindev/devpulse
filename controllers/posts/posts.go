@@ -2,7 +2,11 @@ package postscontroller
 
 import (
 	"errors"
+	"fmt"
+	"regexp"
+	"strconv"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -45,22 +49,21 @@ func (pc *PostController) BeforeCreate(post *CreatePostRequest, userid uuid.UUID
 	if post.AuthorID != userid {
 		return nil, errors.New("author id does not match user id")
 	}
-	if post.Slug == "" {
-		slug := slug.Make(post.Title)
-		if err := pc.postSystem.CheckSlugAvailable(slug); err != nil {
-			logger.Log.WithError(err).Warn("Slug conflict")
-		}
-		post.Slug = slug
-	}
-	if post.CanonicalURL == "" {
-		post.CanonicalURL = "/post/" + post.Slug
-	}
 	if post.ContentFormat == "" {
 		post.ContentFormat = "markdown"
 	}
-	if post.PublishedAt == nil {
+	if post.PublishedAt == nil && (post.Status == "published" || post.Status == "public") {
 		now := time.Now()
 		post.PublishedAt = &now
+	}
+
+	if post.CanonicalURL == "" {
+		baseURL := "/post/" + post.Slug
+		if err := pc.postSystem.CheckCanonicalURLAvailable(baseURL); err != nil {
+			post.CanonicalURL = baseURL + "-" + uuid.New().String()[:8]
+		} else {
+			post.CanonicalURL = baseURL
+		}
 	}
 
 	return post, nil
@@ -113,18 +116,31 @@ func (pc *PostController) NewPost(c *fiber.Ctx) error {
 		})
 	}
 
-	if utils.Contains(roles, "member") && !utils.Contains(roles, "moderator") && !utils.Contains(roles, "author") && !utils.Contains(roles, "trusted_member") && !utils.Contains(roles, "admin") {
-		// Member-only role: Post goes to moderation
-		post.Status = "moderation"
-		post.Published = false
-	} else if utils.Contains(roles, "moderator") || utils.Contains(roles, "author") || utils.Contains(roles, "trusted_member") || utils.Contains(roles, "admin") {
-		// Higher roles: Post is published directly
-		post.Status = "published"
-		post.Published = true
-		post.PublishedAt = &time.Time{} // Set to current time; adjust if needed
-		*post.PublishedAt = time.Now()
-	} else {
-		// No recognized role: Deny creation
+	// Role-based status
+	rolePermissions := map[string]struct {
+		Status    string
+		Published bool
+	}{
+		"member":         {"moderation", false},
+		"moderator":      {"published", true},
+		"author":         {"published", true},
+		"trusted_member": {"published", true},
+		"admin":          {"published", true},
+	}
+	found := false
+	for _, role := range roles {
+		if perm, ok := rolePermissions[role]; ok {
+			post.Status = perm.Status
+			post.Published = perm.Published
+			if perm.Published {
+				now := time.Now()
+				post.PublishedAt = &now
+			}
+			found = true
+			break
+		}
+	}
+	if !found {
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"error":  "Insufficient permissions to create post",
 			"status": fiber.StatusForbidden,
@@ -142,12 +158,15 @@ func (pc *PostController) NewPost(c *fiber.Ctx) error {
 		})
 	}
 
-	// Authorization: Ensure authenticated user matches the author
-	if post.AuthorID != userId {
-		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-			"error":  "Forbidden: You can only create posts for yourself",
-			"status": fiber.StatusForbidden,
-		})
+	if post.Slug == "" {
+		baseSlug := slug.Make(post.Title)
+		post.Slug, err = pc.generateUniqueSlug(baseSlug)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error":  "Unable to generate unique slug",
+				"status": fiber.StatusInternalServerError,
+			})
+		}
 	}
 
 	posts := models.Posts{
@@ -166,30 +185,46 @@ func (pc *PostController) NewPost(c *fiber.Ctx) error {
 
 	meta := utils.GenerateMeta(post.Title, post.Content, "devpulse")
 
-	if posts.MetaTitle == "" {
-		posts.MetaTitle = meta.MetaTitle
+	posts.MetaTitle = meta.MetaTitle
+	if post.Excerpt != "" && utf8.RuneCountInString(post.Excerpt) <= 160 {
+		posts.MetaDescription = post.Excerpt
+	} else {
+		posts.MetaDescription = meta.MetaDesc
 	}
-	if posts.MetaDescription == "" {
-		posts.MetaDescription = meta.MetaTitle
-	}
-	if posts.SEOKeywords == "" {
-		posts.SEOKeywords = utils.JoinKeywords(posts.SEOKeywords, meta.Keywords)
-	}
+	posts.SEOKeywords = utils.JoinKeywords(posts.SEOKeywords, meta.Keywords)
 
 	// Handle tags
 	if len(post.Tags) > 0 {
 		var tags []models.Tag
-		for _, tagName := range post.Tags {
-			var tag models.Tag
-			if err := pc.postSystem.Crud.DB.Where("name = ?", tagName).FirstOrCreate(&tag, models.Tag{Name: tagName, Slug: slug.Make(tagName)}).Error; err != nil {
-				logger.Log.WithError(err).Error("Failed to process tags")
-				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-					"error": "Failed to process tags",
-				})
-			}
-			tags = append(tags, tag)
+		if err := pc.postSystem.Crud.GetByCondition(&tags, "name IN ?", []interface{}{post.Tags}, []string{}, "", 0, 0); err != nil {
+			logger.Log.WithError(err).Error("Failed to fetch tags")
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to process tags"})
 		}
-		posts.Tags = tags
+		existingTags := make(map[string]models.Tag)
+		for _, tag := range tags {
+			existingTags[tag.Name] = tag
+		}
+		// Process tags: use existing or create new ones
+		var finalTags []models.Tag
+		for _, tagName := range post.Tags {
+			if tag, exists := existingTags[tagName]; exists {
+				finalTags = append(finalTags, tag)
+			} else {
+				newTag := models.Tag{
+					Name: tagName,
+					Slug: slug.Make(tagName),
+				}
+				if err := pc.postSystem.Crud.DB.Create(&newTag).Error; err != nil {
+					logger.Log.WithError(err).Error("Failed to create tag")
+					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+						"error":  "Failed to create tag",
+						"status": fiber.StatusInternalServerError,
+					})
+				}
+				finalTags = append(finalTags, newTag)
+			}
+		}
+		posts.Tags = finalTags
 	}
 
 	createdPost, err := pc.postSystem.CreatePost(&posts)
@@ -211,5 +246,52 @@ func (pc *PostController) NewPost(c *fiber.Ctx) error {
 		})
 	}
 
-	return nil
+	response := fiber.Map{
+		"status": fiber.StatusCreated,
+		"post":   createdPost,
+	}
+
+	if createdPost.Status == "moderation" {
+		response["message"] = "Post submitted for moderation"
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(response)
+}
+
+// New method for unique slug generation
+func (pc *PostController) generateUniqueSlug(baseSlug string) (string, error) {
+	// Fetch all slugs matching the base pattern
+	var existingSlugs []string
+	if err := pc.postSystem.Crud.DB.Model(&models.Posts{}).
+		Where("slug LIKE ?", baseSlug+"%").
+		Pluck("slug", &existingSlugs).Error; err != nil {
+		logger.Log.WithError(err).Error("Failed to fetch existing slugs")
+		return "", err
+	}
+
+	// Map existing suffixes
+	suffixMap := make(map[int]bool)
+	re := regexp.MustCompile(`^` + regexp.QuoteMeta(baseSlug) + `(?:-(\d+))?$`)
+	for _, slug := range existingSlugs {
+		matches := re.FindStringSubmatch(slug)
+		if len(matches) > 1 && matches[1] != "" {
+			num, _ := strconv.Atoi(matches[1])
+			suffixMap[num] = true
+		} else if slug == baseSlug {
+			suffixMap[0] = true // Base slug without suffix
+		}
+	}
+
+	// Find the next available number
+	if !suffixMap[0] {
+		return baseSlug, nil // Base slug is available
+	}
+	for i := 2; i <= 100; i++ { // Start at -2
+		if !suffixMap[i] {
+			return fmt.Sprintf("%s-%d", baseSlug, i), nil
+		}
+	}
+
+	// Fallback: unlikely, but append a random suffix
+	return fmt.Sprintf("%s-%s", baseSlug, uuid.New().String()[:8]), nil
 }

@@ -103,16 +103,24 @@ func GenerateKeywords(title, content string, maxKeywords int) []string {
 func GenerateMeta(title, content, brand string) MetaOutput {
 	keywords := GenerateKeywords(title, content, 10)
 	primaryKW := keywords[0] // Top keyword for title/desc
+	titleLower := strings.ToLower(title)
 
 	// Craft Meta Title (SEO expert style: keyword + benefit + brand)
-	metaTitle := primaryKW + " Guide for Success"
-	if brand != "" {
-		metaTitle += " | " + brand
+	var metaTitle, metaDesc string
+	if strings.Contains(titleLower, "how to") {
+		metaTitle = primaryKW + " Tutorial | " + brand
+		metaDesc = "Learn how to master " + primaryKW + " with " + brand + ". Start now!"
+	} else if strings.Contains(titleLower, "best") {
+		metaTitle = "Best " + primaryKW + " | " + brand
+		metaDesc = "Explore the best " + primaryKW + " from " + brand + ". Click to see!"
+	} else {
+		metaTitle = primaryKW + " Guide | " + brand
+		metaDesc = "Discover " + primaryKW + " to boost your results with " + brand + ". Read now!"
 	}
+
 	metaTitle = TruncateString(metaTitle, 60)
 
 	// Craft Meta Description (SEO expert style: hook + keyword + CTA)
-	metaDesc := "Discover " + primaryKW + " to skyrocket your results in " + brand + ". Click now!"
 	metaDesc = TruncateString(metaDesc, 160)
 
 	return MetaOutput{
