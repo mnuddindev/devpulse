@@ -58,14 +58,14 @@ func NewRoutes(app *fiber.App, config *config.ServerConfig, system *controllers.
 
 	app.Post("/logout", auth.RoleAuth("all"), system.UserController.Logout)
 
-	authgroup := app.Group("/", auth.RefreshTokenMiddleware(userService), auth.IsAuth(userService))
+	authgroup := app.Group("/", auth.RefreshTokenMiddleware(userService))
 	user := authgroup.Group("/user")
-	user.Get("/profile", auth.IsAuth(userService), auth.RoleAuth("all"), system.UserController.UserProfile)
-	user.Put("/update/profile/me", auth.IsAuth(userService), auth.RoleAuth("all"), system.UserController.UpdateUserProfile)
-	user.Put("/update/notification/me", auth.IsAuth(userService), auth.RoleAuth("all"), system.UserController.UpdateUserNotificationsPref)
-	user.Put("/update/customization/me", auth.IsAuth(userService), auth.RoleAuth("all"), system.UserController.UpdateUserCustomization)
-	user.Put("/update/account/me", auth.IsAuth(userService), auth.RoleAuth("all"), system.UserController.UpdateUserAccount)
-	user.Delete("/account/delete/me", auth.IsAuth(userService), auth.RoleAuth("all"), system.UserController.DeleteUser)
+	user.Get("/profile", auth.RoleAuth("all"), system.UserController.UserProfile)
+	user.Put("/update/profile/me", auth.RoleAuth("all"), system.UserController.UpdateUserProfile)
+	user.Put("/update/notification/me", auth.RoleAuth("all"), system.UserController.UpdateUserNotificationsPref)
+	user.Put("/update/customization/me", auth.RoleAuth("all"), system.UserController.UpdateUserCustomization)
+	user.Put("/update/account/me", auth.RoleAuth("all"), system.UserController.UpdateUserAccount)
+	user.Delete("/account/delete/me", auth.RoleAuth("all"), system.UserController.DeleteUser)
 
 	// protected routes
 	users := authgroup.Group("/users")
@@ -80,7 +80,7 @@ func NewRoutes(app *fiber.App, config *config.ServerConfig, system *controllers.
 	postgroup.Post("/", auth.RoleAuth("all"), system.PostController.NewPost)
 
 	// Protected routes
-	app.Get("/protected", auth.IsAuth(userService), func(c *fiber.Ctx) error {
+	app.Get("/protected", func(c *fiber.Ctx) error {
 		userID := c.Locals("user_id")
 		return c.Status(fiber.StatusOK).JSON(fiber.Map{
 			"message": "This is private data!",

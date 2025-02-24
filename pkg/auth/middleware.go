@@ -1,7 +1,8 @@
 package auth
 
 import (
-	"fmt"
+	"errors"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/mnuddindev/devpulse/pkg/logger"
@@ -11,41 +12,42 @@ import (
 
 func RefreshTokenMiddleware(uc *users.UserSystem) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		// Skip token refresh for specific routes (e.g., /refresh, /login)
-		if c.Path() == "/refresh" || c.Path() == "/login" || c.Path() == "/logout" || c.Path() == "/register" || fiber.RoutePatternMatch(c.Path(), "/user/:userid/activate") {
+		// Skip authentication for public routes
+		publicRoutes := map[string]bool{
+			"/login":                 true,
+			"/register":              true,
+			"/refresh":               true,
+			"/logout":                true,
+			"/user/:userid/activate": true, // Pattern matching handled below
+		}
+		if publicRoutes[c.Path()] || fiber.RoutePatternMatch(c.Path(), "/user/:userid/activate") {
 			return c.Next()
 		}
 
-		// Extract access token from cookie or header
 		accessToken := c.Cookies("access_token")
 		if accessToken == "" {
-			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error":  "Access token missing",
-				"status": fiber.StatusUnauthorized,
-			})
+			logger.Log.Debug("No access token found, attempting refresh")
+			return handleTokenRefresh(c, uc) // Try refresh if access_token is missing but refresh_token exists
 		}
 
-		// Validate access token
+		// Verify access token
 		claims, err := VerifyToken(accessToken)
 		if err != nil {
-			// If token is expired, attempt to refresh
-			if err.Error() == "Token is expired" || err.Error() == "token has expired" || err.Error() == "token is expired" {
+			if errors.Is(err, ErrExpiredToken) {
+				logger.Log.Debug("Access token expired, attempting refresh")
 				return handleTokenRefresh(c, uc)
 			}
-
-			// Other errors (e.g., invalid token)
 			logger.Log.WithFields(logrus.Fields{
 				"error": err,
-			}).Error("Invalid access token")
+			}).Warn("Access token invalid")
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-				"error":  "Unauthorized 02",
+				"error":  "Invalid access token",
 				"status": fiber.StatusUnauthorized,
 			})
 		}
 
-		// Token is valid; proceed
 		c.Locals("user_id", claims.UserID)
-		fmt.Println("token refreshed")
+		c.Locals("roles", claims.Roles)
 		return c.Next()
 	}
 }
@@ -54,8 +56,11 @@ func handleTokenRefresh(c *fiber.Ctx, uc *users.UserSystem) error {
 	// Extract refresh token from cookie
 	refreshToken := c.Cookies("refresh_token")
 	if refreshToken == "" {
+		logger.Log.WithFields(logrus.Fields{
+			"error": "Refresh token not found in cookies",
+		}).Warn("Refresh token missing")
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error":  "Refresh token missing",
+			"error":  "Refresh token missing, please log in again",
 			"status": fiber.StatusUnauthorized,
 		})
 	}
@@ -65,23 +70,22 @@ func handleTokenRefresh(c *fiber.Ctx, uc *users.UserSystem) error {
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
-		}).Error("Invalid refresh token")
+		}).Warn("Refresh token invalid or expired")
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error":  "Unauthorized 03",
+			"error":  "Invalid or expired refresh token, please log in again",
 			"status": fiber.StatusUnauthorized,
 		})
 	}
 
-	// Fetch user from database
-	userID := refreshClaims.UserID
-	user, err := uc.UserBy("id = ?", userID)
+	// Fetch user
+	user, err := uc.UserBy("id = ?", refreshClaims.UserID)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
-			"error":   err,
-			"user_id": userID,
-		}).Error("User not found")
+			"error":  err,
+			"userID": refreshClaims.UserID,
+		}).Warn("User not found during refresh")
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error":  "Unauthorized 04",
+			"error":  "User not found",
 			"status": fiber.StatusUnauthorized,
 		})
 	}
@@ -92,29 +96,42 @@ func handleTokenRefresh(c *fiber.Ctx, uc *users.UserSystem) error {
 		rolenames = append(rolenames, role.Name)
 	}
 
-	// Generate new tokens (access + refresh)
-	newAccessToken, err := GenerateAccessToken(user.ID, user.Email, rolenames)
+	// Generate new tokens (rotate refresh token for security)
+	accessToken, newRefreshToken, err := GenerateJWT(*user)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
-			"error": err,
-		}).Error("Failed to generate new tokens")
+			"error":  err,
+			"userID": user.ID,
+		}).Error("Token generation failed during refresh")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":  "Token generation failed",
+			"error":  "Failed to generate new tokens",
 			"status": fiber.StatusInternalServerError,
 		})
 	}
 
-	// Set new tokens in cookies
-	// Access token cookie (15 minutes)
+	// Set new cookies with secure settings
 	c.Cookie(&fiber.Cookie{
 		Name:     "access_token",
-		Value:    newAccessToken,
+		Value:    accessToken,
+		Expires:  time.Now().Add(15 * time.Minute),
 		HTTPOnly: true,
+		Secure:   true,     // Enforce HTTPS in production
+		SameSite: "Strict", // Prevent CSRF
+	})
+	c.Cookie(&fiber.Cookie{
+		Name:     "refresh_token",
+		Value:    newRefreshToken,
+		Expires:  time.Now().Add(7 * 24 * time.Hour),
+		HTTPOnly: true,
+		Secure:   true,
+		SameSite: "Strict",
 	})
 
-	// Update context with new access token for current request
+	// Update context for current request
 	c.Locals("user_id", user.ID)
-
-	// Proceed with the request
+	c.Locals("roles", refreshClaims.Roles) // Note: refresh token doesn’t have roles, so we could fetch from user instead
+	logger.Log.WithFields(logrus.Fields{
+		"userID": user.ID,
+	}).Info("Tokens refreshed successfully")
 	return c.Next()
 }

@@ -250,19 +250,23 @@ func (uc *UserController) Login(c *fiber.Ctx) error {
 			"status": fiber.StatusUnprocessableEntity,
 		})
 	}
-	at := fiber.Cookie{
+	// Set cookies explicitly
+	c.Cookie(&fiber.Cookie{
 		Name:     "access_token",
 		Value:    atoken,
+		Expires:  time.Now().Add(15 * time.Minute),
 		HTTPOnly: true,
-	}
-	rt := fiber.Cookie{
+		Secure:   false, // Set to true in production with HTTPS
+		SameSite: "Strict",
+	})
+	c.Cookie(&fiber.Cookie{
 		Name:     "refresh_token",
 		Value:    rtoken,
-		Expires:  time.Now().Add(30 * 24 * time.Hour),
+		Expires:  time.Now().Add(7 * 24 * time.Hour),
 		HTTPOnly: true,
-	}
-	c.Cookie(&at)
-	c.Cookie(&rt)
+		Secure:   false, // Set to true in production
+		SameSite: "Strict",
+	})
 	logger.Log.WithFields(logrus.Fields{
 		"email": login.Email,
 	}).Info("User logged in successfully")

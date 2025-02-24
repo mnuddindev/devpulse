@@ -35,6 +35,8 @@ func GenerateAccessToken(userID uuid.UUID, email string, roles []string) (string
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(15 * time.Minute)), // Access token expires in 15 minutes
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			NotBefore: jwt.NewNumericDate(time.Now()),
+			Issuer:    "devpulse",
 			ID:        uuid.NewString(),
 		},
 	}
@@ -43,14 +45,14 @@ func GenerateAccessToken(userID uuid.UUID, email string, roles []string) (string
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
-			"user":  email,
+			"email": email,
 			"field": "GenerateAccessToken",
 		}).Error("Access Token generation failed!!")
-		return "", err
+		return "", fmt.Errorf("access token signing failed: %w", err)
 	}
 	logger.Log.WithFields(logrus.Fields{
-		"user":  email,
-		"token": t,
+		"email": email,
+		"id":    claims.ID,
 	}).Info("Access token generated successfully")
 	return t, nil
 }
@@ -62,6 +64,8 @@ func GenerateRefreshToken(userID uuid.UUID) (string, error) {
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(7 * 24 * time.Hour)), // Refresh token expires in 7 days
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			NotBefore: jwt.NewNumericDate(time.Now()),
+			Issuer:    "devpulse",
 			ID:        uuid.NewString(),
 		},
 	}
@@ -70,47 +74,49 @@ func GenerateRefreshToken(userID uuid.UUID) (string, error) {
 	t, err := token.SignedString(jwtSecretKey)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
-			"error": err,
-			"user":  userID,
-			"field": "GenerateRefreshToken",
+			"error":  err,
+			"userID": userID,
+			"field":  "GenerateRefreshToken",
 		}).Error("Refresh Token generation failed!!")
-		return "", err
+		return "", fmt.Errorf("refresh token signing failed: %w", err)
 	}
 	logger.Log.WithFields(logrus.Fields{
-		"user":  userID,
-		"token": t,
-		"field": "GenerateRefreshToken",
+		"userID": userID,
+		"id":     claims.ID,
+		"field":  "GenerateRefreshToken",
 	}).Info("Refresh token generated successfully!!")
 	return t, nil
 }
 
 // Generate JWT Tokens
 func GenerateJWT(user models.User) (string, string, error) {
-	var rolenames []string
+	roles := make([]string, 0, len(user.Roles))
 	for _, role := range user.Roles {
-		rolenames = append(rolenames, role.Name)
+		roles = append(roles, role.Name)
 	}
 
-	atoken, err := GenerateAccessToken(user.ID, user.Email, rolenames)
+	atoken, err := GenerateAccessToken(user.ID, user.Email, roles)
 	if err != nil {
-		logger.Log.WithFields(logrus.Fields{
-			"error": err,
-		}).Error("Failed to generate JWT access token")
+		return "", "", err
 	}
 	rtoken, err := GenerateRefreshToken(user.ID)
 	if err != nil {
-		logger.Log.WithFields(logrus.Fields{
-			"error": err,
-		}).Error("Failed to generate JWT refresh token")
+		return "", "", err
 	}
-	return atoken, rtoken, err
+	return atoken, rtoken, nil
 }
 
 // VerifyToken verifies the token by extracting the token and cross checking secretkey, values, signing method returns
 func VerifyToken(tokenString string) (*Claims, error) {
-	//
+	if tokenString == "" {
+		return nil, ErrInvalidToken // Early exit for empty tokens
+	}
+
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			logger.Log.WithFields(logrus.Fields{
+				"alg": token.Header["alg"],
+			}).Warn("Unexpected signing method")
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 		return jwtSecretKey, nil
@@ -119,7 +125,6 @@ func VerifyToken(tokenString string) (*Claims, error) {
 	if err != nil {
 		if errors.Is(err, jwt.ErrTokenExpired) {
 			logger.Log.WithFields(logrus.Fields{
-				"error": err,
 				"token": tokenString,
 			}).Warn("Token has expired")
 			return nil, ErrExpiredToken
@@ -131,18 +136,27 @@ func VerifyToken(tokenString string) (*Claims, error) {
 		return nil, ErrInvalidToken
 	}
 
-	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
+	claims, ok := token.Claims.(*Claims)
+	if !ok && !token.Valid {
 		logger.Log.WithFields(logrus.Fields{
-			"user":  claims.Email,
 			"token": tokenString,
-		}).Info("Token verified successfully")
-		return claims, nil
+		}).Warn("Invalid token claims")
+		return nil, ErrInvalidToken
+	}
+
+	// Additional validation: ensure UserID is present
+	if claims.UserID == uuid.Nil {
+		logger.Log.WithFields(logrus.Fields{
+			"token": tokenString,
+		}).Warn("Token missing user ID")
+		return nil, ErrInvalidToken
 	}
 
 	logger.Log.WithFields(logrus.Fields{
-		"token": tokenString,
-	}).Error("Invalid token claims")
-	return nil, ErrInvalidToken
+		"userID": claims.UserID,
+		"id":     claims.ID,
+	}).Debug("Token verified")
+	return claims, nil
 }
 
 // ExtractToken extracts the token from the request header
@@ -151,7 +165,7 @@ func ExtractToken(c *fiber.Ctx) string {
 	if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
 		return authHeader[7:]
 	}
-	logger.Log.Warn("No token found in the request header")
+	logger.Log.Debug("No Bearer token found in Authorization header")
 	return ""
 }
 

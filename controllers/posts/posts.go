@@ -253,17 +253,19 @@ func (pc *PostController) NewPost(c *fiber.Ctx) error {
 
 	// Create a response map with only necessary fields
 	response := fiber.Map{
-		"status":           fiber.StatusCreated,         // HTTP status code
-		"id":               createdPost.ID,              // Unique identifier of the post
-		"title":            createdPost.Title,           // Post title
-		"slug":             createdPost.Slug,            // SEO-friendly URL slug
-		"pstatus":          createdPost.Status,          // Current status (e.g., published, moderation)
-		"published":        createdPost.Published,       // Published flag
-		"published_at":     createdPost.PublishedAt,     // Timestamp of publication (nullable)
-		"meta_title":       createdPost.MetaTitle,       // SEO meta title
-		"meta_description": createdPost.MetaDescription, // SEO meta description
-		"seo_keywords":     createdPost.SEOKeywords,     // SEO keywords
-		"tags":             tagNames,                    // List of tag names
+		"status": fiber.StatusCreated, // HTTP status code
+		"post": fiber.Map{
+			"id":               createdPost.ID,              // Unique identifier of the post
+			"title":            createdPost.Title,           // Post title
+			"slug":             createdPost.Slug,            // SEO-friendly URL slug
+			"status":           createdPost.Status,          // Current status (e.g., published, moderation)
+			"published":        createdPost.Published,       // Published flag
+			"published_at":     createdPost.PublishedAt,     // Timestamp of publication (nullable)
+			"meta_title":       createdPost.MetaTitle,       // SEO meta title
+			"meta_description": createdPost.MetaDescription, // SEO meta description
+			"seo_keywords":     createdPost.SEOKeywords,     // SEO keywords
+			"tags":             tagNames,                    // List of tag names
+		},
 	}
 
 	if createdPost.Status == "moderation" {
