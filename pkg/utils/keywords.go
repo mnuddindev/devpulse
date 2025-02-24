@@ -4,9 +4,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"unicode"
-
-	"github.com/bbalet/stopwords"
 )
 
 var stopWords = map[string]bool{
@@ -29,138 +26,122 @@ var stopWords = map[string]bool{
 	"you": true, "you'd": true, "you'll": true, "you're": true, "you've": true, "your": true, "yours": true, "yourself": true, "yourselves": true,
 }
 
-// Keyword represents a word with its frequency and score
-type Keyword struct {
-	Word      string
-	Frequency int
-	Score     float64
+// MetaOutput for response
+type MetaOutput struct {
+	MetaTitle string   `json:"meta_title"`
+	MetaDesc  string   `json:"meta_desc"`
+	Keywords  []string `json:"keywords"`
 }
 
-// GenerateKeywords extracts the best keywords from title and description
-func GenerateKeywords(title, description string, maxKeywords int) []string {
+// cleanText normalizes text
+func cleanText(text string) string {
+	text = strings.ToLower(text)
+	reg := regexp.MustCompile(`[^a-z0-9\s]`)
+	return strings.TrimSpace(reg.ReplaceAllString(text, " "))
+}
+
+// generateKeywords extracts SEO-optimized keywords
+func GenerateKeywords(title, content string, maxKeywords int) []string {
 	if maxKeywords <= 0 {
-		maxKeywords = 5 // Default to 5 keywords
+		maxKeywords = 5
 	}
 
-	// Combine title and description, giving title more weight
-	text := title + " " + title + " " + description // Title repeated twice for more weight
+	// Combine text, weighting title heavily
+	fullText := title + " " + title + " " + title + " " + content // Title 3x for SEO priority
+	cleaned := cleanText(fullText)
+	words := strings.Fields(cleaned)
 
-	// Clean and normalize text
-	cleanedText := cleanText(text)
-
-	// Calculate word frequencies
-	wordFreq := make(map[string]int)
-	words := strings.Fields(cleanedText)
-	// totalWords := len(words)
-
-	for _, word := range words {
-		if isValidKeyword(word) {
-			wordFreq[word]++
+	// Build n-grams (1-3 words)
+	ngrams := make(map[string]float64)
+	totalWords := float64(len(words))
+	for i := 0; i < len(words); i++ {
+		for n := 1; n <= 3 && i+n <= len(words); n++ {
+			phrase := strings.Join(words[i:i+n], " ")
+			if len(phrase) < 3 || stopWords[phrase] {
+				continue
+			}
+			ngrams[phrase]++
 		}
 	}
 
-	// Calculate keyword scores
-	keywords := make([]Keyword, 0, len(wordFreq))
-	for word, freq := range wordFreq {
-		// Score based on frequency and word length (longer words often more specific)
-		score := float64(freq) * (float64(len(word)) / 5.0)
-		// Boost score based on position (title words get higher score due to repetition)
-		keywords = append(keywords, Keyword{
-			Word:      word,
-			Frequency: freq,
-			Score:     score,
-		})
+	// Score n-grams
+	type kw struct {
+		Word  string
+		Score float64
+	}
+	kws := make([]kw, 0, len(ngrams))
+	for phrase, freq := range ngrams {
+		score := freq / totalWords // Base density
+		wordCount := float64(len(strings.Fields(phrase)))
+		score *= (1.0 + wordCount*0.3) // Boost multi-word phrases
+		if strings.Contains(strings.ToLower(title), phrase) {
+			score *= 3.0 // Heavy title boost (SEO expert tactic)
+		}
+		if freq > 1 { // Favor repeated terms
+			score *= 1.5
+		}
+		kws = append(kws, kw{phrase, score})
 	}
 
-	// Sort keywords by score
-	sort.Slice(keywords, func(i, j int) bool {
-		if keywords[i].Score == keywords[j].Score {
-			// If scores are equal, prefer higher frequency
-			return keywords[i].Frequency > keywords[j].Frequency
+	// Sort by score
+	sort.Slice(kws, func(i, j int) bool {
+		if kws[i].Score == kws[j].Score {
+			return len(kws[i].Word) > len(kws[j].Word) // Tiebreaker: longer phrases
 		}
-		return keywords[i].Score > keywords[j].Score
+		return kws[i].Score > kws[j].Score
 	})
 
-	// Extract top keywords
+	// Select top keywords
 	result := make([]string, 0, maxKeywords)
-	for i := 0; i < len(keywords) && i < maxKeywords; i++ {
-		result = append(result, keywords[i].Word)
+	for i := 0; i < len(kws) && i < maxKeywords; i++ {
+		result = append(result, kws[i].Word)
 	}
-
 	return result
 }
 
-// cleanText normalizes and cleans the input text
-func cleanText(text string) string {
-	// Convert to lowercase
-	text = strings.ToLower(text)
+// generateMeta crafts SEO-optimized metadata
+func GenerateMeta(title, content, brand string) MetaOutput {
+	keywords := GenerateKeywords(title, content, 10)
+	primaryKW := keywords[0] // Top keyword for title/desc
 
-	// Remove punctuation and special characters
-	reg := regexp.MustCompile(`[^a-z0-9\s]`)
-	text = reg.ReplaceAllString(text, " ")
+	// Craft Meta Title (SEO expert style: keyword + benefit + brand)
+	metaTitle := primaryKW + " Guide for Success"
+	if brand != "" {
+		metaTitle += " | " + brand
+	}
+	metaTitle = TruncateString(metaTitle, 60)
 
-	// Remove extra whitespace
-	text = strings.Join(strings.Fields(text), " ")
+	// Craft Meta Description (SEO expert style: hook + keyword + CTA)
+	metaDesc := "Discover " + primaryKW + " to skyrocket your results in " + brand + ". Click now!"
+	metaDesc = TruncateString(metaDesc, 160)
 
-	// Remove stop words using both our list and stopwords package
-	text = stopwords.CleanString(text, "en", true)
-
-	return text
+	return MetaOutput{
+		MetaTitle: metaTitle,
+		MetaDesc:  metaDesc,
+		Keywords:  keywords,
+	}
 }
 
-// isValidKeyword checks if a word should be considered as a keyword
-func isValidKeyword(word string) bool {
-	// Skip if empty or too short
-	if len(word) < 3 {
-		return false
-	}
-
-	// Skip if it's a stop word
-	if stopWords[word] {
-		return false
-	}
-
-	// Skip if it's just numbers
-	isNumber := true
-	for _, r := range word {
-		if !unicode.IsDigit(r) {
-			isNumber = false
-			break
-		}
-	}
-	if isNumber {
-		return false
-	}
-
-	return true
-}
-
-// JoinKeywords combines provided keywords with generated ones
+// JoinKeywords combines provided and generated keywords
 func JoinKeywords(provided string, generated []string) string {
 	if provided != "" {
-		// If keywords are provided, append generated ones only if they're not already present
 		existing := strings.Split(strings.ToLower(provided), ",")
 		for _, kw := range existing {
 			kw = strings.TrimSpace(kw)
 			if kw != "" {
-				stopWords[kw] = true // Temporarily treat existing keywords as stop words
+				stopWords[kw] = true
 			}
 		}
-
 		uniqueGenerated := make([]string, 0, len(generated))
 		for _, gen := range generated {
 			if !stopWords[gen] {
 				uniqueGenerated = append(uniqueGenerated, gen)
 			}
 		}
-
-		// Clean up temporary stop words
 		for _, kw := range existing {
 			delete(stopWords, kw)
 		}
-
 		return strings.Join(append(existing, uniqueGenerated...), ", ")
 	}
-
 	return strings.Join(generated, ", ")
 }

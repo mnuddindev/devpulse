@@ -120,8 +120,8 @@ func (ps *PostSystem) UpdatePostMany(postID uuid.UUID, assoc string, data interf
 
 // checkSlugAvailability checks if a slug is available for use.
 func (ps *PostSystem) CheckSlugAvailable(slug string) error {
-	post := &models.Posts{}
-	err := ps.Crud.GetByCondition(post, "slug = ?", []interface{}{slug}, []string{}, "", 0, 0)
+	var post models.Posts
+	err := ps.Crud.GetByCondition(&post, "slug = ?", []interface{}{slug}, []string{}, "", 0, 0)
 	if err != nil {
 		// return true if slug is available
 		return errors.New("slug already exists")

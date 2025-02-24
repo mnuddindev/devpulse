@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -96,9 +98,27 @@ func Contains(arr []string, str string) bool {
 }
 
 // TruncateString truncates a string to the given length
-func TruncateString(s string, length int) string {
+func CreateExcerpt(s string, length int) string {
 	if len(s) > length {
 		return s[:length] + "..."
 	}
 	return s
+}
+
+// truncateString ensures the string fits within the specified character limit
+func TruncateString(s string, maxLen int) string {
+	if utf8.RuneCountInString(s) <= maxLen {
+		return s
+	}
+	// Truncate to maxLen, ensuring we don't cut mid-word
+	words := strings.Split(s, " ")
+	result := ""
+	for _, word := range words {
+		if utf8.RuneCountInString(result+" "+word) <= maxLen {
+			result += " " + word
+		} else {
+			break
+		}
+	}
+	return strings.TrimSpace(result)
 }

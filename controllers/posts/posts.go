@@ -16,22 +16,19 @@ import (
 
 // CreatePostRequest defines the structure for post creation request
 type CreatePostRequest struct {
-	Title            string     `json:"title" validate:"required,min=10,max=200"`
-	Content          string     `json:"content" validate:"required,min=100"`
-	Excerpt          string     `json:"excerpt" validate:"max=300"`
-	Slug             string     `json:"slug" validate:"max=220"`
-	FeaturedImageUrl string     `json:"featured_image_url" validate:"omitempty,url,max=500"`
-	Status           string     `json:"status" validate:"required,oneof=draft published unpublished public private"`
-	ContentFormat    string     `json:"content_format" validate:"oneof=markdown html"`
-	CanonicalURL     string     `json:"canonical_url" validate:"omitempty,url,max=500"`
-	Tags             []string   `json:"tags" validate:"max=4,dive"`
-	CoAuthorIDs      []string   `json:"co_authors" validate:"max=3,dive,uuid"`
-	MetaTitle        string     `json:"meta_title" validate:"max=200"`
-	MetaDescription  string     `json:"meta_description" validate:"max=300"`
-	SEOKeywords      string     `json:"seo_keywords" validate:"max=255"`
-	Published        bool       `json:"published"`
-	PublishedAt      *time.Time `json:"published_at"`
-	AuthorID         uuid.UUID  `json:"author_id"`
+	AuthorID         uuid.UUID `json:"author_id"`
+	Title            string    `json:"title" validate:"required,min=10,max=200"`
+	Content          string    `json:"content" validate:"required,min=100"`
+	Tags             []string  `json:"tags" validate:"max=4,dive"`
+	Excerpt          string    `json:"excerpt" validate:"max=300"`
+	Slug             string    `json:"slug" validate:"max=220"`
+	FeaturedImageUrl string    `json:"featured_image_url" validate:"omitempty,url,max=500"`
+	Status           string    `json:"status" validate:"required,oneof=draft published unpublished public private"`
+	ContentFormat    string    `json:"content_format" validate:"oneof=markdown html"`
+	CanonicalURL     string    `json:"canonical_url" validate:"omitempty,url,max=500"`
+
+	Published   bool       `json:"published"`
+	PublishedAt *time.Time `json:"published_at"`
 }
 
 type PostController struct {
@@ -45,9 +42,6 @@ func NewPostController(postSystem *postservices.PostSystem) *PostController {
 }
 
 func (pc *PostController) BeforeCreate(post *CreatePostRequest, userid uuid.UUID) (*CreatePostRequest, error) {
-	if post.AuthorID == uuid.Nil {
-		post.AuthorID = userid
-	}
 	if post.AuthorID != userid {
 		return nil, errors.New("author id does not match user id")
 	}
@@ -58,27 +52,21 @@ func (pc *PostController) BeforeCreate(post *CreatePostRequest, userid uuid.UUID
 		}
 		post.Slug = slug
 	}
-	if post.MetaTitle == "" {
-		post.MetaTitle = post.Title
-	}
-	if post.MetaDescription == "" {
-		post.MetaDescription = post.Excerpt
-	}
 	if post.CanonicalURL == "" {
 		post.CanonicalURL = "/post/" + post.Slug
 	}
-	if post.SEOKeywords == "" {
-		post.SEOKeywords = utils.JoinKeywords(post.SEOKeywords, utils.GenerateKeywords(post.Title, post.Content, 10))
-	}
 	if post.ContentFormat == "" {
 		post.ContentFormat = "markdown"
+	}
+	if post.PublishedAt == nil {
+		now := time.Now()
+		post.PublishedAt = &now
 	}
 
 	return post, nil
 }
 
-// CreatePost creates a new post
-func (pc *PostController) CreatePost(c *fiber.Ctx) error {
+func (pc *PostController) NewPost(c *fiber.Ctx) error {
 	// Get user ID from context
 	userId, ok := c.Locals("user_id").(uuid.UUID)
 	if !ok {
@@ -162,23 +150,6 @@ func (pc *PostController) CreatePost(c *fiber.Ctx) error {
 		})
 	}
 
-	var coAuthorUUIDs []uuid.UUID
-	for _, coAuthorID := range post.CoAuthorIDs {
-		coAuthorUUID, err := uuid.Parse(coAuthorID)
-		if err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Invalid co_author_id format",
-			})
-		}
-		// Ensure co-author is not the same as the author
-		if coAuthorUUID == userId {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-				"error": "Co-author cannot be the same as the primary author",
-			})
-		}
-		coAuthorUUIDs = append(coAuthorUUIDs, coAuthorUUID)
-	}
-
 	posts := models.Posts{
 		Title:            post.Title,
 		Slug:             post.Slug,
@@ -191,10 +162,18 @@ func (pc *PostController) CreatePost(c *fiber.Ctx) error {
 		AuthorID:         userId,
 		Published:        post.Status == "published" || post.Status == "public",
 		PublishedAt:      post.PublishedAt,
-		MetaTitle:        post.MetaTitle,
-		MetaDescription:  post.MetaDescription,
-		SEOKeywords:      post.SEOKeywords,
-		CoAuthors:        coAuthors,
+	}
+
+	meta := utils.GenerateMeta(post.Title, post.Content, "devpulse")
+
+	if posts.MetaTitle == "" {
+		posts.MetaTitle = meta.MetaTitle
+	}
+	if posts.MetaDescription == "" {
+		posts.MetaDescription = meta.MetaTitle
+	}
+	if posts.SEOKeywords == "" {
+		posts.SEOKeywords = utils.JoinKeywords(posts.SEOKeywords, meta.Keywords)
 	}
 
 	// Handle tags
@@ -224,25 +203,6 @@ func (pc *PostController) CreatePost(c *fiber.Ctx) error {
 		})
 	}
 
-	// Handle co-authors (fetch users and associate them)
-	if len(coAuthorUUIDs) > 0 {
-		var coAuthors []models.User
-		err := pc.postSystem.Crud.GetByCondition(&coAuthors, "id IN ?", []interface{}{coAuthorUUIDs}, []string{}, "", 0, 0)
-		if err != nil {
-			return err
-		}
-
-		// Verify all requested co-authors exist
-		if len(coAuthors) != len(coAuthorUUIDs) {
-			return fiber.NewError(fiber.StatusBadRequest, "One or more co-author IDs do not exist")
-		}
-
-		// Associate co-authors with the post
-		if err := pc.postSystem.Crud.AddManyToMany(&createdPost, "CoAuthores", coAuthors); err != nil {
-			return err
-		}
-	}
-
 	// Fetch the created post with co-authors for the response
 	createdPost, err = pc.postSystem.GetPostBy("id = ?", createdPost.ID)
 	if err != nil {
@@ -251,20 +211,5 @@ func (pc *PostController) CreatePost(c *fiber.Ctx) error {
 		})
 	}
 
-	// Prepare response
-	coAuthorIDs := make([]uuid.UUID, len(createdPost.CoAuthors))
-	for i, coAuthor := range createdPost.CoAuthors {
-		coAuthorIDs[i] = coAuthor.ID
-	}
-
-	logger.Log.WithFields(logrus.Fields{
-		"post_id": createdPost.ID,
-		"user_id": createdPost.AuthorID,
-		"title":   post.Title,
-	}).Info("Post created successfully")
-
-	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
-		"post":   createdPost,
-		"status": fiber.StatusCreated,
-	})
+	return nil
 }
