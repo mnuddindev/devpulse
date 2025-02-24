@@ -243,9 +243,27 @@ func (pc *PostController) NewPost(c *fiber.Ctx) error {
 		})
 	}
 
+	// Prepare a slice of tag names for the response (instead of full Tag objects)
+	var tagNames []string
+	// Iterate over the post’s tags to extract names
+	for _, tag := range createdPost.Tags {
+		// Append each tag name to the slice
+		tagNames = append(tagNames, tag.Name)
+	}
+
+	// Create a response map with only necessary fields
 	response := fiber.Map{
-		"status": fiber.StatusCreated,
-		"post":   createdPost,
+		"status":           fiber.StatusCreated,         // HTTP status code
+		"id":               createdPost.ID,              // Unique identifier of the post
+		"title":            createdPost.Title,           // Post title
+		"slug":             createdPost.Slug,            // SEO-friendly URL slug
+		"pstatus":          createdPost.Status,          // Current status (e.g., published, moderation)
+		"published":        createdPost.Published,       // Published flag
+		"published_at":     createdPost.PublishedAt,     // Timestamp of publication (nullable)
+		"meta_title":       createdPost.MetaTitle,       // SEO meta title
+		"meta_description": createdPost.MetaDescription, // SEO meta description
+		"seo_keywords":     createdPost.SEOKeywords,     // SEO keywords
+		"tags":             tagNames,                    // List of tag names
 	}
 
 	if createdPost.Status == "moderation" {
