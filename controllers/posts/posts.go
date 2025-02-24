@@ -2,9 +2,6 @@ package postscontroller
 
 import (
 	"errors"
-	"fmt"
-	"regexp"
-	"strconv"
 	"time"
 	"unicode/utf8"
 
@@ -158,12 +155,19 @@ func (pc *PostController) NewPost(c *fiber.Ctx) error {
 		})
 	}
 
+	// Use enhanced GenerateUniqueSlug with custom config
 	if post.Slug == "" {
-		baseSlug := slug.Make(post.Title)
-		post.Slug, err = pc.generateUniqueSlug(baseSlug)
+		config := utils.SlugConfig{
+			SuffixStyle:    "version", // e.g., -v2
+			MaxLength:      220,
+			MaxAttempts:    100,
+			UseCache:       true,
+			FallbackToUUID: true,
+		}
+		post.Slug, err = utils.GenerateUniqueSlug(pc.postSystem.Crud.DB, &models.Posts{}, "slug", post.Title, config)
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error":  "Unable to generate unique slug",
+				"error":  err.Error(),
 				"status": fiber.StatusInternalServerError,
 			})
 		}
@@ -256,42 +260,4 @@ func (pc *PostController) NewPost(c *fiber.Ctx) error {
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(response)
-}
-
-// New method for unique slug generation
-func (pc *PostController) generateUniqueSlug(baseSlug string) (string, error) {
-	// Fetch all slugs matching the base pattern
-	var existingSlugs []string
-	if err := pc.postSystem.Crud.DB.Model(&models.Posts{}).
-		Where("slug LIKE ?", baseSlug+"%").
-		Pluck("slug", &existingSlugs).Error; err != nil {
-		logger.Log.WithError(err).Error("Failed to fetch existing slugs")
-		return "", err
-	}
-
-	// Map existing suffixes
-	suffixMap := make(map[int]bool)
-	re := regexp.MustCompile(`^` + regexp.QuoteMeta(baseSlug) + `(?:-(\d+))?$`)
-	for _, slug := range existingSlugs {
-		matches := re.FindStringSubmatch(slug)
-		if len(matches) > 1 && matches[1] != "" {
-			num, _ := strconv.Atoi(matches[1])
-			suffixMap[num] = true
-		} else if slug == baseSlug {
-			suffixMap[0] = true // Base slug without suffix
-		}
-	}
-
-	// Find the next available number
-	if !suffixMap[0] {
-		return baseSlug, nil // Base slug is available
-	}
-	for i := 2; i <= 100; i++ { // Start at -2
-		if !suffixMap[i] {
-			return fmt.Sprintf("%s-%d", baseSlug, i), nil
-		}
-	}
-
-	// Fallback: unlikely, but append a random suffix
-	return fmt.Sprintf("%s-%s", baseSlug, uuid.New().String()[:8]), nil
 }
