@@ -157,14 +157,7 @@ func (pc *PostController) NewPost(c *fiber.Ctx) error {
 
 	// Use enhanced GenerateUniqueSlug with custom config
 	if post.Slug == "" {
-		config := utils.SlugConfig{
-			SuffixStyle:    "version", // e.g., -v2
-			MaxLength:      220,
-			MaxAttempts:    100,
-			UseCache:       true,
-			FallbackToUUID: true,
-		}
-		post.Slug, err = utils.GenerateUniqueSlug(pc.postSystem.Crud.DB, &models.Posts{}, "slug", post.Title, config)
+		post.Slug, err = utils.GenerateUniqueSlug(pc.postSystem.Crud.DB, &models.Posts{}, "slug", post.Title, utils.SlugConfig{})
 		if err != nil {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"error":  err.Error(),
