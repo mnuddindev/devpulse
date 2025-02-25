@@ -62,10 +62,23 @@ type Skill struct {
 }
 
 type Role struct {
+	ID          uuid.UUID    `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
+	Name        string       `gorm:"size:50;not null;unique" json:"name"`
+	Permissions []Permission `gorm:"many2many:role_permissions;" json:"permissions"`
+	CreatedAt   time.Time    `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
+	UpdatedAt   time.Time    `gorm:"default:CURRENT_TIMESTAMP" json:"updated_at"`
+}
+
+type Permission struct {
 	ID        uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
-	Name      string    `gorm:"size:50;not null;unique" json:"name"`
+	Name      string    `gorm:"size:50;not null;unique" json:"name"` // e.g., "create_post", "delete_comment"
 	CreatedAt time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"created_at"`
 	UpdatedAt time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"updated_at"`
+}
+
+type RolePermission struct {
+	RoleID       uuid.UUID `gorm:"type:uuid;primaryKey"`
+	PermissionID uuid.UUID `gorm:"type:uuid;primaryKey"`
 }
 
 type Interest struct {

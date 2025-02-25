@@ -21,17 +21,19 @@ var (
 )
 
 type Claims struct {
-	UserID uuid.UUID `json:"user_id"`
-	Email  string    `json:"email"`
-	Roles  []string  `json:"roles"`
+	UserID      uuid.UUID   `json:"user_id"`
+	Email       string      `json:"email"`
+	Roles       []string    `json:"roles"`
+	Permissions []uuid.UUID `json:"permissions,omitempty"`
 	jwt.RegisteredClaims
 }
 
-func GenerateAccessToken(userID uuid.UUID, email string, roles []string) (string, error) {
+func GenerateAccessToken(userID uuid.UUID, email string, roles []string, permissions []uuid.UUID) (string, error) {
 	claims := Claims{
-		UserID: userID,
-		Email:  email,
-		Roles:  roles,
+		UserID:      userID,
+		Email:       email,
+		Roles:       roles,
+		Permissions: permissions,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(15 * time.Minute)), // Access token expires in 15 minutes
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -89,13 +91,13 @@ func GenerateRefreshToken(userID uuid.UUID) (string, error) {
 }
 
 // Generate JWT Tokens
-func GenerateJWT(user models.User) (string, string, error) {
+func GenerateJWT(user models.User, permissions []uuid.UUID) (string, string, error) {
 	roles := make([]string, 0, len(user.Roles))
 	for _, role := range user.Roles {
 		roles = append(roles, role.Name)
 	}
 
-	atoken, err := GenerateAccessToken(user.ID, user.Email, roles)
+	atoken, err := GenerateAccessToken(user.ID, user.Email, roles, permissions)
 	if err != nil {
 		return "", "", err
 	}
