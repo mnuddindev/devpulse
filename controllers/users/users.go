@@ -3,6 +3,7 @@ package users
 import (
 	"time"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/mnuddindev/devpulse/pkg/logger"
@@ -10,13 +11,16 @@ import (
 	"github.com/mnuddindev/devpulse/pkg/services/users"
 	"github.com/mnuddindev/devpulse/pkg/utils"
 	"github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 )
 
 type UserController struct {
+	DB         *gorm.DB
+	Client     *redis.Client
 	userSystem *users.UserSystem
 }
 
-func NewUserController(userSystem *users.UserSystem) *UserController {
+func NewUserController(userSystem *users.UserSystem, db *gorm.DB, client *redis.Client) *UserController {
 	return &UserController{
 		userSystem: userSystem,
 	}

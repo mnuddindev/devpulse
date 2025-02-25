@@ -3,7 +3,7 @@ package routes
 import (
 	"time"
 
-	"github.com/go-redis/redis"
+	"github.com/go-redis/redis/v8"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/compress"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -16,7 +16,7 @@ import (
 	"github.com/mnuddindev/devpulse/pkg/services/users"
 )
 
-func NewRoutes(app *fiber.App, config *config.ServerConfig, system *controllers.CentralSystem) {
+func NewRoutes(app *fiber.App, config *config.ServerConfig, system *controllers.CentralSystem, client *redis.Client) {
 	app.Use(
 		logger.New(),
 		recover.New(),
@@ -38,11 +38,7 @@ func NewRoutes(app *fiber.App, config *config.ServerConfig, system *controllers.
 	)
 
 	// userservice to access crud
-	userService := users.NewUserSystem(system.DB)
-
-	client := redis.NewClient(&redis.Options{
-		Addr: "localhost:1210",
-	})
+	userService := users.NewUserSystem(system.DB, client)
 
 	// for guest users
 	// home router

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/go-redis/redis/v8"
 	"github.com/gofiber/fiber/v2"
 	"github.com/mnuddindev/devpulse/config"
 	"github.com/mnuddindev/devpulse/controllers"
@@ -18,7 +19,10 @@ func main() {
 		}).Fatal("Error while loading config")
 		return
 	}
-	system, err := controllers.StartServices(&config.Postgres)
+	client := redis.NewClient(&redis.Options{
+		Addr: "localhost:1210",
+	})
+	system, err := controllers.StartServices(&config.Postgres, client)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -26,6 +30,6 @@ func main() {
 		return
 	}
 	app := fiber.New()
-	routes.NewRoutes(app, &config.ServerConfig, system)
+	routes.NewRoutes(app, &config.ServerConfig, system, client)
 	app.Listen(config.ServerConfig.Port)
 }

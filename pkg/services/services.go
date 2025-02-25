@@ -1,6 +1,7 @@
 package services
 
 import (
+	"github.com/go-redis/redis/v8"
 	postservices "github.com/mnuddindev/devpulse/pkg/services/posts"
 	"github.com/mnuddindev/devpulse/pkg/services/users"
 	"gorm.io/gorm"
@@ -13,9 +14,9 @@ type Systems struct {
 }
 
 // NewUserSystem initializes a new UserSystem with a given database connection.
-func NewSystem(db *gorm.DB) *Systems {
+func NewSystem(db *gorm.DB, client *redis.Client) *Systems {
 	return &Systems{
-		UserSystem: users.NewUserSystem(db),
-		PostSystem: postservices.NewPostSystem(db),
+		UserSystem: users.NewUserSystem(db, client),
+		PostSystem: postservices.NewPostSystem(db, client),
 	}
 }

@@ -3,6 +3,7 @@ package postservices
 import (
 	"errors"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
 	"github.com/mnuddindev/devpulse/gorm"
 	"github.com/mnuddindev/devpulse/pkg/logger"
@@ -13,13 +14,15 @@ import (
 
 // PostSystem struct that holds a reference to the CRUD operations using Gorm.
 type PostSystem struct {
-	Crud *gorm.GormDB
+	Crud   *gorm.GormDB
+	Client *redis.Client
 }
 
 // NewPostSystem initializes a new UserSystem with a given database connection.
-func NewPostSystem(db *grm.DB) *PostSystem {
+func NewPostSystem(db *grm.DB, client *redis.Client) *PostSystem {
 	return &PostSystem{
-		Crud: gorm.NewGormDB(db),
+		Crud:   gorm.NewGormDB(db),
+		Client: client,
 	}
 }
 

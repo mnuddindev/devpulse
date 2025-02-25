@@ -12,7 +12,7 @@ import (
 // CreateUser creates a new user in the system after validation and password hashing.
 func (us *UserSystem) CreateNotification(userid uuid.UUID, notification models.Notification) error {
 	// Attempt to create the user in the database. If creation fails, log the error and return an error.
-	if err := us.crud.Create(notification); err != nil {
+	if err := us.Crud.Create(notification); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error":  err,
 			"userid": userid,
@@ -35,7 +35,7 @@ func (us *UserSystem) NotificationBy(condition string, args ...interface{}) (*mo
 	var noti models.Notification
 
 	// getting user details by given condition for instance ByLocation, BySkills, ByID
-	if err := us.crud.GetByCondition(&noti, condition, args, []string{}, "", 0, 0); err != nil {
+	if err := us.Crud.GetByCondition(&noti, condition, args, []string{}, "", 0, 0); err != nil {
 		// log if failed to fetch by condition
 		logger.Log.WithFields(logrus.Fields{
 			"error":     err,
@@ -60,7 +60,7 @@ func (us *UserSystem) NotificationPreBy(condition string, args ...interface{}) (
 	var noti models.NotificationPrefrences
 
 	// getting user details by given condition for instance ByLocation, BySkills, ByID
-	if err := us.crud.GetByCondition(&noti, condition, args, []string{}, "", 0, 0); err != nil {
+	if err := us.Crud.GetByCondition(&noti, condition, args, []string{}, "", 0, 0); err != nil {
 		// log if failed to fetch by condition
 		logger.Log.WithFields(logrus.Fields{
 			"error":     err,
@@ -85,7 +85,7 @@ func (uc *UserSystem) Notification() ([]models.Notification, error) {
 	var noti []models.Notification
 
 	// check for users in db
-	if err := uc.crud.GetAll(&noti, []string{}); err != nil {
+	if err := uc.Crud.GetAll(&noti, []string{}); err != nil {
 		// log if failed to get data
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -103,7 +103,7 @@ func (uc *UserSystem) NotificationPref() ([]models.NotificationPrefrences, error
 	var noti []models.NotificationPrefrences
 
 	// check for users in db
-	if err := uc.crud.GetAll(&noti, []string{}); err != nil {
+	if err := uc.Crud.GetAll(&noti, []string{}); err != nil {
 		// log if failed to get data
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -122,7 +122,7 @@ func (us *UserSystem) UpdateNotification(condition string, notid uuid.UUID, upda
 	var notification models.Notification
 
 	// delete user data using id
-	if err := us.crud.Update(&notification, "id = ?", []interface{}{notid}, updates); err != nil {
+	if err := us.Crud.Update(&notification, "id = ?", []interface{}{notid}, updates); err != nil {
 		// log if failed
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -142,7 +142,7 @@ func (us *UserSystem) UpdateNotificationPref(condition string, userId uuid.UUID,
 	var notificationpre models.NotificationPrefrences
 
 	// delete user data using id
-	if err := us.crud.Update(&notificationpre, condition, []interface{}{userId}, updates); err != nil {
+	if err := us.Crud.Update(&notificationpre, condition, []interface{}{userId}, updates); err != nil {
 		// log if failed
 		logger.Log.WithFields(logrus.Fields{
 			"error":   err,

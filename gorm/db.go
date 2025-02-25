@@ -26,25 +26,6 @@ func Connect(co *cfg.Postgres) *gorm.DB {
 	// Print a message if the connection is successful
 	logger.Log.Info("Connected to database")
 
-	_ = []interface{}{
-		&models.User{},
-		&models.Role{},
-		&models.Notification{},
-		&models.NotificationPrefrences{},
-		&models.Posts{},
-		&models.Comment{},
-		&models.Reaction{},
-		&models.Bookmark{},
-		&models.PostAnalytics{},
-		&models.Series{},
-		&models.SeriesAnalytics{},
-		&models.Collection{},
-		&models.CommentFlag{},
-		&models.SocialMediaPreview{},
-		&models.Tag{},
-		&models.TagAnalytics{},
-	}
-
 	if err := client.Debug().AutoMigrate(
 		&models.User{},
 		&models.Role{},

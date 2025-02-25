@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"github.com/go-redis/redis/v8"
 	"github.com/mnuddindev/devpulse/config"
 	postscontroller "github.com/mnuddindev/devpulse/controllers/posts"
 	"github.com/mnuddindev/devpulse/controllers/users"
@@ -17,13 +18,13 @@ type CentralSystem struct {
 	PostController *postscontroller.PostController
 }
 
-func StartServices(config *config.Postgres) (*CentralSystem, error) {
+func StartServices(config *config.Postgres, client *redis.Client) (*CentralSystem, error) {
 	logger.Log.Info("Initializing application system")
 	db := gorm.Connect(config)
-	userSystem := usr.NewUserSystem(db)
-	postSystem := postservices.NewPostSystem(db)
-	userController := users.NewUserController(userSystem)
-	postController := postscontroller.NewPostController(postSystem)
+	userSystem := usr.NewUserSystem(db, client)
+	postSystem := postservices.NewPostSystem(db, client)
+	userController := users.NewUserController(userSystem, db, client)
+	postController := postscontroller.NewPostController(postSystem, db, client)
 	return &CentralSystem{
 		DB:             db,
 		UserController: userController,

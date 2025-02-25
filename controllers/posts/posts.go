@@ -5,6 +5,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/gosimple/slug"
@@ -13,6 +14,7 @@ import (
 	postservices "github.com/mnuddindev/devpulse/pkg/services/posts"
 	"github.com/mnuddindev/devpulse/pkg/utils"
 	"github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 )
 
 // CreatePostRequest defines the structure for post creation request
@@ -33,11 +35,15 @@ type CreatePostRequest struct {
 }
 
 type PostController struct {
+	DB         *gorm.DB
+	Client     *redis.Client
 	postSystem *postservices.PostSystem
 }
 
-func NewPostController(postSystem *postservices.PostSystem) *PostController {
+func NewPostController(postSystem *postservices.PostSystem, db *gorm.DB, client *redis.Client) *PostController {
 	return &PostController{
+		DB:         db,
+		Client:     client,
 		postSystem: postSystem,
 	}
 }

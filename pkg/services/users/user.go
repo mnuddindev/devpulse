@@ -3,6 +3,7 @@ package users
 import (
 	"errors"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/google/uuid"
 	"github.com/mnuddindev/devpulse/gorm"
 	"github.com/mnuddindev/devpulse/pkg/logger"
@@ -14,13 +15,15 @@ import (
 
 // UserSystem struct that holds a reference to the CRUD operations using Gorm.
 type UserSystem struct {
-	crud *gorm.GormDB
+	Crud   *gorm.GormDB
+	Client *redis.Client
 }
 
 // NewUserSystem initializes a new UserSystem with a given database connection.
-func NewUserSystem(db *grm.DB) *UserSystem {
+func NewUserSystem(db *grm.DB, client *redis.Client) *UserSystem {
 	return &UserSystem{
-		crud: gorm.NewGormDB(db),
+		Crud:   gorm.NewGormDB(db),
+		Client: client,
 	}
 }
 
@@ -63,7 +66,7 @@ func (us *UserSystem) BeforeCreate(client *grm.DB, user *models.User) (*models.U
 
 // CreateUser creates a new user in the system after validation and password hashing.
 func (us *UserSystem) CreateUser(user *models.User) (*models.User, error) {
-	user, err := us.BeforeCreate(us.crud.DB, user)
+	user, err := us.BeforeCreate(us.Crud.DB, user)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +84,7 @@ func (us *UserSystem) CreateUser(user *models.User) (*models.User, error) {
 	}
 
 	// Attempt to create the user in the database. If creation fails, log the error and return an error.
-	if err := us.crud.Create(user); err != nil {
+	if err := us.Crud.Create(user); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 			"user":  user,
@@ -103,7 +106,7 @@ func (us *UserSystem) LoginUser(email, password string) (*models.User, error) {
 	var user models.User
 
 	// trying to get user by email to match credentials
-	if err := us.crud.GetByCondition(&user, "email = ?", []interface{}{email}, []string{}, "", 0, 0); err != nil {
+	if err := us.Crud.GetByCondition(&user, "email = ?", []interface{}{email}, []string{}, "", 0, 0); err != nil {
 		// log if failed to find the user with the provided credentials
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -137,7 +140,7 @@ func (us *UserSystem) LoginUser(email, password string) (*models.User, error) {
 // UserProfile fetch everything about user from the db
 func (us *UserSystem) UserProfile(id uuid.UUID) (models.User, error) {
 	var user models.User
-	err := us.crud.DB.Preload("Notifications").Select("id, username, first_name, last_name, bio, avatar_url, job_title, employer, location, github_url, website, skills, interests, is_active, theme_preference, created_at, updated_at").Where("id = ?", id).First(&user).Error
+	err := us.Crud.DB.Preload("Notifications").Select("id, username, first_name, last_name, bio, avatar_url, job_title, employer, location, github_url, website, skills, interests, is_active, theme_preference, created_at, updated_at").Where("id = ?", id).First(&user).Error
 	if err != nil {
 		if err == grm.ErrRecordNotFound {
 			logger.Log.WithFields(logrus.Fields{
@@ -154,7 +157,7 @@ func (us *UserSystem) UserBy(condition string, args ...interface{}) (*models.Use
 	var user models.User
 
 	// getting user details by given condition for instance ByLocation, BySkills, ByID
-	if err := us.crud.GetByCondition(&user, condition, args, []string{"Badges", "Roles", "Followers", "Following", "Notifications", "NotificationsPreferences"}, "", 0, 0); err != nil {
+	if err := us.Crud.GetByCondition(&user, condition, args, []string{"Badges", "Roles", "Followers", "Following", "Notifications", "NotificationsPreferences"}, "", 0, 0); err != nil {
 		// log if failed to fetch by condition
 		logger.Log.WithFields(logrus.Fields{
 			"error":     err,
@@ -179,7 +182,7 @@ func (us *UserSystem) ActiveUser(userid uuid.UUID) error {
 		"is_active":         true,
 		"is_email_verified": true,
 	}
-	if err := us.crud.Update(&user, "id = ?", []interface{}{userid}, updates); err != nil {
+	if err := us.Crud.Update(&user, "id = ?", []interface{}{userid}, updates); err != nil {
 		logrus.WithFields(logrus.Fields{
 			"error": err,
 			"id":    userid,
@@ -195,7 +198,7 @@ func (us *UserSystem) UserActiveByID(userid string) (bool, error) {
 	var user models.User
 
 	// check and store data if the user is activated or not
-	if err := us.crud.GetByID(&user, userid); err != nil {
+	if err := us.Crud.GetByID(&user, userid); err != nil {
 		// log if failed to fetch user by ID
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -218,7 +221,7 @@ func (us *UserSystem) Users() ([]models.User, error) {
 	var users []models.User
 
 	// check for users in db
-	if err := us.crud.GetAll(&users, []string{"Badges", "Roles", "Followers", "Following", "Notifications", "NotificationsPreferences"}); err != nil {
+	if err := us.Crud.GetAll(&users, []string{"Badges", "Roles", "Followers", "Following", "Notifications", "NotificationsPreferences"}); err != nil {
 		// log if failed to get data
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -237,7 +240,7 @@ func (us *UserSystem) UpdateUser(condition string, userid uuid.UUID, updates int
 	var user models.User
 
 	// delete user data using id
-	if err := us.crud.Update(&user, condition, []interface{}{userid}, updates); err != nil {
+	if err := us.Crud.Update(&user, condition, []interface{}{userid}, updates); err != nil {
 		// log if failed
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -253,7 +256,7 @@ func (us *UserSystem) UpdateUser(condition string, userid uuid.UUID, updates int
 
 // UpdateUserMany updates many2many field
 func (us *UserSystem) UpdateUserMany(userid uuid.UUID, assoc string, userdata interface{}) {
-	if err := us.crud.UpdateManyToMany(&models.User{ID: userid}, assoc, userdata); err != nil {
+	if err := us.Crud.UpdateManyToMany(&models.User{ID: userid}, assoc, userdata); err != nil {
 		logger.Log.Error(err)
 	}
 }
@@ -264,7 +267,7 @@ func (us *UserSystem) DeleteUser(userid uuid.UUID) error {
 	var user models.User
 
 	// delete user data using id
-	if err := us.crud.Delete(&user, "id = ?", []interface{}{userid}); err != nil {
+	if err := us.Crud.Delete(&user, "id = ?", []interface{}{userid}); err != nil {
 		// log if failed
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,

@@ -11,52 +11,161 @@ import (
 	"github.com/mnuddindev/devpulse/pkg/models"
 	"github.com/mnuddindev/devpulse/pkg/utils"
 	"github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 )
 
-// Registration handles user registration
+// Registration handles user registration and assigns the "member" role
 func (uc *UserController) Registration(c *fiber.Ctx) error {
+	// Declare a variable to hold the user data from the request body
 	var user models.User
+	// Parse the request body into the user struct, strictly validating the structure
 	if err := utils.StrictBodyParser(c, &user); err != nil {
+		// Log an error with details if parsing fails
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 		}).Error("Invalid request payload")
+		// Return a 400 Bad Request response with the error message
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"errors": err.Error(),
 			"status": fiber.StatusBadRequest,
 		})
 	}
+
+	// Create a new validator instance to check user data
 	validator := utils.NewValidator()
+	// Validate the user struct against defined rules (e.g., required fields)
 	if err := validator.Validate(user); err != nil {
+		// Log an error with user details if validation fails
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 			"user":  user,
 		}).Error("User validation failed while registering")
+		// Return a 422 Unprocessable Entity response with validation errors
 		return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{
 			"errors": err,
 			"status": fiber.StatusUnprocessableEntity,
 		})
 	}
+
+	// Generate a one-time password (OTP) for user activation
 	otp, err := utils.GenerateOTP()
+	// Check if OTP generation failed
 	if err != nil {
+		// Log an error with details about the OTP generation failure
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 			"field": "OTP Generation",
 		}).Error("OTP Generation failed")
+		// Note: We’ll proceed without OTP for now, but you might want to return an error here
 	}
+	// Assign the generated OTP to the user struct
 	user.OTP = otp
+
+	// Fetch or ensure the "member" role exists in the database
+	var memberRole models.Role
+	if err := uc.DB.Where("name = ?", "member").First(&memberRole).Error; err != nil {
+		// Check if the error is because the role wasn’t found
+		if err == gorm.ErrRecordNotFound {
+			// Define the member role’s permissions
+			memberPermissions := []string{
+				"read_post",
+				"create_comment",
+				"edit_own_comment",
+				"delete_own_comment",
+				"give_reaction",
+				"follow_tag",
+				"unfollow_tag",
+				"follow_user",
+				"unfollow_user",
+				"delete_own_profile",
+				"need_moderation",
+				"edit_own_profile",
+			}
+			// Create the "member" role if it doesn’t exist
+			memberRole = models.Role{
+				ID:   uuid.New(), // Generate a new UUID for the role
+				Name: "member",
+			}
+			// Create the role in the database
+			if err := uc.DB.Create(&memberRole).Error; err != nil {
+				// Log an error if role creation fails
+				logger.Log.WithFields(logrus.Fields{
+					"error": err,
+				}).Error("Failed to create member role")
+				// Return a 500 Internal Server Error if role creation fails
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error":  "Failed to initialize member role",
+					"status": fiber.StatusInternalServerError,
+				})
+			}
+			// Fetch or create permissions and associate them with the member role
+			var perms []models.Permission
+			for _, permName := range memberPermissions {
+				var perm models.Permission
+				// Check if the permission exists, create it if not
+				if err := uc.DB.Where("name = ?", permName).FirstOrCreate(&perm, models.Permission{
+					ID:   uuid.New(),
+					Name: permName,
+				}).Error; err != nil {
+					// Log an error if permission creation fails
+					logger.Log.WithFields(logrus.Fields{
+						"error": err,
+						"perm":  permName,
+					}).Error("Failed to create permission")
+					// Return a 500 Internal Server Error if permission creation fails
+					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+						"error":  "Failed to initialize permissions",
+						"status": fiber.StatusInternalServerError,
+					})
+				}
+				perms = append(perms, perm)
+			}
+			// Associate the permissions with the member role
+			if err := uc.DB.Model(&memberRole).Association("Permissions").Replace(perms); err != nil {
+				// Log an error if associating permissions fails
+				logger.Log.WithFields(logrus.Fields{
+					"error": err,
+				}).Error("Failed to assign permissions to member role")
+				// Return a 500 Internal Server Error if association fails
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+					"error":  "Failed to setup member role permissions",
+					"status": fiber.StatusInternalServerError,
+				})
+			}
+		} else {
+			// Log an error if the role query fails for another reason
+			logger.Log.WithFields(logrus.Fields{
+				"error": err,
+			}).Error("Failed to fetch member role")
+			// Return a 500 Internal Server Error for unexpected database errors
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error":  "Database error",
+				"status": fiber.StatusInternalServerError,
+			})
+		}
+	}
+
+	// Assign the "member" role to the new user
+	user.Roles = []models.Role{memberRole}
+	// Create the user in the database with the assigned role
 	newUser, err := uc.userSystem.CreateUser(&user)
+	// Check if user creation failed
 	if err != nil {
+		// Log an error with details if user creation fails
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 		}).Error("Failed to register user")
+		// Return a 500 Internal Server Error with the error message
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":  err.Error(),
 			"status": fiber.StatusInternalServerError,
 		})
 	}
 
+	// Send an activation email with the OTP to the new user
 	utils.SendActivationEmail(otp, newUser.Email, newUser.Username)
 
+	// Return a 201 Created response with the new user’s details
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
 		"user": fiber.Map{
 			"userid":   newUser.ID,
@@ -239,8 +348,17 @@ func (uc *UserController) Login(c *fiber.Ctx) error {
 		})
 	}
 
+	var roleIDs []uuid.UUID
+	var permissions []string
+	for _, role := range user.Roles {
+		roleIDs = append(roleIDs, role.ID)
+		for _, perm := range role.Permissions {
+			permissions = append(permissions, perm.Name)
+		}
+	}
+
 	// Generate JWT tokens
-	atoken, rtoken, err := auth.GenerateJWT(*user)
+	atoken, rtoken, err := auth.GenerateJWT(*user, roleIDs)
 	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
