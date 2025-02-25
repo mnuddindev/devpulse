@@ -67,7 +67,8 @@ func (uc *UserController) Registration(c *fiber.Ctx) error {
 
 	// Fetch the pre-seeded "member" role from the database
 	var memberRole models.Role
-	if err := uc.userSystem.Get uc.userSystem.DB.Where("name = ?", "member").First(&memberRole).Error; err != nil {
+	err = uc.userSystem.Crud.GetByCondition(&memberRole, "name = ?", []interface{}{"member"}, []string{}, "", 0, 0)
+	if err != nil {
 		// Check if the error is because the role wasn’t found (shouldn’t happen with seeding)
 		if err == gorm.ErrRecordNotFound {
 			// Log a critical error since the member role should exist
