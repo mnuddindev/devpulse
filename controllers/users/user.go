@@ -14,7 +14,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// Registration handles user registration and assigns the "member" role
+// Registration handles user registration and assigns the pre-seeded "member" role
 func (uc *UserController) Registration(c *fiber.Ctx) error {
 	// Declare a variable to hold the user data from the request body
 	var user models.User
@@ -56,93 +56,39 @@ func (uc *UserController) Registration(c *fiber.Ctx) error {
 			"error": err,
 			"field": "OTP Generation",
 		}).Error("OTP Generation failed")
-		// Note: We’ll proceed without OTP for now, but you might want to return an error here
+		// Return a 500 Internal Server Error if OTP generation fails (optional improvement)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":  "Failed to generate OTP",
+			"status": fiber.StatusInternalServerError,
+		})
 	}
 	// Assign the generated OTP to the user struct
 	user.OTP = otp
 
-	// Fetch or ensure the "member" role exists in the database
+	// Fetch the pre-seeded "member" role from the database
 	var memberRole models.Role
-	if err := uc.DB.Where("name = ?", "member").First(&memberRole).Error; err != nil {
-		// Check if the error is because the role wasn’t found
+	if err := uc.userSystem.Get uc.userSystem.DB.Where("name = ?", "member").First(&memberRole).Error; err != nil {
+		// Check if the error is because the role wasn’t found (shouldn’t happen with seeding)
 		if err == gorm.ErrRecordNotFound {
-			// Define the member role’s permissions
-			memberPermissions := []string{
-				"read_post",
-				"create_comment",
-				"edit_own_comment",
-				"delete_own_comment",
-				"give_reaction",
-				"follow_tag",
-				"unfollow_tag",
-				"follow_user",
-				"unfollow_user",
-				"delete_own_profile",
-				"need_moderation",
-				"edit_own_profile",
-			}
-			// Create the "member" role if it doesn’t exist
-			memberRole = models.Role{
-				ID:   uuid.New(), // Generate a new UUID for the role
-				Name: "member",
-			}
-			// Create the role in the database
-			if err := uc.DB.Create(&memberRole).Error; err != nil {
-				// Log an error if role creation fails
-				logger.Log.WithFields(logrus.Fields{
-					"error": err,
-				}).Error("Failed to create member role")
-				// Return a 500 Internal Server Error if role creation fails
-				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-					"error":  "Failed to initialize member role",
-					"status": fiber.StatusInternalServerError,
-				})
-			}
-			// Fetch or create permissions and associate them with the member role
-			var perms []models.Permission
-			for _, permName := range memberPermissions {
-				var perm models.Permission
-				// Check if the permission exists, create it if not
-				if err := uc.DB.Where("name = ?", permName).FirstOrCreate(&perm, models.Permission{
-					ID:   uuid.New(),
-					Name: permName,
-				}).Error; err != nil {
-					// Log an error if permission creation fails
-					logger.Log.WithFields(logrus.Fields{
-						"error": err,
-						"perm":  permName,
-					}).Error("Failed to create permission")
-					// Return a 500 Internal Server Error if permission creation fails
-					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-						"error":  "Failed to initialize permissions",
-						"status": fiber.StatusInternalServerError,
-					})
-				}
-				perms = append(perms, perm)
-			}
-			// Associate the permissions with the member role
-			if err := uc.DB.Model(&memberRole).Association("Permissions").Replace(perms); err != nil {
-				// Log an error if associating permissions fails
-				logger.Log.WithFields(logrus.Fields{
-					"error": err,
-				}).Error("Failed to assign permissions to member role")
-				// Return a 500 Internal Server Error if association fails
-				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-					"error":  "Failed to setup member role permissions",
-					"status": fiber.StatusInternalServerError,
-				})
-			}
-		} else {
-			// Log an error if the role query fails for another reason
+			// Log a critical error since the member role should exist
 			logger.Log.WithFields(logrus.Fields{
 				"error": err,
-			}).Error("Failed to fetch member role")
-			// Return a 500 Internal Server Error for unexpected database errors
+			}).Error("Pre-seeded 'member' role not found in database")
+			// Return a 500 Internal Server Error since this is a configuration issue
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error":  "Database error",
+				"error":  "Member role not found in database",
 				"status": fiber.StatusInternalServerError,
 			})
 		}
+		// Log an error for other database issues
+		logger.Log.WithFields(logrus.Fields{
+			"error": err,
+		}).Error("Failed to fetch member role")
+		// Return a 500 Internal Server Error for unexpected database errors
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":  "Database error fetching member role",
+			"status": fiber.StatusInternalServerError,
+		})
 	}
 
 	// Assign the "member" role to the new user
