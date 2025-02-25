@@ -101,7 +101,7 @@ func (uc *UserController) Registration(c *fiber.Ctx) error {
 		// Log an error with details if user creation fails
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
-		}).Error("Failed to register user")
+		}).Warn("Failed to register user")
 		// Return a 500 Internal Server Error with the error message
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":  err.Error(),

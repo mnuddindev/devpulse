@@ -28,15 +28,6 @@ func NewUserSystem(db *grm.DB, client *redis.Client) *UserSystem {
 }
 
 func (us *UserSystem) BeforeCreate(client *grm.DB, user *models.User) (*models.User, error) {
-	var memberRole models.Role
-	if err := client.Where("name = ?", "member").First(&memberRole).Error; err != nil {
-		logger.Log.WithFields(logrus.Fields{
-			"error": err,
-			"user":  "member",
-		}).Error("User role can't be added")
-		return nil, err
-	}
-
 	// Initialize a new validator instance.
 	validate := utils.NewValidator()
 	// Validate the user data. If validation fails, log the error and return an error.
@@ -58,7 +49,6 @@ func (us *UserSystem) BeforeCreate(client *grm.DB, user *models.User) (*models.U
 	}
 
 	// Set the hashed password back to the user.
-	user.Roles = append(user.Roles, memberRole)
 	user.Password = hashedPassword
 
 	return user, nil
@@ -89,7 +79,7 @@ func (us *UserSystem) CreateUser(user *models.User) (*models.User, error) {
 			"error": err,
 			"user":  user,
 		}).Error("failed to register user")
-		return &models.User{}, errors.New("failed to register user")
+		return &models.User{}, errors.New("User already exist!!")
 	}
 
 	// Log the successful creation of the user.
