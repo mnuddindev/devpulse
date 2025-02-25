@@ -3,6 +3,7 @@ package routes
 import (
 	"time"
 
+	"github.com/go-redis/redis"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/compress"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -39,6 +40,10 @@ func NewRoutes(app *fiber.App, config *config.ServerConfig, system *controllers.
 	// userservice to access crud
 	userService := users.NewUserSystem(system.DB)
 
+	client := redis.NewClient(&redis.Options{
+		Addr: "localhost:1210",
+	})
+
 	// for guest users
 	// home router
 	app.Get("/", func(c *fiber.Ctx) error {
@@ -56,28 +61,36 @@ func NewRoutes(app *fiber.App, config *config.ServerConfig, system *controllers.
 	// for the guests
 	app.Get("/users/profile/id/:userid", system.UserController.UserByID)
 
-	app.Post("/logout", auth.RoleAuth("all"), system.UserController.Logout)
+	app.Post("/logout", auth.PermissionAuth(system.DB, "read_post"), system.UserController.Logout)
 
-	authgroup := app.Group("/", auth.RefreshTokenMiddleware(userService))
+	authgroup := app.Group("/", auth.RefreshTokenMiddleware(userService, system.DB, client))
 	user := authgroup.Group("/user")
-	user.Get("/profile", auth.RoleAuth("all"), system.UserController.UserProfile)
-	user.Put("/update/profile/me", auth.RoleAuth("all"), system.UserController.UpdateUserProfile)
-	user.Put("/update/notification/me", auth.RoleAuth("all"), system.UserController.UpdateUserNotificationsPref)
-	user.Put("/update/customization/me", auth.RoleAuth("all"), system.UserController.UpdateUserCustomization)
-	user.Put("/update/account/me", auth.RoleAuth("all"), system.UserController.UpdateUserAccount)
-	user.Delete("/account/delete/me", auth.RoleAuth("all"), system.UserController.DeleteUser)
+	user.Get("/profile", auth.PermissionAuth(system.DB, "read_post"), system.UserController.UserProfile)
+	user.Put("/update/profile/me", auth.PermissionAuth(system.DB, "edit_own_profile"), system.UserController.UpdateUserProfile)
+	user.Put("/update/notification/me", auth.PermissionAuth(system.DB, "edit_own_profile"), system.UserController.UpdateUserNotificationsPref)
+	// Update customization (user-specific permission)
+	user.Put("/update/customization/me", auth.PermissionAuth(system.DB, "edit_own_profile"), system.UserController.UpdateUserCustomization)
+	// Update account details (user-specific permission)
+	user.Put("/update/account/me", auth.PermissionAuth(system.DB, "edit_own_profile"), system.UserController.UpdateUserAccount)
+	// Delete own account (user-specific permission)
+	user.Delete("/account/delete/me", auth.PermissionAuth(system.DB, "delete_own_account"), system.UserController.DeleteUserByID)
 
 	// protected routes
 	users := authgroup.Group("/users")
-	users.Post("/:userid/follow", auth.RoleAuth("all"), system.UserController.FollowUser)
-	users.Delete("/:userid/unfollow", auth.RoleAuth("all"), system.UserController.UnfollowUser)
-	users.Get("/:userid/followers", auth.RoleAuth("all"), system.UserController.GetAllFollowers)
-	users.Get("/:userid/following", auth.RoleAuth("all"), system.UserController.GetAllFollowing)
-	users.Put("/account/update/:userid", auth.RoleAuth("admin", "moderator"), system.UserController.UpdateUserByID)
-	users.Delete("/account/delete/:userid", auth.RoleAuth("admin"), system.UserController.DeleteUserByID)
+	users.Post("/:userid/follow", auth.PermissionAuth(system.DB, "create_post"), system.UserController.FollowUser)
+	// Unfollow a user (any authenticated user)
+	users.Delete("/:userid/unfollow", auth.PermissionAuth(system.DB, "create_post"), system.UserController.UnfollowUser)
+	// Get followers of a user (any authenticated user)
+	users.Get("/:userid/followers", auth.PermissionAuth(system.DB, "read_post"), system.UserController.GetAllFollowers)
+	// Get following list of a user (any authenticated user)
+	users.Get("/:userid/following", auth.PermissionAuth(system.DB, "read_post"), system.UserController.GetAllFollowing)
+	// Update another user’s account (admin or moderator)
+	users.Put("/account/update/:userid", auth.PermissionAuth(system.DB, "manage_users", "moderate_content"), system.UserController.UpdateUserByID)
+	// Delete another user’s account (admin only)
+	users.Delete("/account/delete/:userid", auth.PermissionAuth(system.DB, "delete_any_account"), system.UserController.DeleteUserByID)
 
 	postgroup := authgroup.Group("/posts")
-	postgroup.Post("/", auth.RoleAuth("all"), system.PostController.NewPost)
+	postgroup.Post("/", auth.PermissionAuth(system.DB, "create_post"), system.PostController.NewPost)
 
 	// Protected routes
 	app.Get("/protected", func(c *fiber.Ctx) error {
