@@ -4,6 +4,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/mnuddindev/devpulse/pkg/logger"
+	"github.com/mnuddindev/devpulse/pkg/models"
 	"github.com/mnuddindev/devpulse/pkg/utils"
 	"github.com/sirupsen/logrus"
 )
@@ -94,4 +95,61 @@ func (uc *UserController) GetUserPermissions(c *fiber.Ctx) error {
 		"username":    user.Username,
 		"permissions": permissions,
 	})
+}
+
+// UpdateUserRolePermissions modifies a user's role permissions (UPDATE)
+func (uc *UserController) UpdateUserRolePermissions(c *fiber.Ctx) error {
+	// Define a struct to parse the JSON request body
+	type Request struct {
+		UserID      uuid.UUID `json:"user_id" validate:"required"`
+		RoleID      uuid.UUID `json:"role_id" validate:"required"`
+		Permissions []string  `json:"permissions" validate:"required"`
+	}
+
+	// Declare a variable to hold the parsed request data
+	var req Request
+	// Parse the JSON request body into the Request struct
+	if err := utils.StrictBodyParser(c, &req); err != nil {
+		// Return a 400 Bad Request response if parsing fails
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request"})
+	}
+
+	// Query the database for the user by ID, preloading their current roles
+	user, err := uc.userSystem.UserBy("id = ?", req.UserID)
+	if err != nil {
+		// Return a 404 Not Found response if the user doesn’t exist
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "User not found"})
+	}
+
+	// Query the database for the role by ID, preloading its current permissions
+	role, err := uc.userSystem.RoleBy("id = ?", req.RoleID)
+	if err != nil {
+		// Return a 404 Not Found response if the role doesn’t exist
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Role not found"})
+	}
+
+	// Declare a slice to hold the fetched permissions from the database
+	var perms []models.Permission
+	// Query the database for permissions matching the names provided in the request
+	if err := uc.DB.Where("name IN ?", req.Permissions).Find(&perms).Error; err != nil || len(perms) != len(req.Permissions) {
+		// Return a 400 Bad Request response if any permission names are invalid or not found
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid permissions"})
+	}
+
+	// Replace the role’s current permissions with the new set of permissions
+	if err := uc.userSystem.Crud.UpdateManyToMany(&role, "Permissions", perms); err != nil {
+		// Log an error if the database operation fails
+		logrus.WithError(err).Error("Failed to update permissions")
+		// Return a 500 Internal Server Error response if the operation fails
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update permissions"})
+	}
+
+	// Log an info message confirming the permission update
+	logrus.WithFields(logrus.Fields{
+		"user_id":     req.UserID,
+		"role":        role.Name,
+		"permissions": req.Permissions,
+	}).Info("User role permissions updated")
+	// Return a 200 OK response with a success message
+	return c.JSON(fiber.Map{"message": "Permissions updated successfully"})
 }

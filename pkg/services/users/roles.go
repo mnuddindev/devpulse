@@ -127,7 +127,7 @@ func (us *UserSystem) GetAllRoles() ([]models.Role, error) {
 
 func (us *UserSystem) RolesBy(userID uuid.UUID, roleIDs []uuid.UUID) ([]models.Role, error) {
 	var roles []models.Role
-	if userID != nil {
+	if userID != uuid.Nil {
 		var user models.User
 		if err := us.Crud.GetByCondition(&user, "id = ?", []interface{}{userID}, []string{"Roles"}, "", 0, 0); err != nil {
 			return nil, err
@@ -148,7 +148,7 @@ func (us *UserSystem) RoleBy(condition string, args ...interface{}) (*models.Rol
 	var role models.Role
 
 	// getting role details by given condition for instance ByLocation, BySkills, ByID
-	if err := us.Crud.GetByCondition(&role, condition, args, []string{}, "", 0, 0); err != nil {
+	if err := us.Crud.GetByCondition(&role, condition, args, []string{"Permissions"}, "", 0, 0); err != nil {
 		// log if failed to fetch by condition
 		logger.Log.WithFields(logrus.Fields{
 			"error":     err,
