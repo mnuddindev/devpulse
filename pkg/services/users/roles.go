@@ -23,31 +23,6 @@ func (us *UserSystem) GetUserRoles(userID uuid.UUID) ([]string, error) {
 	return roleNames, nil
 }
 
-func (us *UserSystem) GetUserPermsissions(userID uuid.UUID) ([]string, error) {
-	// Fetch the user from the database with their roles and permissions
-	user, err := us.UserBy("id = ?", userID)
-	if err != nil {
-		// Return a 404 Not Found if the user doesn’t exist
-		return []string{}, errors.New("User not found")
-	}
-
-	// Build a map of unique permissions
-	permissions := make(map[string]bool)
-	for _, role := range user.Roles {
-		for _, perm := range role.Permissions {
-			permissions[perm.Name] = true
-		}
-	}
-
-	// Convert map to slice for JSON response
-	var permList []string
-	for perm := range permissions {
-		permList = append(permList, perm)
-	}
-
-	return permList, nil
-}
-
 func (us *UserSystem) UpdateUserRolePermission(userID, roleid uuid.UUID, permissions []string) error {
 	// Fetch the user from the database with their roles and permissions
 	user, err := us.UserBy("id = ?", userID)
