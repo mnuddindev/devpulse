@@ -1,6 +1,7 @@
 package users
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -14,7 +15,7 @@ import (
 	"gorm.io/gorm"
 )
 
-// Registration handles user registration and assigns the pre-seeded "member" role
+// Registration handles user registration, assigns the "member" role, and caches data in Redis
 func (uc *UserController) Registration(c *fiber.Ctx) error {
 	// Declare a variable to hold the user data from the request body
 	var user models.User
@@ -56,7 +57,7 @@ func (uc *UserController) Registration(c *fiber.Ctx) error {
 			"error": err,
 			"field": "OTP Generation",
 		}).Error("OTP Generation failed")
-		// Return a 500 Internal Server Error if OTP generation fails (optional improvement)
+		// Return a 500 Internal Server Error if OTP generation fails
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":  "Failed to generate OTP",
 			"status": fiber.StatusInternalServerError,
@@ -65,9 +66,10 @@ func (uc *UserController) Registration(c *fiber.Ctx) error {
 	// Assign the generated OTP to the user struct
 	user.OTP = otp
 
-	// Fetch the pre-seeded "member" role from the database
+	// Fetch the pre-seeded "member" role from the database using Crud.GetByCondition
 	var memberRole models.Role
 	err = uc.userSystem.Crud.GetByCondition(&memberRole, "name = ?", []interface{}{"member"}, []string{}, "", 0, 0)
+	// Check if fetching the role failed
 	if err != nil {
 		// Check if the error is because the role wasn’t found (shouldn’t happen with seeding)
 		if err == gorm.ErrRecordNotFound {
@@ -91,7 +93,6 @@ func (uc *UserController) Registration(c *fiber.Ctx) error {
 			"status": fiber.StatusInternalServerError,
 		})
 	}
-
 	// Assign the "member" role to the new user
 	user.Roles = []models.Role{memberRole}
 	// Create the user in the database with the assigned role
@@ -107,6 +108,37 @@ func (uc *UserController) Registration(c *fiber.Ctx) error {
 			"error":  err.Error(),
 			"status": fiber.StatusInternalServerError,
 		})
+	}
+
+	// Generate Redis keys for caching user data and OTP
+	userKey := "user:email:" + newUser.Email
+	otpKey := "user:" + newUser.ID.String() + ":otp"
+	// Marshal the new user struct to JSON for caching
+	userJSON, err := json.Marshal(newUser)
+	// Check if marshaling failed
+	if err != nil {
+		// Log a warning if marshaling fails (non-critical, proceed anyway)
+		logger.Log.WithFields(logrus.Fields{
+			"error": err,
+			"email": newUser.Email,
+		}).Warn("Failed to marshal user for Redis caching")
+	} else {
+		// Cache the user data in Redis with a 1-hour TTL
+		if err := uc.Client.Set(c.Context(), userKey, userJSON, time.Hour).Err(); err != nil {
+			// Log a warning if caching fails (non-critical, proceed)
+			logger.Log.WithFields(logrus.Fields{
+				"error": err,
+				"email": newUser.Email,
+			}).Warn("Failed to cache user in Redis")
+		}
+	}
+	// Cache the OTP in Redis with a 15-minute TTL
+	if err := uc.Client.Set(c.Context(), otpKey, otp, 15*time.Minute).Err(); err != nil {
+		// Log a warning if caching the OTP fails (non-critical, proceed)
+		logger.Log.WithFields(logrus.Fields{
+			"error":  err,
+			"userID": newUser.ID,
+		}).Warn("Failed to cache OTP in Redis")
 	}
 
 	// Send an activation email with the OTP to the new user
