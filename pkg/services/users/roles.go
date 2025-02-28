@@ -4,33 +4,10 @@ import (
 	"errors"
 
 	"github.com/google/uuid"
+	"github.com/mnuddindev/devpulse/pkg/logger"
 	"github.com/mnuddindev/devpulse/pkg/models"
+	"github.com/sirupsen/logrus"
 )
-
-func (us *UserSystem) AssignRole(userID, roleid uuid.UUID) error {
-	// Fetch the user from the database with their current roles
-	user, err := us.UserBy("id = ?", userID)
-	if err != nil {
-		// Return a 404 Not Found if the user doesn’t exist
-		return err
-	}
-	// Fetch the role from the database
-	var role models.Role
-	if err := us.Crud.DB.Where("id = ?", roleid).First(&role).Error; err != nil {
-		// Return a 404 Not Found if the role doesn’t exist
-		return err
-	}
-
-	// Check if the user already has this role
-	for _, existingRole := range user.Roles {
-		if existingRole.ID == role.ID {
-			// Return a 409 Conflict if the role is already assigned
-			return errors.New("User already has this role")
-		}
-	}
-
-	return us.Crud.AddManyToMany(&user, "Roles", &role)
-}
 
 func (us *UserSystem) GetUserRoles(userID uuid.UUID) ([]string, error) {
 	var user models.User
@@ -173,7 +150,7 @@ func (us *UserSystem) GetAllRoles() ([]models.Role, error) {
 	return roles, nil
 }
 
-func (us *UserSystem) RolesBy(userID *uuid.UUID, roleIDs []uuid.UUID) ([]models.Role, error) {
+func (us *UserSystem) RolesBy(userID uuid.UUID, roleIDs []uuid.UUID) ([]models.Role, error) {
 	var roles []models.Role
 	if userID != nil {
 		var user models.User
@@ -188,4 +165,29 @@ func (us *UserSystem) RolesBy(userID *uuid.UUID, roleIDs []uuid.UUID) ([]models.
 		return roles, nil
 	}
 	return nil, nil
+}
+
+// UserBy will fetch and filter out any data by given condition Like GetByLocation
+func (us *UserSystem) RoleBy(condition string, args ...interface{}) (*models.Role, error) {
+	// an empty instance of role model
+	var role models.Role
+
+	// getting role details by given condition for instance ByLocation, BySkills, ByID
+	if err := us.Crud.GetByCondition(&role, condition, args, []string{}, "", 0, 0); err != nil {
+		// log if failed to fetch by condition
+		logger.Log.WithFields(logrus.Fields{
+			"error":     err,
+			"condition": condition,
+			"args":      args,
+		}).Error("Failed to fetch role by Condition")
+		return nil, errors.New("role not found!!")
+	}
+
+	// log if successfully fetched the use data by condition
+	logger.Log.WithFields(logrus.Fields{
+		"role": role,
+	}).Info("Role Fetched Successfully!!")
+
+	// return the role data and error
+	return &role, nil
 }
