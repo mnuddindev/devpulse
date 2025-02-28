@@ -1,9 +1,9 @@
 package users
 
 import (
-	"fmt"
 	"time"
 
+	"github.com/go-redis/redis/v8"
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/mnuddindev/devpulse/pkg/auth"
@@ -122,100 +122,182 @@ func (uc *UserController) Registration(c *fiber.Ctx) error {
 	})
 }
 
-// ActiveUser verifies user by otp
+// ActiveUser verifies and activates a user by OTP, using Redis for performance
 func (uc *UserController) ActiveUser(c *fiber.Ctx) error {
-	// parse request body
+	// Define a struct to parse the JSON request body containing the OTP
 	type Body struct {
 		Otp int64 `json:"otp"`
 	}
+	// Declare a variable to hold the parsed request body
 	var body Body
+	// Parse the request body strictly into the Body struct
 	if err := utils.StrictBodyParser(c, &body); err != nil {
+		// Log an error with details if parsing fails
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 		}).Error("Failed to parse request body")
+		// Return a 400 Bad Request response with an error message
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":  "Invalid request body",
 			"status": fiber.StatusBadRequest,
 		})
 	}
-	fmt.Println(body)
 
-	// validate user id
+	// Parse the user ID from the URL parameter "userid"
 	userID, err := uuid.Parse(c.Params("userid"))
+	// Check if the user ID is invalid or empty (uuid.Nil)
 	if err != nil || userID == uuid.Nil {
+		// Log an error with the invalid user ID
 		logger.Log.WithFields(logrus.Fields{
 			"error":  err,
 			"userID": userID,
 		}).Error("Invalid user ID")
+		// Return a 404 Not Found response for an invalid user ID
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error":  "User not found",
 			"status": fiber.StatusNotFound,
 		})
 	}
 
-	// check userID is not valid
+	// Check if the user ID is the zero UUID (additional validation)
 	if userID.String() == "00000000-0000-0000-0000-000000000000" {
+		// Log an error indicating the user ID is invalid
 		logger.Log.WithFields(logrus.Fields{
 			"error":  err,
 			"userID": userID,
 		}).Error("User not found")
+		// Return a 404 Not Found response for a zero UUID
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"errors": "user not found",
 			"status": fiber.StatusNotFound,
 		})
 	}
 
-	// Fetch user ID
-	user, err := uc.userSystem.UserBy("id = ?", userID)
+	// Generate a Redis key for the user’s cached data (e.g., "user:uuid")
+	userKey := "user:" + userID.String()
+	// Attempt to fetch the user’s OTP from Redis
+	cachedOTP, err := uc.Client.Get(c.Context(), userKey+":otp").Int64()
+	// Declare a variable to hold the user struct
+	var user *models.User
+	// Check if the OTP is cached in Redis
 	if err != nil {
+		// Validate the OTP from the request against the cached OTP
+		if body.Otp != cachedOTP {
+			// Log an error if the OTP doesn’t match
+			logger.Log.WithFields(logrus.Fields{
+				"userID": userID,
+			}).Error("OTP mismatch")
+			// Return a 400 Bad Request response for an incorrect OTP
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error":  "OTP not matched",
+				"status": fiber.StatusBadRequest,
+			})
+		}
+		// Fetch the user from the database only if OTP matches (to check IsActive)
+		user, err = uc.userSystem.UserBy("id = ?", userID)
+		// Check if fetching the user failed
+		if err != nil {
+			// Log an error with details if the user isn’t found
+			logger.Log.WithFields(logrus.Fields{
+				"error":  err,
+				"userID": userID,
+			}).Error("Failed to fetch user by ID")
+			// Return a 404 Not Found response if the user doesn’t exist
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error":  "User not found",
+				"status": fiber.StatusNotFound,
+			})
+		}
+	} else if err == redis.Nil {
+		// If Redis cache misses (OTP not found), fetch the user from the database
+		user, err = uc.userSystem.UserBy("id = ?", userID)
+		// Check if fetching the user failed
+		if err != nil {
+			// Log an error with details if the user isn’t found
+			logger.Log.WithFields(logrus.Fields{
+				"error":  err,
+				"userID": userID,
+			}).Error("Failed to fetch user by ID")
+			// Return a 404 Not Found response if the user doesn’t exist
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error":  "User not found",
+				"status": fiber.StatusNotFound,
+			})
+		}
+		// Validate the OTP from the request against the database OTP
+		if body.Otp != user.OTP {
+			// Log an error if the OTP doesn’t match
+			logger.Log.WithFields(logrus.Fields{
+				"userID": userID,
+			}).Error("OTP mismatch")
+			// Return a 400 Bad Request response for an incorrect OTP
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error":  "OTP not matched",
+				"status": fiber.StatusBadRequest,
+			})
+		}
+		// Cache the OTP in Redis with a 15-minute TTL after DB fetch
+		if err := uc.Client.Set(c.Context(), userKey+":otp", user.OTP, 15*time.Minute).Err(); err != nil {
+			// Log a warning if caching fails (non-critical, proceed anyway)
+			logger.Log.WithFields(logrus.Fields{
+				"error":  err,
+				"userID": userID,
+			}).Warn("Failed to cache OTP in Redis")
+		}
+	} else {
+		// Log an error if Redis access fails for another reason
 		logger.Log.WithFields(logrus.Fields{
 			"error":  err,
 			"userID": userID,
-		}).Error("Failed to fetch user by ID")
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error":  "User not found",
-			"status": fiber.StatusNotFound,
+		}).Error("Redis error fetching OTP")
+		// Return a 500 Internal Server Error for Redis issues
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":  "Internal server error",
+			"status": fiber.StatusInternalServerError,
 		})
 	}
 
-	// validate OTP
-	if body.Otp != user.OTP {
-		logger.Log.WithFields(logrus.Fields{
-			"userID": userID,
-		}).Error("OTP mismatch")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":  "OTP not matched",
-			"status": fiber.StatusBadRequest,
-		})
-	}
-
-	// check if user already verified
+	// Check if the user is already activated
 	if user.IsActive {
+		// Log an error if the user is already verified
 		logger.Log.WithFields(logrus.Fields{
 			"userID": userID,
 		}).Error("OTP expired or already verified")
+		// Return a 400 Bad Request response if the user is already active
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":  "OTP expired or already verified",
 			"status": fiber.StatusBadRequest,
 		})
 	}
 
-	// Activate user if not activated
+	// Activate the user by updating the database
 	if err := uc.userSystem.ActiveUser(userID); err != nil {
+		// Log an error with details if activation fails
 		logger.Log.WithFields(logrus.Fields{
 			"error":  err,
 			"userID": userID,
 		}).Error("Failed to activate user")
+		// Return a 500 Internal Server Error if activation fails
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":  "Failed to activate account",
 			"status": fiber.StatusInternalServerError,
 		})
 	}
 
-	// return success response
+	// Invalidate the OTP cache in Redis after successful activation
+	if err := uc.Client.Del(c.Context(), userKey+":otp").Err(); err != nil {
+		// Log a warning if cache deletion fails (non-critical, proceed anyway)
+		logger.Log.WithFields(logrus.Fields{
+			"error":  err,
+			"userID": userID,
+		}).Warn("Failed to delete OTP from Redis cache")
+	}
+
+	// Log a success message for the activation
 	logger.Log.WithFields(logrus.Fields{
 		"userID": userID,
 	}).Info("User activated successfully")
+	// Return a 200 OK response with user details
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"status":  fiber.StatusOK,
 		"message": "Account activated successfully",
