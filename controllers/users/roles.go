@@ -115,7 +115,7 @@ func (uc *UserController) UpdateUserRolePermissions(c *fiber.Ctx) error {
 	}
 
 	// Query the database for the user by ID, preloading their current roles
-	user, err := uc.userSystem.UserBy("id = ?", req.UserID)
+	_, err := uc.userSystem.UserBy("id = ?", req.UserID)
 	if err != nil {
 		// Return a 404 Not Found response if the user doesn’t exist
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "User not found"})
@@ -137,7 +137,7 @@ func (uc *UserController) UpdateUserRolePermissions(c *fiber.Ctx) error {
 	}
 
 	// Replace the role’s current permissions with the new set of permissions
-	if err := uc.userSystem.Crud.UpdateManyToMany(&role, "Permissions", perms); err != nil {
+	if err := uc.userSystem.Crud.UpdateManyToMany(&role, "Permissions", &perms); err != nil {
 		// Log an error if the database operation fails
 		logrus.WithError(err).Error("Failed to update permissions")
 		// Return a 500 Internal Server Error response if the operation fails
@@ -152,4 +152,50 @@ func (uc *UserController) UpdateUserRolePermissions(c *fiber.Ctx) error {
 	}).Info("User role permissions updated")
 	// Return a 200 OK response with a success message
 	return c.JSON(fiber.Map{"message": "Permissions updated successfully"})
+}
+
+// RemoveRoleFromUser deletes a role from a user (DELETE)
+func (uc *UserController) RemoveRoleFromUser(c *fiber.Ctx) error {
+	// Define a struct to parse the JSON request body
+	type Request struct {
+		UserID uuid.UUID `json:"user_id" validate:"required"`
+		RoleID uuid.UUID `json:"role_id" validate:"required"`
+	}
+
+	// Declare a variable to hold the parsed request data
+	var req Request
+	// Parse the JSON request body into the Request struct
+	if err := c.BodyParser(&req); err != nil {
+		// Return a 400 Bad Request response if parsing fails
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request"})
+	}
+
+	user, err := uc.userSystem.UserBy("id = ?", req.UserID)
+	if err != nil {
+		// Return a 404 Not Found response if the user doesn’t exist
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "User not found"})
+	}
+
+	// Query the database for the role by ID, preloading its current permissions
+	role, err := uc.userSystem.RoleBy("id = ?", req.RoleID)
+	if err != nil {
+		// Return a 404 Not Found response if the role doesn’t exist
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Role not found"})
+	}
+
+	// Remove the specified role from the user’s list of roles
+	if err := uc.userSystem.Crud.DeleteManyToMany(&user, "Roles", &role); err != nil {
+		// Log an error if the database operation fails
+		logrus.WithError(err).Error("Failed to remove role")
+		// Return a 500 Internal Server Error response if the operation fails
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to remove role"})
+	}
+
+	// Log an info message confirming the role removal
+	logrus.WithFields(logrus.Fields{
+		"user_id": req.UserID,
+		"role":    role.Name,
+	}).Info("Role removed from user")
+	// Return a 200 OK response with a success message
+	return c.JSON(fiber.Map{"message": "Role removed successfully"})
 }
