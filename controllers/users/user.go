@@ -121,7 +121,7 @@ func (uc *UserController) Registration(c *fiber.Ctx) error {
 		}).Warn("Failed to marshal user for Redis caching")
 	} else {
 		// Cache the user data in Redis by ID with a 1-hour TTL
-		if err := uc.Client.Set(c.Context(), userKey, userJSON, time.Hour).Err(); err != nil {
+		if err := uc.Client.Set(c.Context(), userKey, userJSON, 30*time.Minute).Err(); err != nil {
 			logger.Log.WithFields(logrus.Fields{
 				"error": err,
 				"email": newUser.Email,
@@ -129,7 +129,7 @@ func (uc *UserController) Registration(c *fiber.Ctx) error {
 		}
 	}
 	// Cache the OTP in Redis with a 15-minute TTL
-	if err := uc.Client.Set(c.Context(), otpKey, otp, 15*time.Minute).Err(); err != nil {
+	if err := uc.Client.Set(c.Context(), otpKey, otp, 30*time.Minute).Err(); err != nil {
 		logger.Log.WithFields(logrus.Fields{
 			"error":  err,
 			"userID": newUser.ID,
@@ -267,7 +267,7 @@ func (uc *UserController) ActiveUser(c *fiber.Ctx) error {
 			})
 		}
 		// Cache OTP on miss
-		uc.Client.Set(c.Context(), otpKey, user.OTP, 15*time.Minute)
+		uc.Client.Set(c.Context(), otpKey, user.OTP, 30*time.Minute)
 	} else {
 		// Log Redis error and fallback to DB
 		logger.Log.WithFields(logrus.Fields{
@@ -308,7 +308,7 @@ func (uc *UserController) ActiveUser(c *fiber.Ctx) error {
 	// Update cached user data with IsActive = true
 	user.IsActive = true
 	userJSON, _ := json.Marshal(user)
-	uc.Client.Set(c.Context(), userKey, userJSON, time.Hour)
+	uc.Client.Set(c.Context(), userKey, userJSON, 30*time.Minute)
 
 	// Log success
 	logger.Log.WithFields(logrus.Fields{
@@ -422,7 +422,7 @@ func (uc *UserController) Login(c *fiber.Ctx) error {
 		if err != nil {
 			// Increment login attempts in Redis with a 5-minute TTL
 			uc.Client.Incr(c.Context(), attemptKey)
-			uc.Client.Expire(c.Context(), attemptKey, 5*time.Minute)
+			uc.Client.Expire(c.Context(), attemptKey, 15*time.Minute)
 			// Log an error if the user isn’t found
 			logger.Log.WithFields(logrus.Fields{
 				"error": err,
@@ -445,7 +445,7 @@ func (uc *UserController) Login(c *fiber.Ctx) error {
 			}).Warn("Failed to marshal user for Redis caching")
 		} else {
 			// Cache the user in Redis with a 1-hour TTL
-			if err := uc.Client.Set(c.Context(), userKey, userJSON, time.Hour).Err(); err != nil {
+			if err := uc.Client.Set(c.Context(), userKey, userJSON, 30*time.Minute).Err(); err != nil {
 				// Log a warning if caching fails (non-critical, proceed)
 				logger.Log.WithFields(logrus.Fields{
 					"error": err,
@@ -465,7 +465,7 @@ func (uc *UserController) Login(c *fiber.Ctx) error {
 		if err != nil {
 			// Increment login attempts in Redis with a 5-minute TTL
 			uc.Client.Incr(c.Context(), attemptKey)
-			uc.Client.Expire(c.Context(), attemptKey, 5*time.Minute)
+			uc.Client.Expire(c.Context(), attemptKey, 15*time.Minute)
 			// Log an error if the user isn’t found
 			logger.Log.WithFields(logrus.Fields{
 				"error": err,
@@ -483,7 +483,7 @@ func (uc *UserController) Login(c *fiber.Ctx) error {
 	if err := utils.ComparePasswords(user.Password, login.Password); err != nil {
 		// Increment login attempts in Redis with a 5-minute TTL
 		uc.Client.Incr(c.Context(), attemptKey)
-		uc.Client.Expire(c.Context(), attemptKey, 5*time.Minute)
+		uc.Client.Expire(c.Context(), attemptKey, 15*time.Minute)
 		// Log an error for password mismatch
 		logger.Log.WithFields(logrus.Fields{
 			"email": login.Email,
@@ -499,7 +499,7 @@ func (uc *UserController) Login(c *fiber.Ctx) error {
 	if !user.IsActive {
 		// Increment login attempts in Redis with a 5-minute TTL
 		uc.Client.Incr(c.Context(), attemptKey)
-		uc.Client.Expire(c.Context(), attemptKey, 5*time.Minute)
+		uc.Client.Expire(c.Context(), attemptKey, 15*time.Minute)
 		// Log an error if the user isn’t verified
 		logger.Log.WithFields(logrus.Fields{
 			"email": login.Email,
@@ -573,38 +573,105 @@ func (uc *UserController) Login(c *fiber.Ctx) error {
 }
 
 func (uc *UserController) Logout(c *fiber.Ctx) error {
-	// Invalidate access token cookie
+	// Retrieve the user ID from the context, set by RefreshTokenMiddleware
+	userID, ok := c.Locals("user_id").(string)
+	// Check if user ID is missing or invalid
+	if !ok || userID == "" {
+		// Log a warning if user ID isn’t found (shouldn’t happen with middleware)
+		logger.Log.Warn("Logout attempted without user ID in context")
+		// Return a 401 Unauthorized response since user isn’t authenticated
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error":  "Unauthorized",
+			"status": fiber.StatusUnauthorized,
+		})
+	}
+
+	// Parse the user ID into a UUID for consistency
+	uid, err := uuid.Parse(userID)
+	// Check if parsing the user ID failed
+	if err != nil {
+		// Log an error with details about the invalid user ID
+		logger.Log.WithFields(logrus.Fields{
+			"error":  err,
+			"userID": userID,
+		}).Error("Invalid user ID format during logout")
+		// Return a 400 Bad Request response for invalid user ID
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":  "Invalid user ID",
+			"status": fiber.StatusBadRequest,
+		})
+	}
+
+	// Get the access token from the cookie
+	accessToken := c.Cookies("access_token")
+	// Get the refresh token from the cookie
+	refreshToken := c.Cookies("refresh_token")
+	// Define Redis keys for blacklisting tokens
+	accessTokenKey := "blacklist:access:" + accessToken
+	refreshTokenKey := "blacklist:refresh:" + refreshToken
+
+	// Check if access token exists
+	if accessToken != "" {
+		// Blacklist the access token in Redis with a 15-minute TTL (matches original expiration)
+		if err := uc.Client.Set(c.Context(), accessTokenKey, "invalid", 15*time.Minute).Err(); err != nil {
+			// Log a warning if Redis fails to blacklist the access token (non-critical, proceed)
+			logger.Log.WithFields(logrus.Fields{
+				"error":  err,
+				"userID": uid,
+			}).Warn("Failed to blacklist access token in Redis")
+		}
+	}
+	// Check if refresh token exists
+	if refreshToken != "" {
+		// Blacklist the refresh token in Redis with a 7-day TTL (matches original expiration)
+		if err := uc.Client.Set(c.Context(), refreshTokenKey, "invalid", 7*24*time.Hour).Err(); err != nil {
+			// Log a warning if Redis fails to blacklist the refresh token (non-critical, proceed)
+			logger.Log.WithFields(logrus.Fields{
+				"error":  err,
+				"userID": uid,
+			}).Warn("Failed to blacklist refresh token in Redis")
+		}
+	}
+	// Invalidate access token cookie by setting it to empty with a past expiration
 	c.Cookie(&fiber.Cookie{
 		Name:     "access_token",
 		Value:    "",
 		Expires:  time.Now().Add(-time.Hour), // Expire immediately
 		HTTPOnly: true,
-		Secure:   true,     // Add in production (HTTPS-only)
-		SameSite: "Strict", // Prevent CSRF
+		Secure:   true,     // Enforce HTTPS in production
+		SameSite: "Strict", // Prevent CSRF attacks
 	})
 
-	// Invalidate refresh token cookie
+	// Invalidate refresh token cookie by setting it to empty with a past expiration
 	c.Cookie(&fiber.Cookie{
 		Name:     "refresh_token",
 		Value:    "",
 		Expires:  time.Now().Add(-time.Hour), // Expire immediately
 		HTTPOnly: true,
-		Secure:   true,     // Add in production (HTTPS-only)
-		SameSite: "Strict", // Prevent CSRF
+		Secure:   true,     // Enforce HTTPS in production
+		SameSite: "Strict", // Prevent CSRF attacks
 	})
 
-	// Clear Authorization header (if used)
+	// Clear the Authorization header (optional, client-managed but added for completeness)
 	c.Set("Authorization", "")
 
-	// Security headers
-	c.Set("Cache-Control", "no-store")
+	// Set security headers to prevent caching of sensitive data
+	c.Set("Cache-Control", "no-store, no-cache, must-revalidate, private")
+	// Set Pragma header for older browsers to prevent caching
 	c.Set("Pragma", "no-cache")
+	// Set X-Content-Type-Options to prevent MIME-type sniffing
+	c.Set("X-Content-Type-Options", "nosniff")
+	// Set X-Frame-Options to prevent clickjacking
+	c.Set("X-Frame-Options", "DENY")
+	// Set Content-Security-Policy to restrict resource loading (basic example)
+	c.Set("Content-Security-Policy", "default-src 'self'")
 
-	// Log the event
+	// Log the logout event with user ID
 	logger.Log.WithFields(logrus.Fields{
-		"user_id": c.Locals("user_id"),
-	}).Info("User logged out")
+		"user_id": uid,
+	}).Info("User logged out successfully")
 
+	// Return a 200 OK response indicating successful logout
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"message": "Logout successful",
 		"status":  fiber.StatusOK,
