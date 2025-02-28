@@ -99,33 +99,29 @@ func (uc *UserController) Registration(c *fiber.Ctx) error {
 	newUser, err := uc.userSystem.CreateUser(&user)
 	// Check if user creation failed
 	if err != nil {
-		// Log an error with details if user creation fails
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 		}).Warn("Failed to register user")
-		// Return a 500 Internal Server Error with the error message
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":  err.Error(),
 			"status": fiber.StatusInternalServerError,
 		})
 	}
 
-	// Generate Redis keys for caching user data and OTP
-	userKey := "user:email:" + newUser.Email
+	// Generate Redis keys for caching user data (by ID) and OTP
+	userKey := "user:id:" + newUser.ID.String()
 	otpKey := "user:" + newUser.ID.String() + ":otp"
 	// Marshal the new user struct to JSON for caching
 	userJSON, err := json.Marshal(newUser)
 	// Check if marshaling failed
 	if err != nil {
-		// Log a warning if marshaling fails (non-critical, proceed anyway)
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 			"email": newUser.Email,
 		}).Warn("Failed to marshal user for Redis caching")
 	} else {
-		// Cache the user data in Redis with a 1-hour TTL
+		// Cache the user data in Redis by ID with a 1-hour TTL
 		if err := uc.Client.Set(c.Context(), userKey, userJSON, time.Hour).Err(); err != nil {
-			// Log a warning if caching fails (non-critical, proceed)
 			logger.Log.WithFields(logrus.Fields{
 				"error": err,
 				"email": newUser.Email,
@@ -134,7 +130,6 @@ func (uc *UserController) Registration(c *fiber.Ctx) error {
 	}
 	// Cache the OTP in Redis with a 15-minute TTL
 	if err := uc.Client.Set(c.Context(), otpKey, otp, 15*time.Minute).Err(); err != nil {
-		// Log a warning if caching the OTP fails (non-critical, proceed)
 		logger.Log.WithFields(logrus.Fields{
 			"error":  err,
 			"userID": newUser.ID,
@@ -154,7 +149,7 @@ func (uc *UserController) Registration(c *fiber.Ctx) error {
 	})
 }
 
-// ActiveUser verifies and activates a user by OTP, using Redis for performance
+// ActiveUser verifies and activates a user by OTP, using Redis caches fully
 func (uc *UserController) ActiveUser(c *fiber.Ctx) error {
 	// Define a struct to parse the JSON request body containing the OTP
 	type Body struct {
@@ -164,11 +159,9 @@ func (uc *UserController) ActiveUser(c *fiber.Ctx) error {
 	var body Body
 	// Parse the request body strictly into the Body struct
 	if err := utils.StrictBodyParser(c, &body); err != nil {
-		// Log an error with details if parsing fails
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 		}).Error("Failed to parse request body")
-		// Return a 400 Bad Request response with an error message
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":  "Invalid request body",
 			"status": fiber.StatusBadRequest,
@@ -179,12 +172,10 @@ func (uc *UserController) ActiveUser(c *fiber.Ctx) error {
 	userID, err := uuid.Parse(c.Params("userid"))
 	// Check if the user ID is invalid or empty (uuid.Nil)
 	if err != nil || userID == uuid.Nil {
-		// Log an error with the invalid user ID
 		logger.Log.WithFields(logrus.Fields{
 			"error":  err,
 			"userID": userID,
 		}).Error("Invalid user ID")
-		// Return a 404 Not Found response for an invalid user ID
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error":  "User not found",
 			"status": fiber.StatusNotFound,
@@ -193,96 +184,96 @@ func (uc *UserController) ActiveUser(c *fiber.Ctx) error {
 
 	// Check if the user ID is the zero UUID (additional validation)
 	if userID.String() == "00000000-0000-0000-0000-000000000000" {
-		// Log an error indicating the user ID is invalid
 		logger.Log.WithFields(logrus.Fields{
 			"error":  err,
 			"userID": userID,
 		}).Error("User not found")
-		// Return a 404 Not Found response for a zero UUID
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"errors": "user not found",
 			"status": fiber.StatusNotFound,
 		})
 	}
 
-	// Generate a Redis key for the user’s cached data (e.g., "user:uuid")
-	userKey := "user:" + userID.String()
+	// Generate Redis keys for user data and OTP
+	userKey := "user:id:" + userID.String()
+	otpKey := "user:" + userID.String() + ":otp"
 	// Attempt to fetch the user’s OTP from Redis
-	cachedOTP, err := uc.Client.Get(c.Context(), userKey+":otp").Int64()
+	cachedOTP, err := uc.Client.Get(c.Context(), otpKey).Int64()
 	// Declare a variable to hold the user struct
 	var user *models.User
 	// Check if the OTP is cached in Redis
-	if err != nil {
+	if err == nil {
 		// Validate the OTP from the request against the cached OTP
 		if body.Otp != cachedOTP {
-			// Log an error if the OTP doesn’t match
 			logger.Log.WithFields(logrus.Fields{
 				"userID": userID,
 			}).Error("OTP mismatch")
-			// Return a 400 Bad Request response for an incorrect OTP
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 				"error":  "OTP not matched",
 				"status": fiber.StatusBadRequest,
 			})
 		}
-		// Fetch the user from the database only if OTP matches (to check IsActive)
-		user, err = uc.userSystem.UserBy("id = ?", userID)
-		// Check if fetching the user failed
-		if err != nil {
-			// Log an error with details if the user isn’t found
-			logger.Log.WithFields(logrus.Fields{
-				"error":  err,
-				"userID": userID,
-			}).Error("Failed to fetch user by ID")
-			// Return a 404 Not Found response if the user doesn’t exist
-			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-				"error":  "User not found",
-				"status": fiber.StatusNotFound,
-			})
+		// Fetch the user from Redis by ID
+		cachedUser, err := uc.Client.Get(c.Context(), userKey).Result()
+		// Check if the user is cached in Redis
+		if err == nil {
+			user = &models.User{}
+			if err := json.Unmarshal([]byte(cachedUser), user); err != nil {
+				logger.Log.WithFields(logrus.Fields{
+					"error":  err,
+					"userID": userID,
+				}).Warn("Failed to unmarshal cached user from Redis")
+				user = nil // Reset to trigger DB fetch
+			}
+		}
+		// If not in Redis or unmarshal failed, fetch from DB
+		if err == redis.Nil || user == nil {
+			user, err = uc.userSystem.UserBy("id = ?", userID)
+			if err != nil {
+				logger.Log.WithFields(logrus.Fields{
+					"error":  err,
+					"userID": userID,
+				}).Error("Failed to fetch user by ID")
+				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+					"error":  "User not found",
+					"status": fiber.StatusNotFound,
+				})
+			}
+			// Re-cache user data
+			userJSON, _ := json.Marshal(user)
+			uc.Client.Set(c.Context(), userKey, userJSON, time.Hour)
 		}
 	} else if err == redis.Nil {
-		// If Redis cache misses (OTP not found), fetch the user from the database
+		// If OTP cache misses, fetch user from DB
 		user, err = uc.userSystem.UserBy("id = ?", userID)
-		// Check if fetching the user failed
 		if err != nil {
-			// Log an error with details if the user isn’t found
 			logger.Log.WithFields(logrus.Fields{
 				"error":  err,
 				"userID": userID,
 			}).Error("Failed to fetch user by ID")
-			// Return a 404 Not Found response if the user doesn’t exist
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 				"error":  "User not found",
 				"status": fiber.StatusNotFound,
 			})
 		}
-		// Validate the OTP from the request against the database OTP
+		// Validate OTP against DB
 		if body.Otp != user.OTP {
-			// Log an error if the OTP doesn’t match
 			logger.Log.WithFields(logrus.Fields{
 				"userID": userID,
 			}).Error("OTP mismatch")
-			// Return a 400 Bad Request response for an incorrect OTP
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 				"error":  "OTP not matched",
 				"status": fiber.StatusBadRequest,
 			})
 		}
-		// Cache the OTP in Redis with a 15-minute TTL after DB fetch
-		if err := uc.Client.Set(c.Context(), userKey+":otp", user.OTP, 15*time.Minute).Err(); err != nil {
-			// Log a warning if caching fails (non-critical, proceed anyway)
-			logger.Log.WithFields(logrus.Fields{
-				"error":  err,
-				"userID": userID,
-			}).Warn("Failed to cache OTP in Redis")
-		}
+		// Cache OTP on miss
+		uc.Client.Set(c.Context(), otpKey, user.OTP, 15*time.Minute)
 	} else {
-		// Log an error if Redis access fails for another reason
+		// Log Redis error and fallback to DB
 		logger.Log.WithFields(logrus.Fields{
 			"error":  err,
 			"userID": userID,
 		}).Error("Redis error fetching OTP")
-		// Return a 500 Internal Server Error for Redis issues
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":  "Internal server error",
 			"status": fiber.StatusInternalServerError,
@@ -291,11 +282,9 @@ func (uc *UserController) ActiveUser(c *fiber.Ctx) error {
 
 	// Check if the user is already activated
 	if user.IsActive {
-		// Log an error if the user is already verified
 		logger.Log.WithFields(logrus.Fields{
 			"userID": userID,
 		}).Error("OTP expired or already verified")
-		// Return a 400 Bad Request response if the user is already active
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":  "OTP expired or already verified",
 			"status": fiber.StatusBadRequest,
@@ -304,32 +293,28 @@ func (uc *UserController) ActiveUser(c *fiber.Ctx) error {
 
 	// Activate the user by updating the database
 	if err := uc.userSystem.ActiveUser(userID); err != nil {
-		// Log an error with details if activation fails
 		logger.Log.WithFields(logrus.Fields{
 			"error":  err,
 			"userID": userID,
 		}).Error("Failed to activate user")
-		// Return a 500 Internal Server Error if activation fails
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":  "Failed to activate account",
 			"status": fiber.StatusInternalServerError,
 		})
 	}
 
-	// Invalidate the OTP cache in Redis after successful activation
-	if err := uc.Client.Del(c.Context(), userKey+":otp").Err(); err != nil {
-		// Log a warning if cache deletion fails (non-critical, proceed anyway)
-		logger.Log.WithFields(logrus.Fields{
-			"error":  err,
-			"userID": userID,
-		}).Warn("Failed to delete OTP from Redis cache")
-	}
+	// Invalidate OTP cache after activation
+	uc.Client.Del(c.Context(), otpKey)
+	// Update cached user data with IsActive = true
+	user.IsActive = true
+	userJSON, _ := json.Marshal(user)
+	uc.Client.Set(c.Context(), userKey, userJSON, time.Hour)
 
-	// Log a success message for the activation
+	// Log success
 	logger.Log.WithFields(logrus.Fields{
 		"userID": userID,
 	}).Info("User activated successfully")
-	// Return a 200 OK response with user details
+	// Return success response
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"status":  fiber.StatusOK,
 		"message": "Account activated successfully",
@@ -343,93 +328,215 @@ func (uc *UserController) ActiveUser(c *fiber.Ctx) error {
 	})
 }
 
-// Login make sure to checks and let users to login
+// Login authenticates users and generates JWT tokens, using Redis caches for performance
 func (uc *UserController) Login(c *fiber.Ctx) error {
+	// Define a struct to parse the login request body with validation rules
 	type Login struct {
 		Email    string `json:"email" validate:"required,email,min=5"`
 		Password string `json:"password" validate:"required,min=6"`
 	}
-	// parse request body
+	// Declare a variable to hold the parsed login data
 	var login Login
+	// Parse the request body into the Login struct with strict validation
 	if err := utils.StrictBodyParser(c, &login); err != nil {
+		// Log an error if parsing fails
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 		}).Error("Failed to parse request body")
+		// Return a 400 Bad Request response for invalid body
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":  "Invalid request body",
 			"status": fiber.StatusBadRequest,
 		})
 	}
 
-	// validate email password
+	// Create a new validator instance for input validation
 	validator := utils.NewValidator()
+	// Validate the login struct against defined rules (e.g., email format, password length)
 	if err := validator.Validate(login); err != nil {
+		// Log an error if validation fails
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 			"user":  login,
-		}).Error("User validation failed while registering")
+		}).Error("User validation failed while logging in")
+		// Return a 422 Unprocessable Entity response with validation errors
 		return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{
 			"errors": err,
 			"status": fiber.StatusUnprocessableEntity,
 		})
 	}
 
-	// fetch user by email
-	user, err := uc.userSystem.UserBy("email = ?", login.Email)
-	if err != nil {
+	// Generate a Redis key for tracking login attempts (e.g., "login_attempts:user@example.com")
+	attemptKey := "login_attempts:" + login.Email
+	// Set a maximum number of allowed login attempts
+	const maxAttempts = 5
+	// Check the number of login attempts in Redis
+	attempts, err := uc.Client.Get(c.Context(), attemptKey).Int()
+	// Handle the case where the key doesn’t exist yet (first attempt)
+	if err == redis.Nil {
+		attempts = 0
+	} else if err != nil {
+		// Log a warning if Redis fails (non-critical, proceed without rate limiting)
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 			"email": login.Email,
-		}).Error("Failed to fetch user by email")
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error":  "User not found",
-			"status": fiber.StatusNotFound,
+		}).Warn("Failed to check login attempts in Redis")
+	}
+	// Check if the user has exceeded the maximum login attempts
+	if attempts >= maxAttempts {
+		// Log an error for too many login attempts
+		logger.Log.WithFields(logrus.Fields{
+			"email": login.Email,
+		}).Error("Too many login attempts")
+		// Return a 429 Too Many Requests response
+		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+			"error":  "Too many login attempts, please try again later",
+			"status": fiber.StatusTooManyRequests,
 		})
 	}
 
-	// compare user password
+	// Generate a Redis key for caching user data (e.g., "user:email:user@example.com")
+	userKey := "user:email:" + login.Email
+	// Declare a variable to hold the user struct
+	var user *models.User
+	// Attempt to fetch the user from Redis as a JSON string
+	cachedUser, err := uc.Client.Get(c.Context(), userKey).Result()
+	// Check if the user is cached in Redis
+	if err == nil {
+		// Unmarshal the cached JSON into a user struct
+		user = &models.User{}
+		if err := json.Unmarshal([]byte(cachedUser), user); err != nil {
+			// Log an error if unmarshaling fails (fallback to DB)
+			logger.Log.WithFields(logrus.Fields{
+				"error": err,
+				"email": login.Email,
+			}).Warn("Failed to unmarshal cached user from Redis")
+			user = nil // Reset to nil to trigger DB fetch
+		}
+	}
+	// Check if the user wasn’t found in Redis or unmarshaling failed
+	if err == redis.Nil || user == nil {
+		// Fetch the user from the database by email
+		user, err = uc.userSystem.UserBy("email = ?", login.Email)
+		// Check if fetching the user failed
+		if err != nil {
+			// Increment login attempts in Redis with a 5-minute TTL
+			uc.Client.Incr(c.Context(), attemptKey)
+			uc.Client.Expire(c.Context(), attemptKey, 5*time.Minute)
+			// Log an error if the user isn’t found
+			logger.Log.WithFields(logrus.Fields{
+				"error": err,
+				"email": login.Email,
+			}).Error("Failed to fetch user by email")
+			// Return a 404 Not Found response
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error":  "User not found",
+				"status": fiber.StatusNotFound,
+			})
+		}
+		// Marshal the user to JSON for caching
+		userJSON, err := json.Marshal(user)
+		// Check if marshaling failed
+		if err != nil {
+			// Log a warning if marshaling fails (non-critical, proceed)
+			logger.Log.WithFields(logrus.Fields{
+				"error": err,
+				"email": login.Email,
+			}).Warn("Failed to marshal user for Redis caching")
+		} else {
+			// Cache the user in Redis with a 1-hour TTL
+			if err := uc.Client.Set(c.Context(), userKey, userJSON, time.Hour).Err(); err != nil {
+				// Log a warning if caching fails (non-critical, proceed)
+				logger.Log.WithFields(logrus.Fields{
+					"error": err,
+					"email": login.Email,
+				}).Warn("Failed to cache user in Redis")
+			}
+		}
+	} else if err != nil {
+		// Log an error if Redis fails for another reason (proceed with DB fallback)
+		logger.Log.WithFields(logrus.Fields{
+			"error": err,
+			"email": login.Email,
+		}).Error("Redis error fetching user")
+		// Fetch from DB as a fallback
+		user, err = uc.userSystem.UserBy("email = ?", login.Email)
+		// Check if fetching the user failed
+		if err != nil {
+			// Increment login attempts in Redis with a 5-minute TTL
+			uc.Client.Incr(c.Context(), attemptKey)
+			uc.Client.Expire(c.Context(), attemptKey, 5*time.Minute)
+			// Log an error if the user isn’t found
+			logger.Log.WithFields(logrus.Fields{
+				"error": err,
+				"email": login.Email,
+			}).Error("Failed to fetch user by email")
+			// Return a 404 Not Found response
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error":  "User not found",
+				"status": fiber.StatusNotFound,
+			})
+		}
+	}
+
+	// Compare the provided password with the stored hashed password
 	if err := utils.ComparePasswords(user.Password, login.Password); err != nil {
+		// Increment login attempts in Redis with a 5-minute TTL
+		uc.Client.Incr(c.Context(), attemptKey)
+		uc.Client.Expire(c.Context(), attemptKey, 5*time.Minute)
+		// Log an error for password mismatch
 		logger.Log.WithFields(logrus.Fields{
 			"email": login.Email,
 		}).Error("Password mismatch")
+		// Return a 401 Unauthorized response
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error":  "Email or password not matched",
 			"status": fiber.StatusUnauthorized,
 		})
 	}
 
-	// check if user is activated
+	// Check if the user account is activated
 	if !user.IsActive {
+		// Increment login attempts in Redis with a 5-minute TTL
+		uc.Client.Incr(c.Context(), attemptKey)
+		uc.Client.Expire(c.Context(), attemptKey, 5*time.Minute)
+		// Log an error if the user isn’t verified
 		logger.Log.WithFields(logrus.Fields{
 			"email": login.Email,
 		}).Error("User not verified")
+		// Return a 401 Unauthorized response
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error":  "Verify your account first",
 			"status": fiber.StatusUnauthorized,
 		})
 	}
 
+	// Reset login attempts in Redis on successful login
+	uc.Client.Del(c.Context(), attemptKey)
+
+	// Collect role IDs for JWT generation (permissions handled by RefreshTokenMiddleware)
 	var roleIDs []uuid.UUID
-	var permissions []string
 	for _, role := range user.Roles {
+		// Append each role ID to the roleIDs slice
 		roleIDs = append(roleIDs, role.ID)
-		for _, perm := range role.Permissions {
-			permissions = append(permissions, perm.Name)
-		}
 	}
 
-	// Generate JWT tokens
+	// Generate JWT access and refresh tokens with role IDs
 	atoken, rtoken, err := auth.GenerateJWT(*user, roleIDs)
+	// Check if token generation failed
 	if err != nil {
+		// Log an error if JWT generation fails
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 		}).Error("Failed to generate JWT tokens")
+		// Return a 422 Unprocessable Entity response
 		return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{
 			"error":  "Token generation failed",
 			"status": fiber.StatusUnprocessableEntity,
 		})
 	}
-	// Set cookies explicitly
+
+	// Set the access token cookie with secure settings
 	c.Cookie(&fiber.Cookie{
 		Name:     "access_token",
 		Value:    atoken,
@@ -438,6 +545,7 @@ func (uc *UserController) Login(c *fiber.Ctx) error {
 		Secure:   false, // Set to true in production with HTTPS
 		SameSite: "Strict",
 	})
+	// Set the refresh token cookie with secure settings
 	c.Cookie(&fiber.Cookie{
 		Name:     "refresh_token",
 		Value:    rtoken,
@@ -446,9 +554,12 @@ func (uc *UserController) Login(c *fiber.Ctx) error {
 		Secure:   false, // Set to true in production
 		SameSite: "Strict",
 	})
+
+	// Log a success message for the login
 	logger.Log.WithFields(logrus.Fields{
 		"email": login.Email,
 	}).Info("User logged in successfully")
+	// Return a 200 OK response with user details
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"message": "Login successful",
 		"status":  fiber.StatusOK,
