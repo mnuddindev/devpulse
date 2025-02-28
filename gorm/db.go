@@ -62,49 +62,68 @@ func Connect(co *cfg.Postgres) *gorm.DB {
 func SeedRoles(db *gorm.DB) {
 	// Define permissions
 	permissions := []models.Permission{
-		{Name: "read_post"},
-		{Name: "create_post"},
-		{Name: "edit_own_post"},
-		{Name: "delete_own_post"},
-		{Name: "edit_any_post"},
-		{Name: "delete_any_post"},
-		{Name: "moderate_post"},
-		{Name: "create_comment"},
-		{Name: "edit_own_comment"},
-		{Name: "delete_own_comment"},
-		{Name: "edit_any_comment"},
-		{Name: "moderate_comment"},
-		{Name: "create_user"},
-		{Name: "edit_user"},
-		{Name: "delete_user"},
-		{Name: "edit_own_profile"},
-		{Name: "delete_own_profile"},
-		{Name: "moderate_user"},
-		{Name: "ban_user"},
-		{Name: "follow_user"},
-		{Name: "unfollow_user"},
-		{Name: "create_roles"},
-		{Name: "edit_roles"},
-		{Name: "delete_roles"},
-		{Name: "manage_roles"},
-		{Name: "create_reaction"},
-		{Name: "edit_reaction"},
-		{Name: "delete_reaction"},
-		{Name: "give_reaction"},
-		{Name: "create_tag"},
-		{Name: "edit_tag"},
-		{Name: "delete_tag"},
-		{Name: "moderate_tag"},
-		{Name: "follow_tag"},
-		{Name: "unfollow_tag"},
-		{Name: "site_setting"},
-		{Name: "need_moderation"},
-		{Name: "give_suggestion"},
-		{Name: "feature_posts"},
-		{Name: "admin"},
+		// Post-related permissions
+		{Name: "create_post"},     // Create a new post
+		{Name: "delete_any_post"}, // Delete any post (admin/moderator)
+		{Name: "delete_own_post"}, // Delete own posts
+		{Name: "edit_any_post"},   // Edit any post (admin/moderator)
+		{Name: "edit_own_post"},   // Edit own posts
+		{Name: "feature_posts"},   // Mark posts as featured (moderator/admin)
+		{Name: "moderate_post"},   // Moderate posts (e.g., approve, flag)
+		{Name: "read_post"},       // View posts (basic access)
+
+		// Comment-related permissions
+		{Name: "create_comment"},     // Add a comment to a post
+		{Name: "delete_any_comment"}, // Delete any comment (admin/moderator)
+		{Name: "delete_own_comment"}, // Delete own comments
+		{Name: "edit_any_comment"},   // Edit any comment (admin/moderator)
+		{Name: "edit_own_comment"},   // Edit own comments
+		{Name: "moderate_comment"},   // Moderate comments (e.g., approve, flag)
+
+		// User-related permissions
+		{Name: "ban_user"},           // Ban a user from the platform (admin)
+		{Name: "create_user"},        // Register new users (admin or system-level)
+		{Name: "delete_any_user"},    // Delete any user account (admin)
+		{Name: "delete_own_profile"}, // Delete own account
+		{Name: "edit_any_user"},      // Edit any user’s profile/data (admin/moderator)
+		{Name: "edit_own_profile"},   // Edit own profile
+		{Name: "follow_user"},        // Follow another user
+		{Name: "moderate_user"},      // Moderate user accounts (e.g., warn, restrict)
+		{Name: "read_user_profile"},  // View other users’ profiles (new)
+		{Name: "unfollow_user"},      // Unfollow another user
+
+		// Role and permission management
+		{Name: "assign_roles"}, // Assign roles to users (admin/moderator)
+		{Name: "create_roles"}, // Create new roles (admin)
+		{Name: "delete_roles"}, // Delete roles (admin)
+		{Name: "edit_roles"},   // Edit role details/permissions (admin)
+		{Name: "manage_roles"}, // Broad permission for role management (admin)
+
+		// Reaction-related permissions
+		{Name: "create_reaction"},     // Add a reaction (e.g., like, heart) to posts/comments
+		{Name: "delete_any_reaction"}, // Delete any reaction (admin/moderator)
+		{Name: "delete_own_reaction"}, // Delete own reactions
+		{Name: "edit_any_reaction"},   // Edit any reaction (admin/moderator, rare use case)
+		{Name: "edit_own_reaction"},   // Edit own reactions
+
+		// Tag-related permissions
+		{Name: "create_tag"},   // Create a new tag
+		{Name: "delete_tag"},   // Delete a tag (admin/moderator)
+		{Name: "edit_tag"},     // Edit a tag (admin/moderator)
+		{Name: "follow_tag"},   // Follow a tag
+		{Name: "moderate_tag"}, // Moderate tags (e.g., approve, merge)
+		{Name: "unfollow_tag"}, // Unfollow a tag
+
+		// Site-wide and moderation permissions
+		{Name: "give_suggestion"},      // Submit suggestions for site improvements
+		{Name: "manage_analytics"},     // View/use site analytics (admin, new)
+		{Name: "manage_notifications"}, // Manage notification settings for all users (admin, new)
+		{Name: "manage_site_settings"}, // Manage global site settings (admin, replaces "site_setting")
+		{Name: "need_moderation"},      // Flag content/users needing moderation (member feature)
+		{Name: "report_content"},       // Report posts/comments/users (new, for all users)
 	}
-	for i := range permissions {
-		db.FirstOrCreate(&permissions[i], models.Permission{Name: permissions[i].Name})
+	for _, perm := range permissions {
+		db.FirstOrCreate(&perm, models.Permission{Name: perm.Name})
 	}
 
 	// Define roles with permissions
@@ -226,12 +245,66 @@ func SeedRoles(db *gorm.DB) {
 		{"Admin", []string{"admin"}},
 	}
 
+	// Seed roles and permissions into the database
 	for _, r := range roles {
+		// Declare a variable to hold the role
 		var role models.Role
-		db.FirstOrCreate(&role, models.Role{Name: r.Name})
+		// Check if the role exists by name, create it if not
+		if err := db.Where("name = ?", r.Name).First(&role).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				// Create a new role with the given name
+				role = models.Role{Name: r.Name}
+				if err := db.Create(&role).Error; err != nil {
+					logger.Log.WithFields(logrus.Fields{
+						"error": err,
+						"role":  r.Name,
+					}).Error("Failed to create role")
+					continue
+				}
+			} else {
+				logger.Log.WithFields(logrus.Fields{
+					"error": err,
+					"role":  r.Name,
+				}).Error("Database error fetching role")
+				continue
+			}
+		}
+
+		// Fetch or create permissions and associate them with the role
 		var perms []models.Permission
-		db.Find(&perms, "name IN ?", r.Permissions)
-		db.Model(&role).Association("Permissions").Replace(perms)
+		for _, permName := range r.Permissions {
+			// Declare a variable to hold the permission
+			var perm models.Permission
+			// Check if the permission exists, create it if not
+			if err := db.Where("name = ?", permName).First(&perm).Error; err != nil {
+				if err == gorm.ErrRecordNotFound {
+					perm = models.Permission{Name: permName}
+					if err := db.Create(&perm).Error; err != nil {
+						logger.Log.WithFields(logrus.Fields{
+							"error": err,
+							"perm":  permName,
+						}).Error("Failed to create permission")
+						continue
+					}
+				} else {
+					logger.Log.WithFields(logrus.Fields{
+						"error": err,
+						"perm":  permName,
+					}).Error("Database error fetching permission")
+					continue
+				}
+			}
+			// Add the permission to the list
+			perms = append(perms, perm)
+		}
+
+		// Associate the permissions with the role
+		if err := db.Model(&role).Association("Permissions").Replace(perms); err != nil {
+			logger.Log.WithFields(logrus.Fields{
+				"error": err,
+				"role":  r.Name,
+			}).Error("Failed to associate permissions with role")
+		}
 	}
 }
 
