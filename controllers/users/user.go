@@ -572,6 +572,7 @@ func (uc *UserController) Login(c *fiber.Ctx) error {
 	})
 }
 
+// Logout handles user logout, invalidates tokens using Redis blacklisting
 func (uc *UserController) Logout(c *fiber.Ctx) error {
 	// Retrieve the user ID from the context, set by RefreshTokenMiddleware
 	userID, ok := c.Locals("user_id").(string)
@@ -678,45 +679,145 @@ func (uc *UserController) Logout(c *fiber.Ctx) error {
 	})
 }
 
+// UserProfile retrieves and returns the authenticated user’s profile, optimized with Redis caching
 func (uc *UserController) UserProfile(c *fiber.Ctx) error {
-	// Get user ID from context
-	userId, ok := c.Locals("user_id").(uuid.UUID)
-	if !ok {
-		logger.Log.WithFields(logrus.Fields{
-			"error": "User ID missing or invalid type in context",
-		}).Warn("Unauthorized access attempt")
-		// Return unauthorized status
+	// Retrieve the user ID from the context, set by RefreshTokenMiddleware
+	userID, ok := c.Locals("user_id").(string)
+	// Check if user ID is missing or invalid
+	if !ok || userID == "" {
+		// Log a warning for an unauthorized access attempt
+		logger.Log.Warn("UserProfile attempted without user ID in context")
+		// Return a 401 Unauthorized response if user ID isn’t present
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error":  "Unauthorized",
 			"status": fiber.StatusUnauthorized,
 		})
 	}
 
-	// Fetch user profile from the database
-	user, err := uc.userSystem.UserBy("id = ?", userId)
+	// Parse the user ID into a UUID for consistency
+	uid, err := uuid.Parse(userID)
+	// Check if parsing the user ID failed
 	if err != nil {
+		// Log an error with details about the invalid user ID
 		logger.Log.WithFields(logrus.Fields{
-			"error": err,
-		}).Error("Database error while fetching user profile")
-		// Return internal server error status
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":  "Internal server error",
-			"status": fiber.StatusInternalServerError,
+			"error":  err,
+			"userID": userID,
+		}).Error("Invalid user ID format in UserProfile")
+		// Return a 400 Bad Request response for invalid user ID
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":  "Invalid user ID",
+			"status": fiber.StatusBadRequest,
 		})
 	}
 
-	if user.ID.String() == "00000000-0000-0000-0000-000000000000" {
+	// Generate a Redis key for rate limiting profile requests
+	rateKey := "profile_rate:" + uid.String()
+	// Set maximum requests allowed per minute
+	const maxRequests = 10
+	// Check the number of profile requests in Redis
+	requests, err := uc.Client.Get(c.Context(), rateKey).Int()
+	// Handle case where rate limit key doesn’t exist (first request)
+	if err == redis.Nil {
+		requests = 0
+	} else if err != nil {
+		// Log a warning if Redis fails (non-critical, proceed without rate limiting)
 		logger.Log.WithFields(logrus.Fields{
-			"error": "User not found",
-		}).Warn("Unauthorized access attempt")
-		// Return unauthorized status
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error":  "User not found",
-			"status": fiber.StatusUnauthorized,
+			"error":  err,
+			"userID": uid,
+		}).Warn("Failed to check profile rate limit in Redis")
+	}
+	// Check if the user has exceeded the rate limit
+	if requests >= maxRequests {
+		// Log a warning for rate limit exceeded
+		logger.Log.WithFields(logrus.Fields{
+			"userID": uid,
+		}).Warn("Profile request rate limit exceeded")
+		// Return a 429 Too Many Requests response
+		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+			"error":  "Too many requests, please try again later",
+			"status": fiber.StatusTooManyRequests,
 		})
 	}
+	// Increment the request counter with a 1-minute TTL
+	uc.Client.Incr(c.Context(), rateKey)
+	uc.Client.Expire(c.Context(), rateKey, 1*time.Minute)
 
-	// Prepare user profile response
+	// Generate a Redis key for the cached user profile
+	userKey := "user:id:" + uid.String()
+	// Declare a variable to hold the user struct
+	var user *models.User
+	// Attempt to fetch the user profile from Redis
+	cachedUser, err := uc.Client.Get(c.Context(), userKey).Result()
+	// Check if the user profile is cached in Redis
+	if err == nil {
+		// Unmarshal the cached JSON into a user struct
+		user = &models.User{}
+		if err := json.Unmarshal([]byte(cachedUser), user); err != nil {
+			// Log a warning if unmarshaling fails (fallback to DB)
+			logger.Log.WithFields(logrus.Fields{
+				"error":  err,
+				"userID": uid,
+			}).Warn("Failed to unmarshal cached user from Redis")
+			user = nil
+		}
+	}
+	// Check if the user wasn’t found in Redis or unmarshaling failed
+	if err == redis.Nil || user == nil {
+		// Fetch the user profile from the database by ID
+		user, err = uc.userSystem.UserBy("id = ?", uid)
+		// Check if fetching the user failed
+		if err != nil {
+			// Log an error with details if the user isn’t found or DB fails
+			logger.Log.WithFields(logrus.Fields{
+				"error":  err,
+				"userID": uid,
+			}).Error("Database error while fetching user profile")
+			// Return a 500 Internal Server Error if DB query fails
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error":  "Failed to fetch user profile",
+				"status": fiber.StatusInternalServerError,
+			})
+		}
+		// Marshal the user to JSON for caching
+		userJSON, err := json.Marshal(user)
+		// Check if marshaling failed
+		if err != nil {
+			// Log a warning if marshaling fails (non-critical, proceed)
+			logger.Log.WithFields(logrus.Fields{
+				"error":  err,
+				"userID": uid,
+			}).Warn("Failed to marshal user for Redis caching")
+		} else {
+			// Cache the user profile in Redis with a 30-minute TTL
+			if err := uc.Client.Set(c.Context(), userKey, userJSON, 30*time.Minute).Err(); err != nil {
+				// Log a warning if caching fails (non-critical)
+				logger.Log.WithFields(logrus.Fields{
+					"error":  err,
+					"userID": uid,
+				}).Warn("Failed to cache user profile in Redis")
+			}
+		}
+	} else if err != nil {
+		// Log an error if Redis fails for another reason (proceed with DB fallback)
+		logger.Log.WithFields(logrus.Fields{
+			"error":  err,
+			"userID": uid,
+		}).Error("Redis error fetching user profile")
+		// Fetch from DB as a fallback
+		user, err = uc.userSystem.UserBy("id = ?", uid)
+		if err != nil {
+			logger.Log.WithFields(logrus.Fields{
+				"error":  err,
+				"userID": uid,
+			}).Error("Database error while fetching user profile")
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error":  "Failed to fetch user profile",
+				"status": fiber.StatusInternalServerError,
+			})
+		}
+	}
+
+	// Prepare user profile response with selective fields
 	profileResponse := fiber.Map{
 		"id":                       user.ID,
 		"username":                 user.Username,
@@ -758,9 +859,15 @@ func (uc *UserController) UserProfile(c *fiber.Ctx) error {
 		"notification_preferences": user.NotificationsPreferences,
 	}
 
-	// Return user profile response
+	// Log successful profile retrieval
+	logger.Log.WithFields(logrus.Fields{
+		"userID": uid,
+	}).Info("User profile retrieved successfully")
+	// Return a 200 OK response with the user profile
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"user": profileResponse,
+		"message": "Profile retrieved successfully",
+		"status":  fiber.StatusOK,
+		"user":    profileResponse,
 	})
 }
 
