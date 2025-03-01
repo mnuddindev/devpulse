@@ -1806,6 +1806,29 @@ func (uc *UserController) DeleteUser(c *fiber.Ctx) error {
 		})
 	}
 
+	// Define a struct to capture the confirmation input from the request body
+	type ConfirmData struct {
+		Confirm bool `json:"confirm" validate:"required"`
+	}
+	// Allocate a new instance of ConfirmData to store the parsed request body
+	confirmData := new(ConfirmData)
+	// Parse the request body into the ConfirmData struct, enforcing strict JSON structure
+	if err := utils.StrictBodyParser(c, confirmData); err != nil {
+		// Return a 400 Bad Request response if the body cannot be parsed, indicating a malformed request
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"errors": []utils.Error{{Field: "confirm", Msg: "Confirmation required"}},
+			"status": fiber.StatusBadRequest,
+		})
+	}
+	// Validate the ConfirmData struct to ensure the "confirm" field is present and true
+	if err := utils.NewValidator().Validate(confirmData); err != nil || !confirmData.Confirm {
+		// Return a 400 Bad Request response with a structured error if confirmation is missing or false
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"errors": []utils.Error{{Field: "confirm", Msg: "Please confirm deletion by setting 'confirm' to true"}},
+			"status": fiber.StatusBadRequest,
+		})
+	}
+
 	// Generate a unique Redis key for rate limiting delete actions
 	rateKey := "delete_rate:" + userID.String()
 	// Define the maximum number of delete attempts allowed per hour to prevent abuse
