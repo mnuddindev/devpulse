@@ -76,11 +76,6 @@ type Permission struct {
 	UpdatedAt time.Time `gorm:"default:CURRENT_TIMESTAMP" json:"updated_at"`
 }
 
-type RolePermission struct {
-	RoleID       uuid.UUID `gorm:"type:uuid;primaryKey"`
-	PermissionID uuid.UUID `gorm:"type:uuid;primaryKey"`
-}
-
 type Interest struct {
 	ID        uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
 	Name      string    `gorm:"size:100;not null;unique" json:"name"`
