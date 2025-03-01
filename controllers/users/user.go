@@ -1262,7 +1262,7 @@ func (uc *UserController) UpdateUserProfileHelper(c *fiber.Ctx, section string, 
 	// Validate the update data using the provided section-specific validation function
 	validationErrors := validateFunc(updateData)
 	// Check if validation returned any errors (non-nil *ErrorResponse indicates failure)
-	if validationErrors != nil {
+	if validationErrors != nil && len(validationErrors.Errors) > 0 {
 		// Log an error with details about validation failure for debugging
 		logger.Log.WithFields(logrus.Fields{
 			"error":   validationErrors,
@@ -1271,7 +1271,7 @@ func (uc *UserController) UpdateUserProfileHelper(c *fiber.Ctx, section string, 
 		}).Error("Update validation failed")
 		// Return a 422 Unprocessable Entity response with the validation errors
 		return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{
-			"error":  validationErrors,
+			"errors": validationErrors.Errors,
 			"status": fiber.StatusUnprocessableEntity,
 		})
 	}
@@ -1347,7 +1347,7 @@ func (uc *UserController) UpdateUserProfileHelper(c *fiber.Ctx, section string, 
 			})
 		}
 		// Update the preferences with provided data
-		_, err = uc.userSystem.UpdateNotificationPref("user_id = ?", userID, updates)
+		updatedPrefs, err = uc.userSystem.UpdateNotificationPref("user_id = ?", userID, updates)
 		// Check if updating the preferences failed
 		if err != nil {
 			// Log an error with details about the failure
@@ -1359,22 +1359,6 @@ func (uc *UserController) UpdateUserProfileHelper(c *fiber.Ctx, section string, 
 			// Return a 500 Internal Server Error for update failure
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"error":  "Failed to update " + section,
-				"status": fiber.StatusInternalServerError,
-			})
-		}
-		// Fetch the updated preferences post-update
-		updatedPrefs, err = uc.userSystem.NotificationPreBy("user_id = ?", userID)
-		// Check if fetching updated preferences failed
-		if err != nil {
-			// Log an error if fetching updated preferences fails
-			logger.Log.WithFields(logrus.Fields{
-				"error":   err,
-				"userID":  userID,
-				"section": section,
-			}).Error("Failed to fetch updated notification preferences")
-			// Return a 500 Internal Server Error for fetch failure
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"error":  "Failed to retrieve updated " + section,
 				"status": fiber.StatusInternalServerError,
 			})
 		}
@@ -1672,7 +1656,7 @@ func (uc *UserController) UpdateUserNotificationsPref(c *fiber.Ctx) error {
 		})
 	}
 	// Call the helper function to process the update for the "notifications" section
-	return uc.UpdateUserProfileHelper(c, "notifications",
+	return uc.updateUserProfileHelper(c, "notifications",
 		// Pass the update data to the helper
 		updateData,
 		// Define a validation function using the utils validator, returning *ErrorResponse
@@ -1763,7 +1747,7 @@ func (uc *UserController) UpdateUserAccount(c *fiber.Ctx) error {
 		// Compare the provided current password with the stored hashed password
 		if err := utils.ComparePasswords(user.Password, ud.CurrentPassword); err != nil {
 			// Return a custom *ErrorResponse if the current password doesn’t match
-			return &utils.ErrorResponse{Errors: []utils.Error{{Field: "current_password", Msg: "mismatch"}}}
+			return &utils.ErrorResponse{Errors: []utils.Error{{Field: "current_password", Msg: "Current password is incorrect"}}}
 		}
 		// Return nil if validation succeeds
 		return nil
