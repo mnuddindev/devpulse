@@ -755,13 +755,13 @@ func (uc *UserController) UpdateUserByID(c *fiber.Ctx) error {
 	})
 }
 
-// DeleteUserByID deletes a user by ID, restricted to admin users with Redis optimization
+// DeleteUserByID deletes a user by ID, restricted to admins with specific permissions or the "admin" role
 func (uc *UserController) DeleteUserByID(c *fiber.Ctx) error {
-	// Attempt to parse the target user ID from the URL parameter "userid" into a UUID
+	// Attempt to parse the target user ID from the URL parameter "userid" into a UUID format
 	userID, err := uuid.Parse(c.Params("userid"))
-	// Check if parsing the user ID failed due to an invalid format (e.g., not a valid UUID)
+	// Check if parsing the user ID failed due to an invalid format (e.g., not a valid UUID string)
 	if err != nil {
-		// Log an error with details to debug invalid user ID formats provided in the request URL
+		// Log an error with details to debug invalid user ID formats provided in the admin request URL
 		logger.Log.WithFields(logrus.Fields{
 			"error":  err,
 			"userID": c.Params("userid"),
@@ -775,11 +775,11 @@ func (uc *UserController) DeleteUserByID(c *fiber.Ctx) error {
 
 	// Retrieve the authenticated admin user ID from the Fiber context, set by RefreshTokenMiddleware
 	authUserIDRaw, ok := c.Locals("user_id").(string)
-	// Verify if the authenticated user ID exists and is a string, ensuring the request is authenticated
+	// Verify if the authenticated admin user ID exists and is a string, ensuring the request is from an authenticated admin
 	if !ok || authUserIDRaw == "" {
-		// Log a warning to alert about unauthorized deletion attempts without authentication
+		// Log a warning to alert about unauthorized deletion attempts without an authenticated admin ID
 		logger.Log.Warn("DeleteUserByID attempted without authenticated admin ID")
-		// Return a 401 Unauthorized response with a structured error indicating authentication is required
+		// Return a 401 Unauthorized response with a structured error; PermissionAuth should catch this earlier
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"errors": []utils.Error{{Field: "auth", Msg: "Admin authentication required"}},
 			"status": fiber.StatusUnauthorized,
@@ -788,9 +788,9 @@ func (uc *UserController) DeleteUserByID(c *fiber.Ctx) error {
 
 	// Parse the authenticated admin user ID into a UUID for comparison and logging
 	authUserID, err := uuid.Parse(authUserIDRaw)
-	// Check if parsing the authenticated user ID failed due to an invalid format
+	// Check if parsing the authenticated admin user ID failed due to an invalid format
 	if err != nil {
-		// Log an error with details to debug invalid authenticated user ID formats from the context
+		// Log an error with details to debug invalid authenticated admin ID formats from the context
 		logger.Log.WithFields(logrus.Fields{
 			"error":  err,
 			"userID": authUserIDRaw,
@@ -802,16 +802,16 @@ func (uc *UserController) DeleteUserByID(c *fiber.Ctx) error {
 		})
 	}
 
-	// Define a struct to capture the confirmation input from the request body, ensuring intentional deletion
+	// Define a struct to capture the confirmation input from the admin request body, ensuring intentional deletion
 	type ConfirmData struct {
-		// Define Confirm as a required boolean field to verify the admin’s intent to delete
+		// Define Confirm as a required boolean field to verify the admin’s intent to delete the user
 		Confirm bool `json:"confirm" validate:"required"`
 	}
-	// Allocate a new ConfirmData struct to parse the request body into
+	// Allocate a new ConfirmData struct to parse the admin’s request body into
 	confirmData := new(ConfirmData)
 	// Parse the request body strictly into the ConfirmData struct, enforcing proper JSON structure
 	if err := utils.StrictBodyParser(c, confirmData); err != nil {
-		// Log an error with details to debug parsing issues with the confirmation body
+		// Log an error with details to debug parsing issues with the confirmation body submitted by the admin
 		logger.Log.WithFields(logrus.Fields{
 			"error":  err,
 			"userID": userID,
@@ -822,9 +822,9 @@ func (uc *UserController) DeleteUserByID(c *fiber.Ctx) error {
 			"status": fiber.StatusBadRequest,
 		})
 	}
-	// Create a new validator instance to check the confirmation data against its rules
+	// Create a new validator instance to check the confirmation data against its validation rules
 	validator := utils.NewValidator()
-	// Validate the ConfirmData struct to ensure the "confirm" field is present and true
+	// Validate the ConfirmData struct to ensure the "confirm" field is present and true for the admin’s intent
 	if err := validator.Validate(confirmData); err != nil || !confirmData.Confirm {
 		// Return a 400 Bad Request response if confirmation is missing or false, prompting the admin to confirm
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -833,9 +833,9 @@ func (uc *UserController) DeleteUserByID(c *fiber.Ctx) error {
 		})
 	}
 
-	// Generate a Redis key for rate limiting delete attempts, unique to the authenticated admin user’s UUID
+	// Generate a Redis key for rate limiting admin delete attempts, unique to the authenticated admin’s UUID
 	rateKey := "delete_rate:" + authUserID.String()
-	// Define a constant for the maximum number of delete attempts allowed per hour to prevent abuse
+	// Define a constant for the maximum number of delete attempts allowed per hour by an admin
 	const maxDeletes = 5
 	// Retrieve the current count of delete attempts from Redis for this admin user
 	deletesCount, err := uc.Client.Get(c.Context(), rateKey).Int()
@@ -851,13 +851,13 @@ func (uc *UserController) DeleteUserByID(c *fiber.Ctx) error {
 			"userID": authUserID,
 		}).Warn("Failed to check delete rate limit in Redis")
 	}
-	// Check if the number of delete attempts exceeds the allowed maximum
+	// Check if the number of delete attempts exceeds the allowed maximum for this admin
 	if deletesCount >= maxDeletes {
 		// Log a warning to track admins hitting the rate limit, aiding in monitoring potential abuse
 		logger.Log.WithFields(logrus.Fields{
 			"userID": authUserID,
 		}).Warn("Delete rate limit exceeded")
-		// Return a 429 Too Many Requests response to throttle excessive delete attempts by this admin
+		// Return a 429 Too Many Requests response to throttle excessive deletes by this admin
 		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
 			"errors": []utils.Error{{Field: "delete", Msg: "Too many delete attempts, please try again later"}},
 			"status": fiber.StatusTooManyRequests,
@@ -870,7 +870,7 @@ func (uc *UserController) DeleteUserByID(c *fiber.Ctx) error {
 
 	// Generate a Redis key for the cached user profile, using the target user’s UUID
 	userKey := "user:id:" + userID.String()
-	// Check if the user exists in Redis to optimize performance by avoiding unnecessary DB calls
+	// Check if the user exists in Redis to optimize performance by avoiding unnecessary DB calls for admins
 	exists, err := uc.Client.Exists(c.Context(), userKey).Result()
 	// Handle any Redis errors that might occur during the existence check
 	if err != nil {
@@ -886,7 +886,7 @@ func (uc *UserController) DeleteUserByID(c *fiber.Ctx) error {
 		user, err := uc.userSystem.UserBy("id = ?", userID)
 		// Check if fetching the user failed
 		if err != nil {
-			// Log an error with details to debug database retrieval issues
+			// Log an error with details to debug database retrieval issues for the admin
 			logger.Log.WithFields(logrus.Fields{
 				"error":  err,
 				"userID": userID,
@@ -907,7 +907,7 @@ func (uc *UserController) DeleteUserByID(c *fiber.Ctx) error {
 		}
 		// Check if the user is already soft-deleted by verifying DeletedAt or zero UUID
 		if user.DeletedAt.Valid || user.ID == uuid.Nil {
-			// Log an info message to note an attempt to delete an already soft-deleted user
+			// Log an info message to note an admin attempt to delete an already soft-deleted user
 			logger.Log.WithFields(logrus.Fields{
 				"userID": userID,
 			}).Info("Attempted to delete already soft-deleted user")
@@ -920,11 +920,11 @@ func (uc *UserController) DeleteUserByID(c *fiber.Ctx) error {
 		// No need to cache here since we’re deleting—proceed directly to deletion
 	}
 
-	// Attempt to delete the user from the database (soft delete via GORM’s DeletedAt)
+	// Attempt to delete the user from the database (soft delete via GORM’s DeletedAt) as an admin action
 	err = uc.userSystem.DeleteUser(userID)
 	// Check if deleting the user failed
 	if err != nil {
-		// Log an error with details to investigate why the deletion operation failed
+		// Log an error with details to investigate why the deletion operation failed for the admin
 		logger.Log.WithFields(logrus.Fields{
 			"error":  err,
 			"userID": userID,
@@ -936,7 +936,7 @@ func (uc *UserController) DeleteUserByID(c *fiber.Ctx) error {
 		})
 	}
 
-	// Remove the user’s profile from Redis to ensure no stale data remains after deletion
+	// Remove the user’s profile from Redis to ensure no stale data remains after admin deletion
 	err = uc.Client.Del(c.Context(), userKey).Err()
 	// Check if deleting the cache entry failed
 	if err != nil {
@@ -952,7 +952,7 @@ func (uc *UserController) DeleteUserByID(c *fiber.Ctx) error {
 		"userID":      userID,
 		"adminUserID": authUserID,
 	}).Info("User deleted successfully by admin")
-	// Return a 200 OK response with a clear, user-friendly success message
+	// Return a 200 OK response with a clear, user-friendly success message for the admin
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"message": "User has been deleted successfully",
 		"status":  fiber.StatusOK,
