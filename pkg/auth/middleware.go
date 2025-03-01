@@ -295,15 +295,15 @@ func handleTokenRefresh(c *fiber.Ctx, uc *users.UserSystem, db *gorm.DB, redisCl
 	}
 
 	// Generate a Redis key for the cached user data
-	userKey := "user:id:" + refreshClaims.UserID
+	userKey := "user:id:" + refreshClaims.UserID.String()
 	// Declare a variable to hold the user struct
-	var user *users.User
+	var user *models.User
 	// Attempt to fetch the user from Redis
 	cachedUser, err := redisClient.Get(c.Context(), userKey).Result()
 	// Check if the user is cached in Redis
 	if err == nil {
 		// Unmarshal the cached JSON into a user struct
-		user = &users.User{}
+		user = &models.User{}
 		if err := json.Unmarshal([]byte(cachedUser), user); err != nil {
 			// Log a warning if unmarshaling fails (fallback to DB)
 			logger.Log.WithFields(logrus.Fields{

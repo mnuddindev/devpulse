@@ -224,24 +224,31 @@ func (us *UserSystem) Users() ([]models.User, error) {
 	return users, nil
 }
 
-// Update Users updates user by ID
-func (us *UserSystem) UpdateUser(condition string, userid uuid.UUID, updates interface{}) error {
-	// an empty instance for user model
+// UpdateUser updates a user by condition and returns the updated user
+func (us *UserSystem) UpdateUser(condition string, userid uuid.UUID, updates interface{}) (*models.User, error) {
+	// Declare a user instance to hold the updated data
 	var user models.User
-
-	// delete user data using id
-	if err := us.Crud.Update(&user, condition, []interface{}{userid}, updates); err != nil {
-		// log if failed
+	// Update the user in the database and populate the user struct with the result
+	err := us.Crud.DB.Model(&user).Where(condition, userid).Updates(updates).Select("*").First(&user).Error
+	// Check if the update failed
+	if err != nil {
+		// Log an error with details if the update fails
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
 			"id":    userid,
-		}).Error("Failed to delete user")
-		return errors.New("failed to delete user")
+		}).Error("Failed to update user")
+		// Return nil and a specific error message based on the failure
+		if err == grm.ErrRecordNotFound {
+			return nil, errors.New("user not found")
+		}
+		return nil, errors.New("failed to update user")
 	}
+	// Log a success message with the user ID
 	logger.Log.WithFields(logrus.Fields{
 		"id": userid,
-	}).Info("User updated Successfully!!")
-	return nil
+	}).Info("User updated successfully")
+	// Return the updated user and no error
+	return &user, nil
 }
 
 // UpdateUserMany updates many2many field

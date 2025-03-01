@@ -7,6 +7,7 @@ import (
 	"github.com/mnuddindev/devpulse/pkg/logger"
 	"github.com/mnuddindev/devpulse/pkg/models"
 	"github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 )
 
 // CreateUser creates a new user in the system after validation and password hashing.
@@ -136,22 +137,18 @@ func (us *UserSystem) UpdateNotification(condition string, notid uuid.UUID, upda
 	return nil
 }
 
-// Update Users Notification preferences updates by ID
-func (us *UserSystem) UpdateNotificationPref(condition string, userId uuid.UUID, updates interface{}) error {
-	// an empty instance for user model
-	var notificationpre models.NotificationPrefrences
-
-	// delete user data using id
-	if err := us.Crud.Update(&notificationpre, condition, []interface{}{userId}, updates); err != nil {
-		// log if failed
+func (us *UserSystem) UpdateNotificationPref(condition string, userid uuid.UUID, updates interface{}) (*models.NotificationPrefrences, error) {
+	var prefs models.NotificationPrefrences
+	err := us.Crud.DB.Model(&prefs).Where(condition, userid).Updates(updates).Select("*").First(&prefs).Error
+	if err != nil {
 		logger.Log.WithFields(logrus.Fields{
-			"error":   err,
-			"user_id": userId,
-		}).Error("Failed to update users notification preferences")
-		return errors.New("failed to update users notification preferences")
+			"error": err,
+			"id":    userid,
+		}).Error("Failed to update notification preferences")
+		if err == gorm.ErrRecordNotFound {
+			return nil, errors.New("notification preferences not found")
+		}
+		return nil, errors.New("failed to update notification preferences")
 	}
-	logger.Log.WithFields(logrus.Fields{
-		"user_id": userId,
-	}).Info("Users Notification Preferences updated Successfully!!")
-	return nil
+	return &prefs, nil
 }
