@@ -1775,52 +1775,148 @@ func (uc *UserController) UpdateUserAccount(c *fiber.Ctx) error {
 		})
 }
 
+// DeleteUser deletes the authenticated user's account with Redis optimization
 func (uc *UserController) DeleteUser(c *fiber.Ctx) error {
-	// Get user ID from context
-	userid, ok := c.Locals("user_id").(uuid.UUID)
-	if !ok {
-		logger.Log.WithFields(logrus.Fields{
-			"error": "User ID missing or invalid type in context",
-		}).Warn("Unauthorized access attempt")
-		// Return unauthorized status
+	// Retrieve the raw user ID string from the context, set by RefreshTokenMiddleware during authentication
+	userIDRaw, ok := c.Locals("user_id").(string)
+	// Check if the user ID is missing or not a string, indicating the user isn’t authenticated
+	if !ok || userIDRaw == "" {
+		// Log a warning to track unauthorized access attempts without a valid user ID
+		logger.Log.Warn("DeleteUser attempted without user ID in context")
+		// Return a 401 Unauthorized response with a structured error
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error":  "Unauthorized",
+			"errors": []utils.Error{{Field: "user_id", Msg: "Authentication required"}},
 			"status": fiber.StatusUnauthorized,
 		})
 	}
 
-	// Find user in the database
-	user, err := uc.userSystem.UserBy("id = ?", userid)
+	// Parse the raw user ID string into a UUID for consistent and safe handling
+	userID, err := uuid.Parse(userIDRaw)
+	// Check if parsing the user ID into a UUID failed due to invalid format
 	if err != nil {
-		// Return internal server error status
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to update profile",
+		// Log an error with details to debug invalid user ID formats
+		logger.Log.WithFields(logrus.Fields{
+			"error":  err,
+			"userID": userIDRaw,
+		}).Error("Invalid user ID format in DeleteUser")
+		// Return a 400 Bad Request response with a structured error
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"errors": []utils.Error{{Field: "user_id", Msg: "Invalid user ID format"}},
+			"status": fiber.StatusBadRequest,
 		})
 	}
 
-	if user.ID.String() == "00000000-0000-0000-0000-000000000000" {
+	// Generate a unique Redis key for rate limiting delete actions
+	rateKey := "delete_rate:" + userID.String()
+	// Define the maximum number of delete attempts allowed per hour to prevent abuse
+	const maxDeletes = 5
+	// Attempt to retrieve the current count of delete attempts from Redis for this key
+	deletesCount, err := uc.Client.Get(c.Context(), rateKey).Int()
+	// Check if the rate limit key doesn’t exist in Redis (first delete attempt)
+	if err == redis.Nil {
+		// Set the delete count to 0 since this is the first attempt in the time window
+		deletesCount = 0
+		// Check if Redis returned an unexpected error (not just a missing key)
+	} else if err != nil {
+		// Log a warning to track Redis issues, but proceed without rate limiting as it’s non-critical
 		logger.Log.WithFields(logrus.Fields{
-			"error": "User not found",
-		}).Warn("Unauthorized access attempt")
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"status":  fiber.StatusNotFound,
-			"message": "User not found!!",
+			"error":  err,
+			"userID": userID,
+		}).Warn("Failed to check delete rate limit in Redis")
+	}
+	// Check if the number of delete attempts exceeds the allowed maximum
+	if deletesCount >= maxDeletes {
+		// Log a warning to monitor users hitting the rate limit
+		logger.Log.WithFields(logrus.Fields{
+			"userID": userID,
+		}).Warn("Delete rate limit exceeded")
+		// Return a 429 Too Many Requests response to throttle excessive deletes
+		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+			"errors": []utils.Error{{Field: "delete", Msg: "Too many delete attempts, please try again later"}},
+			"status": fiber.StatusTooManyRequests,
 		})
 	}
+	// Increment the delete counter in Redis to track this attempt
+	uc.Client.Incr(c.Context(), rateKey)
+	// Set a 1-hour TTL on the rate limit key to reset after the time window
+	uc.Client.Expire(c.Context(), rateKey, 1*time.Hour)
 
-	if err := uc.userSystem.DeleteUser(userid); err != nil {
+	// Generate a Redis key for the cached user profile
+	userKey := "user:id:" + userID.String()
+	// Attempt to check if the user exists in Redis cache first
+	exists, err := uc.Client.Exists(c.Context(), userKey).Result()
+	// Check if Redis returned an error (not just a missing key)
+	if err != nil {
+		// Log a warning if Redis fails, but proceed to DB check
 		logger.Log.WithFields(logrus.Fields{
-			"error": "User deletation failed",
-		}).Warn("User can't be deleted")
-		// Return unauthorized status
+			"error":  err,
+			"userID": userID,
+		}).Warn("Failed to check user existence in Redis")
+	}
+	// Check if the user doesn’t exist in Redis (cache miss or deleted)
+	if exists == 0 {
+		// Fetch the user from the database to confirm existence
+		user, err := uc.userSystem.UserBy("id = ?", userID)
+		// Check if fetching the user failed
+		if err != nil {
+			// Log an error with details about the database failure
+			logger.Log.WithFields(logrus.Fields{
+				"error":  err,
+				"userID": userID,
+			}).Error("Failed to fetch user for deletion")
+			// Check if the user wasn’t found in the database
+			if err == gorm.ErrRecordNotFound {
+				// Return a 404 Not Found response with a structured error
+				return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+					"errors": []utils.Error{{Field: "user", Msg: "User not found"}},
+					"status": fiber.StatusNotFound,
+				})
+			}
+			// Return a 500 Internal Server Error for other database issues
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"errors": []utils.Error{{Field: "database", Msg: "Failed to fetch user"}},
+				"status": fiber.StatusInternalServerError,
+			})
+		}
+		// Marshal the user data to cache it in Redis (optional, since we’re deleting)
+		userJSON, _ := json.Marshal(user)
+		uc.Client.Set(c.Context(), userKey, userJSON, 30*time.Minute)
+	}
+
+	// Delete the user from the database
+	err = uc.userSystem.DeleteUser(userID)
+	// Check if deleting the user failed
+	if err != nil {
+		// Log an error with details about the deletion failure
+		logger.Log.WithFields(logrus.Fields{
+			"error":  err,
+			"userID": userID,
+		}).Error("Failed to delete user from database")
+		// Return a 500 Internal Server Error with a structured error
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":  "Unauthorized",
+			"errors": []utils.Error{{Field: "delete", Msg: "Failed to delete user"}},
 			"status": fiber.StatusInternalServerError,
 		})
 	}
 
+	// Invalidate the user’s cache in Redis post-deletion
+	err = uc.Client.Del(c.Context(), userKey).Err()
+	// Check if cache invalidation failed
+	if err != nil {
+		// Log a warning if cache deletion fails, but proceed as DB is the source of truth
+		logger.Log.WithFields(logrus.Fields{
+			"error":  err,
+			"userID": userID,
+		}).Warn("Failed to delete user cache from Redis")
+	}
+
+	// Log a success message indicating the user was deleted
+	logger.Log.WithFields(logrus.Fields{
+		"userID": userID,
+	}).Info("User deleted successfully")
+	// Return a 200 OK response with a success message
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "User deleted successfully",
 		"status":  fiber.StatusOK,
-		"message": "User deleted successfully!!",
 	})
 }
