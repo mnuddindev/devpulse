@@ -83,7 +83,7 @@ func NewRoutes(app *fiber.App, config *config.ServerConfig, system *controllers.
 	// Update another user’s account (admin or moderator)
 	users.Put("/account/update/:userid", auth.PermissionAuth(system.DB, "manage_users", "moderate_content"), system.UserController.UpdateUserByID)
 	// Delete another user’s account (admin only)
-	users.Delete("/account/delete/:userid", auth.PermissionAuth(system.DB, "delete_any_account"), system.UserController.DeleteUserByID)
+	users.Delete("/account/delete/:userid", auth.PermissionAuth(system.DB, "admin"), system.UserController.DeleteUserByID)
 
 	postgroup := authgroup.Group("/posts")
 	postgroup.Post("/", auth.PermissionAuth(system.DB, "create_post"), system.PostController.NewPost)

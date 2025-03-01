@@ -1540,6 +1540,41 @@ func (uc *UserController) BuildProfileResponse(user *models.User, section string
 	case "account":
 		// Return an empty map for account updates, avoiding password exposure
 		return fiber.Map{}
+		// Handle the "public" section for UserByID, exposing only public-facing fields
+	case "public":
+		// Return a map with public user profile fields, excluding sensitive data like email
+		return fiber.Map{
+			"id":                   user.ID,
+			"username":             user.Username,
+			"first_name":           user.FirstName,
+			"last_name":            user.LastName,
+			"bio":                  user.Bio,
+			"avatar_url":           user.AvatarUrl,
+			"job_title":            user.JobTitle,
+			"employer":             user.Employer,
+			"location":             user.Location,
+			"github_url":           user.GithubUrl,
+			"website":              user.Website,
+			"current_learning":     user.CurrentLearning,
+			"available_for":        user.AvailableFor,
+			"currently_hacking_on": user.CurrentlyHackingOn,
+			"pronouns":             user.Pronouns,
+			"education":            user.Education,
+			"brand_color":          user.BrandColor,
+			"posts_count":          user.PostsCount,
+			"comments_count":       user.CommentsCount,
+			"likes_count":          user.LikesCount,
+			"bookmarks_count":      user.BookmarksCount,
+			"last_seen":            user.LastSeen,
+			"created_at":           user.CreatedAt,
+			"updated_at":           user.UpdatedAt,
+			"skills":               user.Skills,
+			"interests":            user.Interests,
+			"badges":               user.Badges,
+			"roles":                user.Roles,
+			"followers":            user.Followers,
+			"following":            user.Following,
+		}
 	// Default case returns the full profile response for unrecognized sections
 	default:
 		// Return a comprehensive map with all user profile fields except sensitive relations
@@ -1656,7 +1691,7 @@ func (uc *UserController) UpdateUserNotificationsPref(c *fiber.Ctx) error {
 		})
 	}
 	// Call the helper function to process the update for the "notifications" section
-	return uc.updateUserProfileHelper(c, "notifications",
+	return uc.UpdateUserProfileHelper(c, "notifications",
 		// Pass the update data to the helper
 		updateData,
 		// Define a validation function using the utils validator, returning *ErrorResponse
