@@ -73,6 +73,7 @@ func NewRoutes(app *fiber.App, config *config.ServerConfig, system *controllers.
 
 	// protected routes
 	users := authgroup.Group("/users")
+	// follower management system routes
 	users.Post("/:userid/follow", auth.PermissionAuth(system.DB, "create_post"), system.UserController.FollowUser)
 	// Unfollow a user (any authenticated user)
 	users.Delete("/:userid/unfollow", auth.PermissionAuth(system.DB, "create_post"), system.UserController.UnfollowUser)
@@ -84,20 +85,47 @@ func NewRoutes(app *fiber.App, config *config.ServerConfig, system *controllers.
 	users.Put("/account/update/:userid", auth.PermissionAuth(system.DB, "manage_users", "moderate_content"), system.UserController.UpdateUserByID)
 	// Delete another user’s account (admin only)
 	users.Delete("/account/delete/:userid", auth.PermissionAuth(system.DB, "admin"), system.UserController.DeleteUserByID)
-	// Create brand new permission type
+
+	// Permission Management Routes
+	// POST /users/permissions - Create a new permission, restricted to admins
 	users.Post("/permissions", auth.PermissionAuth(system.DB, "manage_users", "moderate_content"), system.UserController.CreatePermission)
-	// retrieves a user's permissions
+	// GET /users/permissions/:permission_id - Retrieve a specific permission’s details, restricted to admins
 	users.Get("/permissions/:permission_id", auth.PermissionAuth(system.DB, "manage_users", "moderate_content"), system.UserController.GetPermission)
-	// retrieves a list of all roles, accessible by admins
+	// GET /users/permissions - List all permissions, restricted to admins
 	users.Get("/permissions", auth.PermissionAuth(system.DB, "manage_users", "moderate_content"), system.UserController.ListPermissions)
-	// modifies an existing permission’s name, restricted to admins
+	// PATCH /users/permissions/:permission_id - Update a permission’s name, restricted to admins
 	users.Patch("/permissions/:permission_id", auth.PermissionAuth(system.DB, "manage_users", "moderate_content"), system.UserController.UpdatePermission)
-	// deletes permission from db
+	// DELETE /users/permissions/:permission_id - Delete a permission, restricted to admins with confirmation
 	users.Delete("/permissions/:permission_id", auth.PermissionAuth(system.DB, "manage_users", "moderate_content"), system.UserController.DeletePermission)
 	// assigns a permission to a role, restricted to admins
+
+	// Role Management Routes
+	// POST /users/roles - Create a new role, restricted to admins with manage_users or moderate_content
+	users.Post("/roles", auth.PermissionAuth(system.DB, "manage_users", "moderate_content"), system.UserController.CreateRole)
+	// GET /users/roles/:role_id - Retrieve a specific role’s details, restricted to admins
+	users.Get("/roles/:role_id", auth.PermissionAuth(system.DB, "manage_users", "moderate_content"), system.UserController.GetRole)
+	// GET /users/roles - List all roles, restricted to admins
+	users.Get("/roles", auth.PermissionAuth(system.DB, "manage_users", "moderate_content"), system.UserController.ListRoles)
+	// PATCH /users/roles/:role_id - Update a role’s name, restricted to admins
+	users.Patch("/roles/:role_id", auth.PermissionAuth(system.DB, "manage_users", "moderate_content"), system.UserController.UpdateRole)
+	// DELETE /users/roles/:role_id - Delete a role, restricted to admins with confirmation
+	users.Delete("/roles/:role_id", auth.PermissionAuth(system.DB, "manage_users", "moderate_content"), system.UserController.DeleteRole)
+
+	// Role-Permission Management Routes
+	// POST /users/roles/permissions/add - Assign a permission to a role, restricted to admins
 	users.Post("/roles/permissions/add", auth.PermissionAuth(system.DB, "manage_users", "moderate_content"), system.UserController.AddPermissionToRole)
-	// removes a permission from a role, restricted to admins with confirmation
+	// DELETE /users/roles/permissions/remove - Remove a permission from a role, restricted to admins with confirmation
 	users.Delete("/roles/permissions/remove", auth.PermissionAuth(system.DB, "manage_users", "moderate_content"), system.UserController.RemovePermissionFromRole)
+
+	// Existing User-Role Management Routes (for completeness)
+	// POST /users/roles/add - Assign a role to a user
+	users.Post("/roles/add", auth.PermissionAuth(system.DB, "manage_users", "moderate_content"), system.UserController.AddRoleToUser)
+	// GET /users/permissions/:user_id - Retrieve a user’s permissions (admin or self)
+	users.Get("/permissions/:user_id", auth.PermissionAuth(system.DB, "manage_users", "moderate_content", "view_self_permissions"), system.UserController.GetUserPermissions)
+	// PUT /users/roles/update-permissions - Update a user’s role permissions
+	users.Put("/roles/update-permissions", auth.PermissionAuth(system.DB, "manage_users", "moderate_content"), system.UserController.UpdateUserRolePermissions)
+	// DELETE /users/roles/remove - Remove a role from a user
+	users.Delete("/roles/remove", auth.PermissionAuth(system.DB, "manage_users", "moderate_content"), system.UserController.RemoveRoleFromUser)
 
 	postgroup := authgroup.Group("/posts")
 	postgroup.Post("/", auth.PermissionAuth(system.DB, "create_post"), system.PostController.NewPost)
