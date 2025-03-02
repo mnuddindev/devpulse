@@ -89,9 +89,9 @@ func (us *UserSystem) UpdatePermission(condition string, permissionID uuid.UUID,
 }
 
 // DeletePermission deletes a permission from the database
-func (us *UserSystem) DeletePermission(permission *models.Permission) error {
+func (us *UserSystem) DeletePermission(permission *models.Permission, condition string, pid uuid.UUID) error {
 	// Attempt to delete the permission from the database using the Crud system (assumes soft delete if configured)
-	err := us.Crud.Delete(permission, "", []interface{}{})
+	err := us.Crud.Delete(permission, condition, []interface{}{pid})
 	// Check if an error occurred during the deletion process
 	if err != nil {
 		// Log an error with details to debug the failure to delete the permission

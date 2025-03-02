@@ -85,6 +85,14 @@ func NewRoutes(app *fiber.App, config *config.ServerConfig, system *controllers.
 	// Delete another user’s account (admin only)
 	users.Delete("/account/delete/:userid", auth.PermissionAuth(system.DB, "admin"), system.UserController.DeleteUserByID)
 
+	users.Post("/permissions", auth.PermissionAuth(system.DB, "manage_users", "moderate_content"), system.UserController.CreatePermission)
+	users.Get("/permissions/:permission_id", auth.PermissionAuth(system.DB, "manage_users", "moderate_content"), system.UserController.GetPermission)
+	users.Get("/permissions", auth.PermissionAuth(system.DB, "manage_users", "moderate_content"), system.UserController.ListPermissions)
+	users.Patch("/permissions/:permission_id", auth.PermissionAuth(system.DB, "manage_users", "moderate_content"), system.UserController.UpdatePermission)
+	users.Delete("/permissions/:permission_id", auth.PermissionAuth(system.DB, "manage_users", "moderate_content"), system.UserController.DeletePermission)
+	users.Post("/roles/permissions/add", auth.PermissionAuth(system.DB, "manage_users", "moderate_content"), system.UserController.AddPermissionToRole)
+	users.Delete("/roles/permissions/remove", auth.PermissionAuth(system.DB, "manage_users", "moderate_content"), system.UserController.RemovePermissionFromRole)
+
 	postgroup := authgroup.Group("/posts")
 	postgroup.Post("/", auth.PermissionAuth(system.DB, "create_post"), system.PostController.NewPost)
 

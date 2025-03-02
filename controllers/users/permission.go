@@ -858,7 +858,7 @@ func (uc *UserController) DeletePermission(c *fiber.Ctx) error {
 	}
 
 	// Attempt to delete the permission from the database (assuming soft delete via Crud or GORM configuration)
-	if err := uc.userSystem.Crud.Delete(permission); err != nil {
+	if err := uc.userSystem.DeletePermission(permission, "id = ?", permissionID); err != nil {
 		// Log an error with details if the database operation to delete the permission fails
 		logger.Log.WithFields(logrus.Fields{
 			"error":        err,
