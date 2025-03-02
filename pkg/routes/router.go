@@ -84,13 +84,19 @@ func NewRoutes(app *fiber.App, config *config.ServerConfig, system *controllers.
 	users.Put("/account/update/:userid", auth.PermissionAuth(system.DB, "manage_users", "moderate_content"), system.UserController.UpdateUserByID)
 	// Delete another user’s account (admin only)
 	users.Delete("/account/delete/:userid", auth.PermissionAuth(system.DB, "admin"), system.UserController.DeleteUserByID)
-
+	// Create brand new permission type
 	users.Post("/permissions", auth.PermissionAuth(system.DB, "manage_users", "moderate_content"), system.UserController.CreatePermission)
+	// retrieves a user's permissions
 	users.Get("/permissions/:permission_id", auth.PermissionAuth(system.DB, "manage_users", "moderate_content"), system.UserController.GetPermission)
+	// retrieves a list of all roles, accessible by admins
 	users.Get("/permissions", auth.PermissionAuth(system.DB, "manage_users", "moderate_content"), system.UserController.ListPermissions)
+	// modifies an existing permission’s name, restricted to admins
 	users.Patch("/permissions/:permission_id", auth.PermissionAuth(system.DB, "manage_users", "moderate_content"), system.UserController.UpdatePermission)
+	// deletes permission from db
 	users.Delete("/permissions/:permission_id", auth.PermissionAuth(system.DB, "manage_users", "moderate_content"), system.UserController.DeletePermission)
+	// assigns a permission to a role, restricted to admins
 	users.Post("/roles/permissions/add", auth.PermissionAuth(system.DB, "manage_users", "moderate_content"), system.UserController.AddPermissionToRole)
+	// removes a permission from a role, restricted to admins with confirmation
 	users.Delete("/roles/permissions/remove", auth.PermissionAuth(system.DB, "manage_users", "moderate_content"), system.UserController.RemovePermissionFromRole)
 
 	postgroup := authgroup.Group("/posts")
