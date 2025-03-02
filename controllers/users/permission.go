@@ -124,7 +124,7 @@ func (uc *UserController) CreatePermission(c *fiber.Ctx) error {
 		Name: req.Name,
 	}
 	// Attempt to create the permission in the database using the Crud system
-	if err := uc.userSystem.Crud.Create(&permission); err != nil {
+	if err := uc.userSystem.CreatePermission(&permission); err != nil {
 		// Log an error with details if the database operation to create the permission fails (e.g., unique constraint violation)
 		logger.Log.WithFields(logrus.Fields{
 			"error": err,
@@ -266,7 +266,7 @@ func (uc *UserController) GetPermission(c *fiber.Ctx) error {
 	}
 	// Check if the permission wasn’t found in Redis (cache miss) or if unmarshaling failed
 	if err == redis.Nil || permission == nil {
-		// Fetch the permission from the database using the provided permission ID
+		// Fetch the permission from the database using the PermissionBy function
 		permission, err = uc.userSystem.PermissionBy("id = ?", permissionID)
 		// Check if fetching the permission failed
 		if err != nil {
