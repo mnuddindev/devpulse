@@ -17,6 +17,13 @@ import (
 
 // Registration handles user registration, assigns the "member" role, and caches data in Redis
 func (uc *UserController) Registration(c *fiber.Ctx) error {
+	if uc.userSystem == nil {
+		logger.Log.Error("userSystem is nil in UserController")
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":  "Internal server error: userSystem not initialized",
+			"status": fiber.StatusInternalServerError,
+		})
+	}
 	// Declare a variable to hold the user data from the request body
 	var user models.User
 	// Parse the request body into the user struct, strictly validating the structure

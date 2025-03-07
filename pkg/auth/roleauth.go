@@ -3,12 +3,13 @@ package auth
 import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/mnuddindev/devpulse/pkg/models"
+	ucc "github.com/mnuddindev/devpulse/pkg/services/users"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
 // PermissionAuth restricts access to users with specific permissions, allowing admins full access
-func PermissionAuth(db *gorm.DB, requiredPerms ...string) fiber.Handler {
+func PermissionAuth(db *gorm.DB, uc *ucc.UserSystem, requiredPerms ...string) fiber.Handler {
 	// Return a Fiber handler function that processes the permission check
 	return func(c *fiber.Ctx) error {
 		// Attempt to retrieve permissions from the context, expecting a []string type set by prior middleware
@@ -17,17 +18,16 @@ func PermissionAuth(db *gorm.DB, requiredPerms ...string) fiber.Handler {
 		if !ok {
 			// Retrieve the user ID from the context, assuming it’s a string set by earlier middleware (e.g., JWT auth)
 			userID := c.Locals("user_id").(string)
-			// Declare a User variable to hold the fetched user data from the database
-			var user models.User
 			// Query the database for the user by ID, preloading roles and their permissions for a complete check
-			if err := db.Preload("Roles.Permissions").Where("id = ?", userID).First(&user).Error; err != nil {
+			user, err := uc.UserBy("id = ?", []interface{}{userID})
+			if err != nil {
 				// Log a warning if the user isn’t found in the database during the fallback check
 				logrus.Warn("User not found in database fallback")
 				// Return a 403 Forbidden response if the user doesn’t exist, preventing further processing
 				return c.Status(fiber.StatusForbidden).JSON(fiber.Map{"error": "User not found"})
 			}
 			// Extract permissions from the user’s roles using the helper function
-			perms = getUserPermissions(&user)
+			perms = getUserPermissions(user)
 			// Store the fetched permissions back in the context for use in subsequent handlers
 			c.Locals("permissions", perms)
 		}

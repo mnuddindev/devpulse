@@ -23,6 +23,8 @@ type UserController struct {
 
 func NewUserController(userSystem *users.UserSystem, db *gorm.DB, client *redis.Client) *UserController {
 	return &UserController{
+		DB:         db,
+		Client:     client,
 		userSystem: userSystem,
 	}
 }
