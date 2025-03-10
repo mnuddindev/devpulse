@@ -14,18 +14,28 @@ import (
 	fiblog "github.com/gofiber/fiber/v2/middleware/logger"
 )
 
+type LogLevel string
+
+const (
+	LevelDebug LogLevel = "DEBUG"
+	LevelInfo  LogLevel = "INFO"
+	LevelWarn  LogLevel = "WARN"
+	LevelError LogLevel = "ERRORs"
+)
+
 // LogEntry represents a structured log entry in JSON.
 type LogEntry struct {
-	TimeStamp string `json:"timestamp"`
-	Level     string `json:"level"`
-	RequestID string `json:"request_id,omitempty"`
-	UserID    string `json:"user_id,omitempty"`
-	Message   string `json:"message"`
-	Path      string `json:"path,omitempty"`
-	Method    string `json:"method,omitempty"`
-	Status    int    `json:"status,omitempty"`
-	Latency   string `json:"latency,omitempty"`
-	Error     string `json:"error,omitempty"`
+	TimeStamp string            `json:"timestamp"`
+	Level     string            `json:"level"`
+	RequestID string            `json:"request_id,omitempty"`
+	UserID    string            `json:"user_id,omitempty"`
+	Message   string            `json:"message"`
+	Path      string            `json:"path,omitempty"`
+	Method    string            `json:"method,omitempty"`
+	Status    int               `json:"status,omitempty"`
+	Latency   string            `json:"latency,omitempty"`
+	Error     string            `json:"error,omitempty"`
+	Meta      map[string]string `json:"meta,omitempty"`
 }
 
 // Logger manages structured logging with rotation and color
@@ -35,10 +45,13 @@ type Logger struct {
 	TimeFormat string
 	OutputDir  string
 	MaxSizeMB  int
+	MaxAgeDays int
 	File       *os.File
 	FileSize   int64
 	Log        *log.Logger
 	FiberLog   fiber.Handler
+	Queue      chan LogEntry
+	Quit       chan struct{}
 }
 
 // LoggerOption defines a function to configure the logger.
@@ -50,6 +63,9 @@ func NewLogger(opts ...LoggerOption) (*Logger, error) {
 		TimeFormat: time.RFC3339,
 		OutputDir:  "./logs",
 		MaxSizeMB:  10,
+		MaxAgeDays: 7,
+		Queue:      make(chan LogEntry, 1000),
+		Quit:       make(chan struct{}),
 	}
 
 	// Apply options to the logger
@@ -74,6 +90,10 @@ func NewLogger(opts ...LoggerOption) (*Logger, error) {
 		TimeFormat: l.TimeFormat,
 		Output:     file,
 	})
+
+	go l.Worker()
+
+	l.CleanupOldLogs()
 
 	return l, nil
 }

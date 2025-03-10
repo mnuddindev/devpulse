@@ -3,6 +3,8 @@ package logger
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -23,9 +25,14 @@ func WithOutputDir(dir string) LoggerOption {
 	return func(l *Logger) { l.OutputDir = dir }
 }
 
-// WithMaxFileSize sets the maximum size of single Log file.
+// WithMaxFileSize sets the maxiMum size of single Log file.
 func WithMaxFileSize(size int) LoggerOption {
 	return func(l *Logger) { l.MaxSizeMB = size }
+}
+
+// WithMaxDays sets the maxiMum age for the log files.
+func WithMaxDays(days int) LoggerOption {
+	return func(l *Logger) { l.MaxAgeDays = days }
 }
 
 // Info logs an info-level message with context.
@@ -68,4 +75,41 @@ func (l *Logger) LogWithLevel(ctx context.Context, level, msg string, fields ...
 	}
 
 	l.WriteEntry(entry)
+}
+
+// Worker processes the async logging queue.
+func (l *Logger) Worker() {
+	for {
+		select {
+		case entry := <-l.Queue:
+			l.WriteEntry(entry)
+		case <-l.Quit:
+			for len(l.Queue) > 0 {
+				l.WriteEntry(<-l.Queue)
+			}
+			return
+		}
+	}
+}
+
+// CleanupOldLogs removes log files older than maxAgeDays.
+func (l *Logger) CleanupOldLogs() {
+	l.Mu.Lock()
+	defer l.Mu.Unlock()
+
+	files, err := filepath.Glob(filepath.Join(l.OutputDir, os.Getenv("APP")+"-*.log"))
+	if err != nil {
+		return
+	}
+
+	now := time.Now()
+	for _, file := range files {
+		info, err := os.Stat(file)
+		if err != nil {
+			continue
+		}
+		if now.Sub(info.ModTime()).Hours()/24 > float64(l.MaxAgeDays) {
+			os.Remove(file)
+		}
+	}
 }
