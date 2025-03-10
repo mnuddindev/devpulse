@@ -15,6 +15,7 @@ import (
 )
 
 type LogLevel string
+type Map map[string]string
 
 const (
 	LevelDebug LogLevel = "DEBUG"
@@ -25,17 +26,17 @@ const (
 
 // LogEntry represents a structured log entry in JSON.
 type LogEntry struct {
-	TimeStamp string            `json:"timestamp"`
-	Level     string            `json:"level"`
-	RequestID string            `json:"request_id,omitempty"`
-	UserID    string            `json:"user_id,omitempty"`
-	Message   string            `json:"message"`
-	Path      string            `json:"path,omitempty"`
-	Method    string            `json:"method,omitempty"`
-	Status    int               `json:"status,omitempty"`
-	Latency   string            `json:"latency,omitempty"`
-	Error     string            `json:"error,omitempty"`
-	Meta      map[string]string `json:"meta,omitempty"`
+	TimeStamp string `json:"timestamp"`
+	Level     string `json:"level"`
+	RequestID string `json:"request_id,omitempty"`
+	UserID    string `json:"user_id,omitempty"`
+	Message   string `json:"message"`
+	Path      string `json:"path,omitempty"`
+	Method    string `json:"method,omitempty"`
+	Status    int    `json:"status,omitempty"`
+	Latency   string `json:"latency,omitempty"`
+	Error     string `json:"error,omitempty"`
+	Meta      Map    `json:"meta,omitempty"`
 }
 
 // Logger manages structured logging with rotation and color

@@ -10,6 +10,16 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+// LogBuilder builds a log entry with a fluent interface.
+type LogBuilder struct {
+	Logger *Logger
+	Ctx    context.Context
+	Level  LogLevel
+	Msg    string
+	Meta   Map
+	Fields []interface{}
+}
+
 // WithFormat sets the Fiber logger format.
 func WithFormat(format string) LoggerOption {
 	return func(l *Logger) { l.Format = format }
@@ -35,51 +45,63 @@ func WithMaxDays(days int) LoggerOption {
 	return func(l *Logger) { l.MaxAgeDays = days }
 }
 
-// Debug logs a debug-level message with context and optional metadata.
-func (l *Logger) Debug(ctx context.Context, msg string, meta map[string]string, fields ...interface{}) {
-	l.LogWithLevel(ctx, LevelDebug, msg, meta, fields...)
+// Debug starts a debug-level log entry.
+func (l *Logger) Debug(ctx context.Context) *LogBuilder {
+	return &LogBuilder{Logger: l, Ctx: ctx, Level: LevelDebug}
 }
 
-// Info logs an info-level message with context and optional metadata.
-func (l *Logger) Info(ctx context.Context, msg string, meta map[string]string, fields ...interface{}) {
-	l.LogWithLevel(ctx, LevelInfo, msg, meta, fields...)
+// Info starts an info-level log entry.
+func (l *Logger) Info(ctx context.Context) *LogBuilder {
+	return &LogBuilder{Logger: l, Ctx: ctx, Level: LevelInfo}
 }
 
-// Warn logs a warn-level message with context and optional metadata.
-func (l *Logger) Warn(ctx context.Context, msg string, meta map[string]string, fields ...interface{}) {
-	l.LogWithLevel(ctx, LevelWarn, msg, meta, fields...)
+// Warn starts a warn-level log entry.
+func (l *Logger) Warn(ctx context.Context) *LogBuilder {
+	return &LogBuilder{Logger: l, Ctx: ctx, Level: LevelWarn}
 }
 
-// Error logs an error-level message with context and optional metadata.
-func (l *Logger) Error(ctx context.Context, msg string, meta map[string]string, fields ...interface{}) {
-	l.LogWithLevel(ctx, LevelError, msg, meta, fields...)
+// Error starts an error-level log entry.
+func (l *Logger) Error(ctx context.Context) *LogBuilder {
+	return &LogBuilder{Logger: l, Ctx: ctx, Level: LevelError}
+}
+
+// WithMeta adds metadata to the log entry.
+func (b *LogBuilder) WithMeta(meta Map) *LogBuilder {
+	b.Meta = meta
+	return b
+}
+
+// WithFields adds formatted fields to the message.
+func (b *LogBuilder) WithFields(fields ...interface{}) *LogBuilder {
+	b.Fields = fields
+	return b
 }
 
 // LogWithLevel logs a message with the specified level and context.
-func (l *Logger) LogWithLevel(ctx context.Context, level LogLevel, msg string, meta map[string]string, fields ...interface{}) {
+func (b *LogBuilder) Logs(msg string) {
 	entry := LogEntry{
-		TimeStamp: time.Now().Format(l.TimeFormat),
-		Level:     string(level),
-		Message:   fmt.Sprintf(msg, fields...),
+		TimeStamp: time.Now().Format(b.Logger.TimeFormat),
+		Level:     string(b.Level),
+		Message:   fmt.Sprintf(msg, b.Fields...),
 	}
 
 	// Extract request context
-	if reqID, ok := ctx.Value("request_id").(string); ok {
+	if reqID, ok := b.Ctx.Value("request_id").(string); ok {
 		entry.RequestID = reqID
 	}
-	if userID, ok := ctx.Value("user_id").(string); ok {
+	if userID, ok := b.Ctx.Value("user_id").(string); ok {
 		entry.UserID = userID
 	}
 
 	// Add Fiber-specific fields if available
-	if c, ok := ctx.Value("fiber_ctx").(*fiber.Ctx); ok {
+	if c, ok := b.Ctx.Value("fiber_ctx").(*fiber.Ctx); ok {
 		entry.Path = c.Path()
 		entry.Method = c.Method()
 		entry.Status = c.Response().StatusCode()
 		entry.Latency = time.Since(c.Context().Time()).String()
 	}
 
-	l.Queue <- entry
+	b.Logger.Queue <- entry
 }
 
 // Worker processes the async logging queue.
