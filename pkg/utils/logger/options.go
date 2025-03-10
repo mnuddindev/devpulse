@@ -35,26 +35,31 @@ func WithMaxDays(days int) LoggerOption {
 	return func(l *Logger) { l.MaxAgeDays = days }
 }
 
-// Info logs an info-level message with context.
-func (l *Logger) Info(ctx context.Context, msg string, fields ...interface{}) {
-	l.LogWithLevel(ctx, "INFO", msg, fields...)
+// Debug logs a debug-level message with context and optional metadata.
+func (l *Logger) Debug(ctx context.Context, msg string, meta map[string]string, fields ...interface{}) {
+	l.LogWithLevel(ctx, LevelDebug, msg, meta, fields...)
 }
 
-// Error logs an error-level message with context.
-func (l *Logger) Error(ctx context.Context, msg string, fields ...interface{}) {
-	l.LogWithLevel(ctx, "ERROR", msg, fields...)
+// Info logs an info-level message with context and optional metadata.
+func (l *Logger) Info(ctx context.Context, msg string, meta map[string]string, fields ...interface{}) {
+	l.LogWithLevel(ctx, LevelInfo, msg, meta, fields...)
 }
 
-// Error logs an error-level message with context.
-func (l *Logger) Warning(ctx context.Context, msg string, fields ...interface{}) {
-	l.LogWithLevel(ctx, "WARNING", msg, fields...)
+// Warn logs a warn-level message with context and optional metadata.
+func (l *Logger) Warn(ctx context.Context, msg string, meta map[string]string, fields ...interface{}) {
+	l.LogWithLevel(ctx, LevelWarn, msg, meta, fields...)
+}
+
+// Error logs an error-level message with context and optional metadata.
+func (l *Logger) Error(ctx context.Context, msg string, meta map[string]string, fields ...interface{}) {
+	l.LogWithLevel(ctx, LevelError, msg, meta, fields...)
 }
 
 // LogWithLevel logs a message with the specified level and context.
-func (l *Logger) LogWithLevel(ctx context.Context, level, msg string, fields ...interface{}) {
+func (l *Logger) LogWithLevel(ctx context.Context, level LogLevel, msg string, meta map[string]string, fields ...interface{}) {
 	entry := LogEntry{
 		TimeStamp: time.Now().Format(l.TimeFormat),
-		Level:     level,
+		Level:     string(level),
 		Message:   fmt.Sprintf(msg, fields...),
 	}
 
@@ -74,7 +79,7 @@ func (l *Logger) LogWithLevel(ctx context.Context, level, msg string, fields ...
 		entry.Latency = time.Since(c.Context().Time()).String()
 	}
 
-	l.WriteEntry(entry)
+	l.Queue <- entry
 }
 
 // Worker processes the async logging queue.

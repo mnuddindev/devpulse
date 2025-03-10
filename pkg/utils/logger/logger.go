@@ -149,21 +149,20 @@ func (l *Logger) WriteEntry(entry LogEntry) error {
 
 	var colorPrefix, colorReset string
 	switch entry.Level {
-	case "INFO":
+	case string(LevelDebug):
+		colorPrefix = "\033[36m" // Cyan
+	case string(LevelInfo):
 		colorPrefix = "\033[32m" // Green
-	case "ERROR":
+	case string(LevelWarn):
+		colorPrefix = "\033[33m" // Yellow
+	case string(LevelError):
 		colorPrefix = "\033[31m" // Red
-	case "WARNING":
-		colorPrefix = "" // Yellow
 	default:
-		colorPrefix = "\033[0m" // Red
+		colorPrefix = "\033[0m" // Reset
 	}
 	colorReset = "\033[0m"
 
-	// Write to file (JSON only, no color in file)
 	l.Log.Output(2, string(data))
-
-	// Write to terminal with color
 	fmt.Fprintf(os.Stdout, "%s%s%s\n", colorPrefix, string(data), colorReset)
 
 	return nil
@@ -208,4 +207,12 @@ func SetupLogger(l *Logger) fiber.Handler {
 		c.SetUserContext(ctx)
 		return c.Next()
 	}
+}
+
+// Close shuts down the logger gracefully.
+func (l *Logger) Close() {
+	close(l.Quit)
+	l.Mu.Lock()
+	l.File.Close()
+	l.Mu.Unlock()
 }
