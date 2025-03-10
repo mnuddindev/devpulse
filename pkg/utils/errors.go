@@ -1,73 +1,94 @@
+// Package utils provides utility functions for the BlogBlaze application.
 package utils
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/gofiber/fiber/v2"
 )
 
-// CustomError represents a structured error for the web page
+// Error represents a structured error for the web app.
 type CustomError struct {
-	Status  int    `json:"status"`
+	Code    int    `json:"code"`
 	Message string `json:"message"`
-	Details string `json:"details"`
+	Details string `json:"details,omitempty"`
 }
 
-// NewError creates a new CustomError with a status code and message
+// NewError creates a new Error with a status code, message, and optional details.
 func NewError(code int, message string, details ...string) *CustomError {
-	ce := &CustomError{
-		Status:  code,
+	e := &CustomError{
+		Code:    code,
 		Message: message,
 	}
 	if len(details) > 0 {
-		ce.Details = details[0]
+		e.Details = details[0]
 	}
-	return ce
+	return e
 }
 
-// Error implements the error interface
-func (ce *CustomError) Error() string {
-	return fmt.Sprintf("status %d: %s", ce.Status, ce.Message)
+// Error implements the error interface.
+func (e *CustomError) Error() string {
+	return fmt.Sprintf("status %d: %s", e.Code, e.Message)
 }
 
-// Common error types for reuse
+// WithCause attaches underlying details to the error (renamed from your intent).
+func (e *CustomError) WithCause(err error) *CustomError {
+	if err != nil {
+		e.Details = err.Error()
+	}
+	return e
+}
+
+// Common error types for reuse.
 var (
-	ErrBadRequest     = NewError(fiber.StatusBadRequest, "Invalid request")
-	ErrUnauthorized   = NewError(fiber.StatusUnauthorized, "Unauthorized")
-	ErrForbidden      = NewError(fiber.StatusForbidden, "Forbidden")
-	ErrNotFound       = NewError(fiber.StatusNotFound, "Resource not found")
-	ErrInternalServer = NewError(fiber.StatusInternalServerError, "Internal server error")
+	ErrBadRequest          = NewError(fiber.StatusBadRequest, "Invalid request")
+	ErrUnauthorized        = NewError(fiber.StatusUnauthorized, "Unauthorized")
+	ErrForbidden           = NewError(fiber.StatusForbidden, "Forbidden")
+	ErrNotFound            = NewError(fiber.StatusNotFound, "Resource not found")
+	ErrInternalServerError = NewError(fiber.StatusInternalServerError, "Internal server error")
 )
 
-// HandleError sends a standardized error response using GoFiber
+// HandleError sends a standardized error response using GoFiber.
 func HandleError(c *fiber.Ctx, err error) error {
-	var CustomErr *CustomError
+	var appErr *CustomError
 
-	// Check is the error is already a CustomError
-	if errors.As(err, &CustomErr) {
-		if CustomErr.Status >= 500 {
-			CustomErr.Details = ""
+	if As(err, &appErr) {
+		if appErr.Code >= 500 {
+			appErr.Details = ""
 		}
-		return c.Status(CustomErr.Status).JSON(fiber.Map{
+		return c.Status(appErr.Code).JSON(fiber.Map{
 			"error": fiber.Map{
-				"status":  CustomErr.Status,
-				"message": CustomErr.Message,
-				"details": CustomErr.Details,
+				"code":    appErr.Code,
+				"message": appErr.Message,
+				"details": appErr.Details,
 			},
 		})
 	}
 
-	// Fallback call for unhandled errors
+	// Fallback for unhandled errors
 	return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 		"error": fiber.Map{
-			"status":  fiber.StatusInternalServerError,
+			"code":    fiber.StatusInternalServerError,
 			"message": "Something went wrong",
 		},
 	})
 }
 
-// WrapError wraps an existing error with a custom status and message
+// WrapError wraps an existing error with a custom status and message.
 func WrapError(err error, code int, message string) *CustomError {
 	return NewError(code, message, err.Error())
+}
+
+// As is a helper to unwrap errors (replacing errors.As for clarity in this package).
+func As(err error, target interface{}) bool {
+	if err == nil {
+		return false
+	}
+	if e, ok := err.(*CustomError); ok {
+		if t, ok := target.(**CustomError); ok {
+			*t = e
+			return true
+		}
+	}
+	return false
 }
