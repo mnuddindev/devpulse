@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/mnuddindev/devpulse/pkg/utils"
 )
 
 // LogBuilder builds a log entry with a fluent interface.
@@ -16,7 +17,7 @@ type LogBuilder struct {
 	Ctx    context.Context
 	Level  LogLevel
 	Msg    string
-	Meta   Map
+	Meta   utils.Map
 	Fields []interface{}
 }
 
@@ -66,7 +67,7 @@ func (l *Logger) Error(ctx context.Context) *LogBuilder {
 }
 
 // WithMeta adds metadata to the log entry.
-func (b *LogBuilder) WithMeta(meta Map) *LogBuilder {
+func (b *LogBuilder) WithMeta(meta utils.Map) *LogBuilder {
 	b.Meta = meta
 	return b
 }
@@ -120,23 +121,31 @@ func (l *Logger) Worker() {
 }
 
 // CleanupOldLogs removes log files older than maxAgeDays.
-func (l *Logger) CleanupOldLogs() {
+func (l *Logger) CleanupOldLogs(ctx context.Context) error {
 	l.Mu.Lock()
 	defer l.Mu.Unlock()
 
 	files, err := filepath.Glob(filepath.Join(l.OutputDir, os.Getenv("APP")+"-*.log"))
 	if err != nil {
-		return
+		return nil
 	}
 
 	now := time.Now()
 	for _, file := range files {
-		info, err := os.Stat(file)
-		if err != nil {
-			continue
-		}
-		if now.Sub(info.ModTime()).Hours()/24 > float64(l.MaxAgeDays) {
-			os.Remove(file)
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("log cleanup canceled: %w", ctx.Err())
+		default:
+			info, err := os.Stat(file)
+			if err != nil {
+				continue
+			}
+			if now.Sub(info.ModTime()).Hours()/24 > float64(l.MaxAgeDays) {
+				if err := os.Remove(file); err != nil {
+					return fmt.Errorf("failed to remove old log file %s: %w", file, err)
+				}
+			}
 		}
 	}
+	return nil
 }

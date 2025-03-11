@@ -12,10 +12,10 @@ import (
 
 	"github.com/gofiber/fiber/v2"
 	fiblog "github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/mnuddindev/devpulse/pkg/utils"
 )
 
 type LogLevel string
-type Map map[string]string
 
 const (
 	LevelDebug LogLevel = "DEBUG"
@@ -26,17 +26,17 @@ const (
 
 // LogEntry represents a structured log entry in JSON.
 type LogEntry struct {
-	TimeStamp string `json:"timestamp"`
-	Level     string `json:"level"`
-	RequestID string `json:"request_id,omitempty"`
-	UserID    string `json:"user_id,omitempty"`
-	Message   string `json:"message"`
-	Path      string `json:"path,omitempty"`
-	Method    string `json:"method,omitempty"`
-	Status    int    `json:"status,omitempty"`
-	Latency   string `json:"latency,omitempty"`
-	Error     string `json:"error,omitempty"`
-	Meta      Map    `json:"meta,omitempty"`
+	TimeStamp string    `json:"timestamp"`
+	Level     string    `json:"level"`
+	RequestID string    `json:"request_id,omitempty"`
+	UserID    string    `json:"user_id,omitempty"`
+	Message   string    `json:"message"`
+	Path      string    `json:"path,omitempty"`
+	Method    string    `json:"method,omitempty"`
+	Status    int       `json:"status,omitempty"`
+	Latency   string    `json:"latency,omitempty"`
+	Error     string    `json:"error,omitempty"`
+	Meta      utils.Map `json:"meta,omitempty"`
 }
 
 // Logger manages structured logging with rotation and color
@@ -58,7 +58,7 @@ type Logger struct {
 // LoggerOption defines a function to configure the logger.
 type LoggerOption func(*Logger)
 
-func NewLogger(opts ...LoggerOption) (*Logger, error) {
+func NewLogger(ctx context.Context, opts ...LoggerOption) (*Logger, error) {
 	l := &Logger{
 		Format:     "[${time}] ${status} - ${method} ${path} ${latency}\n",
 		TimeFormat: time.RFC3339,
@@ -74,27 +74,39 @@ func NewLogger(opts ...LoggerOption) (*Logger, error) {
 		opt(l)
 	}
 
+	// Check context before proceeding
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("logger initialization canceled: %w", err)
+	}
+
 	if err := os.MkdirAll(l.OutputDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create log directory: %v", err)
 	}
 
-	// Open initial Log file.
-	file, err := OpenLogFile(l.OutputDir)
-	if err != nil {
-		return nil, err
+	// Open initial log file with context
+	select {
+	case <-ctx.Done():
+		return nil, fmt.Errorf("logger initialization canceled during file open: %w", ctx.Err())
+	default:
+		file, err := OpenLogFile(l.OutputDir)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open log file: %w", err)
+		}
+		l.File = file
+		l.Log = log.New(file, "", 0)
+		l.FiberLog = fiblog.New(fiblog.Config{
+			Format:     l.Format,
+			TimeFormat: l.TimeFormat,
+			Output:     file,
+		})
 	}
-
-	l.File = file
-	l.Log = log.New(file, "", 0)
-	l.FiberLog = fiblog.New(fiblog.Config{
-		Format:     l.Format,
-		TimeFormat: l.TimeFormat,
-		Output:     file,
-	})
 
 	go l.Worker()
 
-	l.CleanupOldLogs()
+	if err := l.CleanupOldLogs(ctx); err != nil {
+		l.Close()
+		return nil, err
+	}
 
 	return l, nil
 }

@@ -7,6 +7,15 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+// Common error types for reuse.
+var (
+	ErrBadRequest          = NewError(fiber.StatusBadRequest, "Invalid request")
+	ErrUnauthorized        = NewError(fiber.StatusUnauthorized, "Unauthorized")
+	ErrForbidden           = NewError(fiber.StatusForbidden, "Forbidden")
+	ErrNotFound            = NewError(fiber.StatusNotFound, "Resource not found")
+	ErrInternalServerError = NewError(fiber.StatusInternalServerError, "Internal server error")
+)
+
 // Error represents a structured error for the web app.
 type CustomError struct {
 	Code    int    `json:"code"`
@@ -38,15 +47,6 @@ func (e *CustomError) WithCause(err error) *CustomError {
 	}
 	return e
 }
-
-// Common error types for reuse.
-var (
-	ErrBadRequest          = NewError(fiber.StatusBadRequest, "Invalid request")
-	ErrUnauthorized        = NewError(fiber.StatusUnauthorized, "Unauthorized")
-	ErrForbidden           = NewError(fiber.StatusForbidden, "Forbidden")
-	ErrNotFound            = NewError(fiber.StatusNotFound, "Resource not found")
-	ErrInternalServerError = NewError(fiber.StatusInternalServerError, "Internal server error")
-)
 
 // HandleError sends a standardized error response using GoFiber.
 func HandleError(c *fiber.Ctx, err error) error {

@@ -7,6 +7,10 @@ import (
 )
 
 type Config struct {
+	APP        string
+	Version    string
+	Status     string
+	Author     string
 	DBHost     string
 	DBUser     string
 	DBPassword string
@@ -19,6 +23,10 @@ type Config struct {
 func LoadConfig() *Config {
 	godotenv.Load()
 	return &Config{
+		APP:        os.Getenv("APP"),
+		Version:    os.Getenv("VERSION"),
+		Status:     os.Getenv("STATUS"),
+		Author:     os.Getenv("AUTHOR"),
 		DBHost:     os.Getenv("DB_HOST"),
 		DBUser:     os.Getenv("DB_USER"),
 		DBPassword: os.Getenv("DB_PASS"),

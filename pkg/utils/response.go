@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/mnuddindev/devpulse/pkg/utils/logger"
+	"github.com/mnuddindev/devpulse/pkg/logger"
 )
 
 // Response holds a standardized API response fields.
