@@ -23,7 +23,7 @@ func main() {
 	}
 	defer logger.Close()
 
-	redisClient, err := db.NewRedis(ctx, cfg.RedisAddr, "", 0)
+	redisClient, err := db.NewRedis(ctx, cfg.RedisAddr, "")
 	if err != nil {
 		logger.Error(ctx).WithMeta(utils.Map{"error": err.Error()}).Logs("Failed to initialize Redis")
 		panic(err)

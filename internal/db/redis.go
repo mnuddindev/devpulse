@@ -12,7 +12,7 @@ type RedisClient struct {
 }
 
 // NewRedis initializes a Redis client with context.
-func NewRedis(ctx context.Context, addr, password string, db int) (*RedisClient, error) {
+func NewRedis(ctx context.Context, addr, password string) (*RedisClient, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, utils.WrapError(err, utils.ErrInternalServerError.Code, "redis initialization canceled")
 	}
@@ -20,7 +20,6 @@ func NewRedis(ctx context.Context, addr, password string, db int) (*RedisClient,
 	client := redis.NewClient(&redis.Options{
 		Addr:     addr,
 		Password: password,
-		DB:       db,
 	})
 
 	// Ping Redis with context
