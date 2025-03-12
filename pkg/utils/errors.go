@@ -1,4 +1,3 @@
-// Package utils provides utility functions for the BlogBlaze application.
 package utils
 
 import (

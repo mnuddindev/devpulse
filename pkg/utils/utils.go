@@ -1,3 +1,3 @@
 package utils
 
-type Map map[string]string
+type Map map[string]interface{}

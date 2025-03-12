@@ -1,8 +1,9 @@
-package db
+package storage
 
 import (
 	"context"
 
+	"github.com/mnuddindev/devpulse/pkg/logger"
 	"github.com/mnuddindev/devpulse/pkg/utils"
 	"github.com/redis/go-redis/v9"
 )
@@ -31,11 +32,11 @@ func NewRedis(ctx context.Context, addr, password string) (*RedisClient, error) 
 }
 
 // CloseRedis shuts down the Redis connection.
-func (r *RedisClient) Close(logger *utils.Logger) error {
+func (r *RedisClient) Close(log *logger.Logger) error {
 	if err := r.Client.Close(); err != nil {
-		logger.Error(context.Background()).WithMeta(utils.Map{"error": err.Error()}).Log("Redis close failed")
+		log.Error(context.Background()).WithMeta(map[string]string{"error": err.Error()}).Logs("Redis close failed")
 		return utils.NewError(utils.ErrInternalServerError.Code, "Failed to close Redis", err.Error())
 	}
-	logger.Info(context.Background()).Log("Redis connection closed successfully")
+	log.Info(context.Background()).Logs("Redis connection closed successfully")
 	return nil
 }

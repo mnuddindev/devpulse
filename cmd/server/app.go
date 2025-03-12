@@ -2,50 +2,50 @@ package main
 
 import (
 	"context"
-	"time"
+	"fmt"
+	"log"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/gofiber/fiber/v2"
+	routes "github.com/mnuddindev/devpulse/internal/api"
 	"github.com/mnuddindev/devpulse/internal/config"
 	"github.com/mnuddindev/devpulse/internal/db"
-	"github.com/mnuddindev/devpulse/internal/models"
-	"github.com/mnuddindev/devpulse/pkg/logger"
 	"github.com/mnuddindev/devpulse/pkg/utils"
 )
 
 func main() {
-	ctx := context.Background()
-
+	ctx, cancel := context.WithCancel(context.Background())
 	cfg := config.LoadConfig()
 
-	logger, err := logger.NewLogger(ctx)
+	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable TimeZone=UTC", cfg.DBHost, cfg.DBUser, cfg.DBPassword, cfg.DBName, cfg.DBPort)
+	DB, err := db.NewDB(ctx, dsn)
 	if err != nil {
-		panic("Failed to initialize logger: " + err.Error())
-	}
-	defer logger.Close()
-
-	redisClient, err := db.NewRedis(ctx, cfg.RedisAddr, "")
-	if err != nil {
-		logger.Error(ctx).WithMeta(utils.Map{"error": err.Error()}).Logs("Failed to initialize Redis")
-		panic(err)
-	}
-	defer redisClient.Close(logger)
-
-	dsn := "host=localhost user=postgres password=secret dbname=blogblaze port=5432 sslmode=disable TimeZone=UTC"
-	gormDB, err := db.NewDB(
-		ctx,
-		dsn,
-		[]interface{}{
-			&models.User{},
-		},
-		db.WithLogger(logger),
-	)
-	if err != nil {
-		logger.Error(ctx).WithMeta(utils.Map{"error": err.Error()}).Logs("Failed to initialize PostgreSQL database")
+		log.Fatal(utils.NewError(utils.ErrInternalServerError.Code, "Failed to initialize PostgreSQL database", err.Error()))
 		panic("DB init failed")
 	}
-	defer db.CloseDB(logger)
+	defer func() {
+		if err != nil {
+			db.CloseDB()
+		}
+	}()
 
 	app := fiber.New()
 
-	app.Listen(cfg.ServerAddr)
+	routes.NewRoutes(ctx, app, cfg, DB)
+
+	go func() {
+		signalChannel := make(chan os.Signal, 1)
+		signal.Notify(signalChannel, syscall.SIGINT, syscall.SIGTERM)
+		<-signalChannel
+		log.Fatal("Shutting down server...")
+		cancel()
+		app.Shutdown()
+	}()
+
+	if err := app.Listen(cfg.ServerAddr); err != nil {
+		fmt.Println(utils.NewError(utils.ErrInternalServerError.Code, "Server Failed!!", err.Error()))
+		os.Exit(1)
+	}
 }

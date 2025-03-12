@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/mnuddindev/devpulse/pkg/utils"
 )
 
 // LogBuilder builds a log entry with a fluent interface.
@@ -17,7 +16,7 @@ type LogBuilder struct {
 	Ctx    context.Context
 	Level  LogLevel
 	Msg    string
-	Meta   utils.Map
+	Meta   map[string]string
 	Fields []interface{}
 }
 
@@ -67,7 +66,7 @@ func (l *Logger) Error(ctx context.Context) *LogBuilder {
 }
 
 // WithMeta adds metadata to the log entry.
-func (b *LogBuilder) WithMeta(meta utils.Map) *LogBuilder {
+func (b *LogBuilder) WithMeta(meta map[string]string) *LogBuilder {
 	b.Meta = meta
 	return b
 }
