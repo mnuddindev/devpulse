@@ -7,9 +7,9 @@ func RegisterModels() []interface{} {
 		&user.User{},
 		&user.Role{},
 		&user.Permission{},
+		//&user.Badge{},
 		&user.Notification{},
 		&user.NotificationPreferences{},
-		&user.Badge{},
 	}
 }
 
@@ -17,11 +17,17 @@ type (
 	User                    = user.User
 	Role                    = user.Role
 	Permission              = user.Permission
-	Notification            = user.Notification
-	NotificationPreferences = user.Notification
 	Badge                   = user.Badge
+	Notification            = user.Notification
+	NotificationPreferences = user.NotificationPreferences
 )
 
 var (
-	SeedRoles = user.SeedRoles
+	NewUser                    = user.NewUser
+	NewRole                    = user.NewRole
+	NewPermission              = user.NewPermission
+	NewBadge                   = user.NewBadge
+	NewNotification            = user.NewNotification
+	NewNotificationPreferences = user.NewNotificationPreferences
+	SeedRoles                  = user.SeedRoles
 )

@@ -32,9 +32,7 @@ func NewDB(ctx context.Context, dsn string) (*gorm.DB, error) {
 		return nil, utils.NewError(utils.ErrInternalServerError.Code, "Database not initialized")
 	}
 
-	if err := db.WithContext(ctx).AutoMigrate(
-		&models.User{},
-	); err != nil {
+	if err := db.WithContext(ctx).AutoMigrate(models.RegisterModels()...); err != nil {
 		return nil, utils.NewError(utils.ErrInternalServerError.Code, "Failed to auto-migrate models", err.Error())
 	}
 

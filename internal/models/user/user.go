@@ -19,13 +19,14 @@ type User struct {
 	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 	DeletedAt time.Time `gorm:"index" json:"-"`
 
-	Username        string `gorm:"size:255;not null;unique" json:"username" validate:"required,min=3,max=255,alphanum"`
-	Email           string `gorm:"size:100;not null;unique" json:"email" validate:"required,email"`
-	Password        string `gorm:"size:255;not null" json:"-" validate:"required,min=6"`
-	OTP             int64  `gorm:"type:bigint;not null" json:"otp"`
-	IsActive        bool   `gorm:"default:false" json:"is_active"`
-	IsEmailVerified bool   `gorm:"default:false" json:"is_email_verified"`
-	Role            Role   `gorm:"foreignKey:Name;references:Name" json:"role"`
+	Username        string    `gorm:"size:255;not null;unique" json:"username" validate:"required,min=3,max=255,alphanum"`
+	Email           string    `gorm:"size:100;not null;unique" json:"email" validate:"required,email"`
+	Password        string    `gorm:"size:255;not null" json:"-" validate:"required,min=6"`
+	OTP             int64     `gorm:"type:bigint;not null" json:"otp"`
+	IsActive        bool      `gorm:"default:false" json:"is_active"`
+	IsEmailVerified bool      `gorm:"default:false" json:"is_email_verified"`
+	RoleID          uuid.UUID `gorm:"type:uuid;not null" json:"role_id"`
+	Role            Role      `gorm:"foreignKey:RoleID" json:"role"`
 
 	Profile struct {
 		Name               string `gorm:"size:100" json:"name" validate:"omitempty,max=100"`
@@ -77,11 +78,22 @@ func NewUser(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, use
 		return nil, utils.WrapError(err, utils.ErrInternalServerError.Code, "user credential canceled")
 	}
 
+	var memberRole Role
+	if err := db.WithContext(ctx).Where("name = ?", "member").First(&memberRole).Error; err != nil {
+		return nil, utils.WrapError(err, utils.ErrInternalServerError.Code, "Default 'member' not found!!")
+	}
+
+	otp, err := utils.GenerateOTP()
+	if err != nil {
+		return nil, utils.WrapError(err, utils.ErrInternalServerError.Code, "OTP generation failed.")
+	}
+
 	u := &User{
 		Username: username,
 		Email:    email,
 		Password: password,
-		Role:     Role{Name: "member"},
+		OTP:      otp,
+		RoleID:   memberRole.ID,
 	}
 
 	for _, opt := range opts {
@@ -106,9 +118,168 @@ func NewUser(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, use
 	return u, nil
 }
 
+// GetUser retrieves a user by ID, with optional preloading of relationships.
+func GetUser(ctx context.Context, redisClient *storage.RedisClient, gormDB *gorm.DB, id uuid.UUID, preload ...string) (*User, error) {
+	key := "user:" + id.String()
+	if cached, err := redisClient.Get(ctx, key).Result(); err == nil {
+		var u User
+		if err := json.Unmarshal([]byte(cached), &u); err == nil {
+			return &u, nil
+		}
+	}
+
+	var u User
+	query := gormDB.WithContext(ctx).Where("id = ?", id)
+	for _, p := range preload {
+		query = query.Preload(p)
+	}
+	if err := query.First(&u).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, utils.NewError(utils.ErrNotFound.Code, "User not found")
+		}
+		return nil, utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to get user")
+	}
+
+	userJSON, _ := json.Marshal(u)
+	redisClient.Set(ctx, key, userJSON, 10*time.Minute)
+	return &u, nil
+}
+
+// GetUsers retrieves multiple users with pagination and optional filters.
+func GetUsers(ctx context.Context, redisClient *storage.RedisClient, gormDB *gorm.DB, page, limit int, filters ...string) ([]User, error) {
+	key := "users:page:" + string(page) + ":limit:" + string(limit)
+	if cached, err := redisClient.Get(ctx, key).Result(); err == nil {
+		var users []User
+		if err := json.Unmarshal([]byte(cached), &users); err == nil {
+			return users, nil
+		}
+	}
+
+	var users []User
+	query := gormDB.WithContext(ctx).Offset((page - 1) * limit).Limit(limit)
+	for _, f := range filters {
+		query = query.Where(f)
+	}
+	if err := query.Find(&users).Error; err != nil {
+		return nil, utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to get users")
+	}
+
+	usersJSON, _ := json.Marshal(users)
+	redisClient.Set(ctx, key, usersJSON, 10*time.Minute)
+	return users, nil
+}
+
+// UpdateUser updates a user’s fields and refreshes cache.
+func UpdateUser(ctx context.Context, redisClient *storage.RedisClient, gormDB *gorm.DB, id uuid.UUID, opts ...UserOption) (*User, error) {
+	u, err := GetUser(ctx, redisClient, gormDB, id)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, opt := range opts {
+		opt(u)
+	}
+
+	validate := validator.New()
+	if err := validate.Struct(u); err != nil {
+		return nil, utils.NewError(utils.ErrBadRequest.Code, "Invalid user data", err.Error())
+	}
+
+	if err := gormDB.WithContext(ctx).Save(u).Error; err != nil {
+		return nil, utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to update user")
+	}
+
+	userJSON, _ := json.Marshal(u)
+	key := "user:" + u.ID.String()
+	redisClient.Set(ctx, key, userJSON, 10*time.Minute)
+	return u, nil
+}
+
+// DeleteUser soft-deletes a user and clears cache.
+func DeleteUser(ctx context.Context, redisClient *storage.RedisClient, gormDB *gorm.DB, id uuid.UUID) error {
+	u, err := GetUser(ctx, redisClient, gormDB, id)
+	if err != nil {
+		return err
+	}
+
+	if err := gormDB.WithContext(ctx).Delete(u).Error; err != nil {
+		return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to delete user")
+	}
+
+	key := "user:" + id.String()
+	redisClient.Del(ctx, key)
+	return nil
+}
+
+// VerifyEmail marks a user’s email as verified if OTP matches.
+func (u *User) VerifyEmail(ctx context.Context, redisClient *storage.RedisClient, gormDB *gorm.DB, otp int64) error {
+	if u.OTP != otp {
+		return utils.NewError(utils.ErrBadRequest.Code, "Invalid OTP")
+	}
+
+	u.IsEmailVerified = true
+	u.OTP = 0 // Reset OTP after verification
+	if err := gormDB.WithContext(ctx).Save(u).Error; err != nil {
+		return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to verify email")
+	}
+
+	userJSON, _ := json.Marshal(u)
+	key := "user:" + u.ID.String()
+	redisClient.Set(ctx, key, userJSON, 10*time.Minute)
+	return nil
+}
+
+// FollowUser adds a follow relationship.
+func (u *User) FollowUser(ctx context.Context, redisClient *storage.RedisClient, gormDB *gorm.DB, followID uuid.UUID) error {
+	followee, err := GetUser(ctx, redisClient, gormDB, followID)
+	if err != nil {
+		return err
+	}
+	if u.ID == followee.ID {
+		return utils.NewError(utils.ErrBadRequest.Code, "Cannot follow yourself")
+	}
+	if err := gormDB.WithContext(ctx).Model(u).Association("Following").Append(followee); err != nil {
+		return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to follow user")
+	}
+	userJSON, _ := json.Marshal(u)
+	key := "user:" + u.ID.String()
+	redisClient.Set(ctx, key, userJSON, 10*time.Minute)
+	return nil
+}
+
+// UnfollowUser removes a user from the following list.
+func (u *User) UnfollowUser(ctx context.Context, redisClient *storage.RedisClient, gormDB *gorm.DB, followID uuid.UUID) error {
+	followee, err := GetUser(ctx, redisClient, gormDB, followID)
+	if err != nil {
+		return err
+	}
+
+	if err := gormDB.WithContext(ctx).Model(u).Association("Following").Delete(followee); err != nil {
+		return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to unfollow user")
+	}
+
+	userJSON, _ := json.Marshal(u)
+	key := "user:" + u.ID.String()
+	redisClient.Set(ctx, key, userJSON, 10*time.Minute)
+	return nil
+}
+
+// UpdateLastSeen refreshes the user’s last seen timestamp.
+func (u *User) UpdateLastSeen(ctx context.Context, redisClient *storage.RedisClient, gormDB *gorm.DB) error {
+	u.Stats.LastSeen = time.Now()
+	if err := gormDB.WithContext(ctx).Save(u).Error; err != nil {
+		return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to update last seen")
+	}
+
+	userJSON, _ := json.Marshal(u)
+	key := "user:" + u.ID.String()
+	redisClient.Set(ctx, key, userJSON, 10*time.Minute)
+	return nil
+}
+
 // HasPermission checks if the user has a permission.
 func (u *User) HasPermission(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, permission string) bool {
-	cacheKey := "perms:role:" + u.Role.Name
+	cacheKey := "perms:role:" + u.RoleID.String()
 	if cachedPerms, err := rclient.Get(ctx, cacheKey).Result(); err == nil {
 		var perms []string
 		if json.Unmarshal([]byte(cachedPerms), &perms) == nil {
@@ -122,7 +293,7 @@ func (u *User) HasPermission(ctx context.Context, rclient *storage.RedisClient, 
 	}
 
 	var role Role
-	if err := db.WithContext(ctx).Preload("Permissions").Where("name = ?", u.Role.Name).First(&role).Error; err != nil {
+	if err := db.WithContext(ctx).Preload("Permissions").Where("id = ?", u.RoleID).First(&role).Error; err != nil {
 		return false
 	}
 
