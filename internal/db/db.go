@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"github.com/mnuddindev/devpulse/internal/models"
+	"github.com/mnuddindev/devpulse/pkg/logger"
+	storage "github.com/mnuddindev/devpulse/pkg/redis"
 	"github.com/mnuddindev/devpulse/pkg/utils"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -13,7 +15,7 @@ var (
 	DBInstance *gorm.DB
 )
 
-func NewDB(ctx context.Context, dsn string) (*gorm.DB, error) {
+func NewDB(ctx context.Context, dsn string, rclient *storage.RedisClient, log *logger.Logger) (*gorm.DB, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -34,6 +36,10 @@ func NewDB(ctx context.Context, dsn string) (*gorm.DB, error) {
 
 	if err := db.WithContext(ctx).AutoMigrate(models.RegisterModels()...); err != nil {
 		return nil, utils.NewError(utils.ErrInternalServerError.Code, "Failed to auto-migrate models", err.Error())
+	}
+
+	if err := models.SeedRoles(ctx, db, rclient, log); err != nil {
+		return nil, err
 	}
 
 	return DBInstance, nil

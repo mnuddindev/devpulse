@@ -42,7 +42,7 @@ func main() {
 	}()
 
 	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable TimeZone=UTC", cfg.DBHost, cfg.DBUser, cfg.DBPassword, cfg.DBName, cfg.DBPort)
-	DB, err := db.NewDB(ctx, dsn)
+	DB, err := db.NewDB(ctx, dsn, rclient, log)
 	if err != nil {
 		log.Error(ctx).WithMeta(utils.Map{"error": err.Error()}).Logs("Failed to initialize PostgreSQL database")
 		panic("DB init failed")
