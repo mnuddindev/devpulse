@@ -5,7 +5,7 @@ import (
 	"math/big"
 )
 
-type Map map[string]interface{}
+type Map map[string]string
 
 func GenerateOTP() (int64, error) {
 	max := big.NewInt(999999)

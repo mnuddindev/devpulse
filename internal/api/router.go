@@ -15,28 +15,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func NewRoutes(ctx context.Context, app *fiber.App, cfg *config.Config, db *gorm.DB) {
-	log, err := logger.NewLogger(ctx)
-	if err != nil {
-		panic("Failed to initialize logger: " + err.Error())
-	}
-	defer func() {
-		if err != nil {
-			log.Close()
-		}
-	}()
-
-	redisClient, err := storage.NewRedis(ctx, cfg.RedisAddr, "")
-	if err != nil {
-		log.Error(ctx).WithMeta(map[string]string{"error": err.Error()}).Logs("Failed to initialize Redis")
-		panic(err)
-	}
-	defer func() {
-		if err != nil {
-			redisClient.Close(log)
-		}
-	}()
-
+func NewRoutes(ctx context.Context, app *fiber.App, cfg *config.Config, db *gorm.DB, log *logger.Logger, rclient *storage.RedisClient) {
 	app.Use(
 		logger.SetupLogger(log),
 		recover.New(),
@@ -66,7 +45,7 @@ func NewRoutes(ctx context.Context, app *fiber.App, cfg *config.Config, db *gorm
 
 	go func() {
 		<-ctx.Done()
-		redisClient.Close(log)
+		rclient.Close(log)
 		log.Close()
 	}()
 }
