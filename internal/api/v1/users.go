@@ -11,4 +11,5 @@ func Register(c *fiber.Ctx) error {
 		Password        string `json:"password"`
 		ConfirmPassword string `json:"confirm_password"`
 	}
+	return nil
 }
