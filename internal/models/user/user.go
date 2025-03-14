@@ -73,7 +73,7 @@ type User struct {
 type UserOption func(*User)
 
 // NewUser creates a new User instance with validation.
-func NewUser(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, username, email, password string, opts ...UserOption) (*User, error) {
+func NewUser(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, username, email, password string, otp int64, opts ...UserOption) (*User, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, utils.WrapError(err, utils.ErrInternalServerError.Code, "user credential canceled")
 	}
@@ -81,11 +81,6 @@ func NewUser(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, use
 	var memberRole Role
 	if err := db.WithContext(ctx).Where("name = ?", "member").First(&memberRole).Error; err != nil {
 		return nil, utils.WrapError(err, utils.ErrInternalServerError.Code, "Default 'member' not found!!")
-	}
-
-	otp, err := utils.GenerateOTP()
-	if err != nil {
-		return nil, utils.WrapError(err, utils.ErrInternalServerError.Code, "OTP generation failed.")
 	}
 
 	u := &User{
