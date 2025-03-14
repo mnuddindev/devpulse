@@ -155,10 +155,10 @@ The BlogBlaze Team
 	// Dial and send
 	dialer := gomail.NewDialer(config.SMTPHost, config.SMTPPort, config.SMTPUsername, config.SMTPPassword)
 	if err := dialer.DialAndSend(msg); err != nil {
-		logger.Error(ctx).Logs(fmt.Sprintf("Failed to send activation email: %v, email: %s, user: %s", err, email, username))
+		logger.Warn(ctx).WithFields("email", email).Logs(fmt.Sprintf("Failed to send activation email: %v, email: %s, user: %s", err, email, username))
 		return WrapError(err, ErrInternalServerError.Code, "Failed to send activation email")
 	}
 
-	logger.Info(ctx).Logs(fmt.Sprintf("Activation email sent to: %s", email))
+	logger.Info(ctx).WithFields("email", email).Logs(fmt.Sprintf("Activation email sent to: %s", email))
 	return nil
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/json"
+	"fmt"
 	"math/big"
 
 	"github.com/gofiber/fiber/v2"
@@ -12,12 +13,17 @@ import (
 type Map map[string]string
 
 func GenerateOTP() (int64, error) {
-	max := big.NewInt(999999)
-	numb, err := rand.Int(rand.Reader, max)
+	max := big.NewInt(99999999) // 8 digits max
+	n, err := rand.Int(rand.Reader, max)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to generate OTP: %w", err)
 	}
-	return numb.Int64(), nil
+	otp := n.Int64()
+	// Ensure 8 digits by padding if needed
+	if otp < 10000000 {
+		otp += 10000000 // Min 10000000
+	}
+	return otp, nil
 }
 
 // StrictBodyParser parses the request body strictly and returns an error if the body contains unknown fields.

@@ -114,17 +114,9 @@ func NewUser(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, use
 }
 
 // GetUser retrieves a user by ID, with optional preloading of relationships.
-func GetUser(ctx context.Context, redisClient *storage.RedisClient, gormDB *gorm.DB, id uuid.UUID, preload ...string) (*User, error) {
-	key := "user:" + id.String()
-	if cached, err := redisClient.Get(ctx, key).Result(); err == nil {
-		var u User
-		if err := json.Unmarshal([]byte(cached), &u); err == nil {
-			return &u, nil
-		}
-	}
-
+func GetUserBy(ctx context.Context, redisClient *storage.RedisClient, gormDB *gorm.DB, condition string, args []interface{}, preload ...string) (*User, error) {
 	var u User
-	query := gormDB.WithContext(ctx).Where("id = ?", id)
+	query := gormDB.WithContext(ctx).Where(condition, args...)
 	for _, p := range preload {
 		query = query.Preload(p)
 	}
@@ -133,6 +125,14 @@ func GetUser(ctx context.Context, redisClient *storage.RedisClient, gormDB *gorm
 			return nil, utils.NewError(utils.ErrNotFound.Code, "User not found")
 		}
 		return nil, utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to get user")
+	}
+
+	key := "user:" + u.ID.String()
+	if cached, err := redisClient.Get(ctx, key).Result(); err == nil {
+		var u User
+		if err := json.Unmarshal([]byte(cached), &u); err == nil {
+			return &u, nil
+		}
 	}
 
 	userJSON, _ := json.Marshal(u)
@@ -166,7 +166,7 @@ func GetUsers(ctx context.Context, redisClient *storage.RedisClient, gormDB *gor
 
 // UpdateUser updates a user’s fields and refreshes cache.
 func UpdateUser(ctx context.Context, redisClient *storage.RedisClient, gormDB *gorm.DB, id uuid.UUID, opts ...UserOption) (*User, error) {
-	u, err := GetUser(ctx, redisClient, gormDB, id)
+	u, err := GetUserBy(ctx, redisClient, gormDB, "id = ?", []interface{}{id}, "")
 	if err != nil {
 		return nil, err
 	}
@@ -192,7 +192,7 @@ func UpdateUser(ctx context.Context, redisClient *storage.RedisClient, gormDB *g
 
 // DeleteUser soft-deletes a user and clears cache.
 func DeleteUser(ctx context.Context, redisClient *storage.RedisClient, gormDB *gorm.DB, id uuid.UUID) error {
-	u, err := GetUser(ctx, redisClient, gormDB, id)
+	u, err := GetUserBy(ctx, redisClient, gormDB, "id = ?", []interface{}{id}, "")
 	if err != nil {
 		return err
 	}
@@ -226,7 +226,7 @@ func (u *User) VerifyEmail(ctx context.Context, redisClient *storage.RedisClient
 
 // FollowUser adds a follow relationship.
 func (u *User) FollowUser(ctx context.Context, redisClient *storage.RedisClient, gormDB *gorm.DB, followID uuid.UUID) error {
-	followee, err := GetUser(ctx, redisClient, gormDB, followID)
+	followee, err := GetUserBy(ctx, redisClient, gormDB, "id = ?", []interface{}{followID}, "")
 	if err != nil {
 		return err
 	}
@@ -244,7 +244,7 @@ func (u *User) FollowUser(ctx context.Context, redisClient *storage.RedisClient,
 
 // UnfollowUser removes a user from the following list.
 func (u *User) UnfollowUser(ctx context.Context, redisClient *storage.RedisClient, gormDB *gorm.DB, followID uuid.UUID) error {
-	followee, err := GetUser(ctx, redisClient, gormDB, followID)
+	followee, err := GetUserBy(ctx, redisClient, gormDB, "id = ?", []interface{}{followID}, "")
 	if err != nil {
 		return err
 	}
