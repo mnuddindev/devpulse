@@ -3,7 +3,6 @@ package models
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"github.com/go-playground/validator/v10"
@@ -143,46 +142,46 @@ func DeleteRole(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, 
 
 // SeedRoles initializes default roles and permissions.
 func SeedRoles(ctx context.Context, db *gorm.DB, redisClient *storage.RedisClient, logger *logger.Logger) error {
-	allPermissions := []string{
-		// Post-related
-		"create_post", "delete_any_post", "delete_own_post", "edit_any_post", "edit_own_post",
-		"feature_posts", "moderate_post", "read_post",
-		// Comment-related
-		"create_comment", "delete_any_comment", "delete_own_comment", "edit_any_comment", "edit_own_comment",
-		"moderate_comment",
-		// User-related
-		"ban_user", "create_user", "delete_any_user", "delete_own_profile", "edit_any_user", "edit_own_profile",
-		"follow_user", "moderate_user", "read_user_profile", "unfollow_user",
+	var allPermissions []string
+	permissions := []Permission{
+		// Post-related permissions
+		{Name: "create_post"}, {Name: "delete_any_post"}, {Name: "delete_own_post"}, {Name: "edit_any_post"},
+		{Name: "edit_own_post"}, {Name: "feature_posts"}, {Name: "moderate_post"},
+		{Name: "read_post"},
+
+		// Comment-related permissions
+		{Name: "create_comment"}, {Name: "delete_any_comment"}, {Name: "delete_own_comment"},
+		{Name: "edit_any_comment"}, {Name: "edit_own_comment"},
+		{Name: "moderate_comment"},
+
+		// User-related permissions
+		{Name: "ban_user"}, {Name: "create_user"}, {Name: "delete_any_user"}, {Name: "delete_own_profile"},
+		{Name: "edit_any_user"}, {Name: "edit_own_profile"}, {Name: "follow_user"},
+		{Name: "moderate_user"}, {Name: "read_user_profile"},
+		{Name: "unfollow_user"},
+
 		// Role and permission management
-		"assign_roles", "create_roles", "delete_roles", "edit_roles", "manage_roles",
-		// Reaction-related
-		"create_reaction", "delete_any_reaction", "delete_own_reaction", "edit_any_reaction", "edit_own_reaction",
-		"give_reaction",
-		// Tag-related
-		"create_tag", "delete_tag", "edit_tag", "follow_tag", "moderate_tag", "unfollow_tag",
-		// Site-wide and moderation
-		"give_suggestion", "manage_analytics", "manage_notifications", "manage_site_settings",
-		"need_moderation", "report_content",
-	}
+		{Name: "assign_roles"}, {Name: "create_roles"}, {Name: "delete_roles"},
+		{Name: "edit_roles"}, {Name: "manage_roles"},
 
-	permMap := make(map[string]Permission)
-	for _, permName := range allPermissions {
-		var perm Permission
-		if err := db.WithContext(ctx).Where("name = ?", permName).First(&perm).Error; err != nil {
-			if err == gorm.ErrRecordNotFound {
-				perm = Permission{Name: permName}
-				if err := db.WithContext(ctx).FirstOrCreate(&perm).Error; err != nil {
-					logger.Error(ctx).Logs(fmt.Sprintf("Failed to create permission: %v, perm: %s", err, permName))
-					continue
-				}
-			} else {
-				logger.Error(ctx).Logs(fmt.Sprintf("Database error fetching permission: %v, perm: %s", err, permName))
-				continue
-			}
-		}
-		permMap[permName] = perm
-	}
+		// Reaction-related permissions
+		{Name: "create_reaction"}, {Name: "delete_any_reaction"}, {Name: "delete_own_reaction"},
+		{Name: "edit_any_reaction"}, {Name: "edit_own_reaction"},
 
+		// Tag-related permissions
+		{Name: "create_tag"}, {Name: "delete_tag"}, {Name: "edit_tag"},
+		{Name: "follow_tag"}, {Name: "moderate_tag"},
+		{Name: "unfollow_tag"},
+
+		// Site-wide and moderation permissions
+		{Name: "give_suggestion"}, {Name: "manage_analytics"}, {Name: "manage_notifications"},
+		{Name: "manage_site_settings"}, {Name: "need_moderation"},
+		{Name: "report_content"},
+	}
+	for _, perm := range permissions {
+		allPermissions = append(allPermissions, perm.Name)
+		db.FirstOrCreate(&perm, Permission{Name: perm.Name})
+	}
 	// Define roles with permissions
 	roles := []struct {
 		Name        string
@@ -228,45 +227,57 @@ func SeedRoles(ctx context.Context, db *gorm.DB, redisClient *storage.RedisClien
 	// Seed roles and permissions into the database
 	for _, r := range roles {
 		var role Role
-		if err := db.WithContext(ctx).Where("name = ?", r.Name).FirstOrCreate(&role).Error; err != nil {
-			logger.Error(ctx).Logs(fmt.Sprintf("Failed to create role: %v, role: %s", err, r.Name))
-			continue
+		if err := db.WithContext(ctx).Where("name = ?", r.Name).First(&role).Error; err != nil {
+			if err == gorm.ErrRecordNotFound {
+				role = Role{Name: r.Name}
+				if err := db.Create(&role).Error; err != nil {
+					logger.Error(ctx).WithMeta(utils.Map{
+						"error": err.Error(),
+						"role":  r.Name,
+					}).Logs("Failed to create role")
+					continue
+				}
+			} else {
+				logger.Error(ctx).WithMeta(utils.Map{
+					"error": err.Error(),
+					"role":  r.Name,
+				}).Logs("Database error fetching role")
+				continue
+			}
 		}
 
-		// Fetch or link permissions
-		var permsToLink []Permission
+		// Fetch or create permissions and associate them with the role
+		var perms []Permission
 		for _, permName := range r.Permissions {
 			var perm Permission
 			if err := db.WithContext(ctx).Where("name = ?", permName).First(&perm).Error; err != nil {
-				logger.Error(ctx).Logs(fmt.Sprintf("Permission not found: %v, perm: %s, role: %s", err, permName, r.Name))
-				continue
+				if err == gorm.ErrRecordNotFound {
+					perm = Permission{Name: permName}
+					if err := db.Create(&perm).Error; err != nil {
+						logger.Error(ctx).WithMeta(utils.Map{
+							"error": err.Error(),
+							"role":  permName,
+						}).Logs("Failed to create permission")
+						continue
+					}
+				} else {
+					logger.Error(ctx).WithMeta(utils.Map{
+						"error": err.Error(),
+						"role":  permName,
+					}).Logs("Database error fetching permission")
+					continue
+				}
 			}
-			permsToLink = append(permsToLink, perm)
+			perms = append(perms, perm)
 		}
 
-		// Replace existing permissions with the defined set
-		if err := db.WithContext(ctx).Model(&role).Association("Permissions").Replace(permsToLink); err != nil {
-			logger.Error(ctx).Logs(fmt.Sprintf("Failed to associate permissions with role: %v, role: %s", err, r.Name))
-			continue
-		}
-
-		// Fetch permission names for caching
-		var permNames []string
-		var linkedPerms []Permission
-		if err := db.WithContext(ctx).Model(&role).Association("Permissions").Find(&linkedPerms); err != nil {
-			logger.Error(ctx).Logs(fmt.Sprintf("Failed to fetch permissions for caching: %v, role: %s", err, r.Name))
-			continue
-		}
-		for _, p := range linkedPerms {
-			permNames = append(permNames, p.Name)
-		}
-
-		// Cache in Redis
-		permsJSON, _ := json.Marshal(permNames)
-		if err := redisClient.Set(ctx, "perms:role:"+role.ID.String(), permsJSON, 10*time.Minute).Err(); err != nil {
-			logger.Warn(ctx).Logs(fmt.Sprintf("Failed to cache permissions in Redis: %v, role: %s", err, r.Name))
+		// Associate the permissions with the role
+		if err := db.WithContext(ctx).Model(&role).Association("Permissions").Replace(perms); err != nil {
+			logger.Error(ctx).WithMeta(utils.Map{
+				"error": err.Error(),
+				"role":  r.Name,
+			}).Logs("Failed to associate permissions with role")
 		}
 	}
-
 	return nil
 }
