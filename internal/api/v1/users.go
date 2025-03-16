@@ -89,7 +89,6 @@ func Register(c *fiber.Ctx) error {
 		Logger.Info(c.Context()).Logs(fmt.Sprintf("Activation email sent successfully for user: %s", ui.Username))
 	}
 
-	// Redis caching (already in NewUser, but log it)
 	key := "user:" + token
 	userJSON, err := json.Marshal(user)
 	if err != nil {
@@ -200,6 +199,20 @@ func ActivateUser(c *fiber.Ctx) error {
 	Redis.Del(c.Context(), "user:"+token)
 	Logger.Info(c.Context()).WithFields("user_id", user.ID).Logs(fmt.Sprintf("User activated successfully: %s", user.Username))
 
+	key := "user:" + user.Email
+	userJSON, err := json.Marshal(updatedUser)
+	if err != nil {
+		Logger.Warn(c.Context()).WithFields("error", err).Logs("Failed to serialize user data")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Failed to serialize user data",
+		})
+	}
+	if err := Redis.Set(c.Context(), key, userJSON, 0).Err(); err != nil {
+		Logger.Warn(c.Context()).Logs(fmt.Sprintf("Failed to cache user in Redis: %v, key: %s", err, key))
+	} else {
+		Logger.Info(c.Context()).Logs(fmt.Sprintf("User cached in Redis: %s", key))
+	}
+
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"message": "Account activated successfully",
 		"user": fiber.Map{
@@ -207,6 +220,102 @@ func ActivateUser(c *fiber.Ctx) error {
 			"username": updatedUser.Username,
 			"email":    updatedUser.Email,
 			"message":  "Your account has been activated. Please log in now!",
+		},
+	})
+}
+
+// Login ensures user can login to his account.
+func Login(c *fiber.Ctx) error {
+	type LoginRequest struct {
+		Email    string `json:"email" validate:"required,email,max=100"`
+		Password string `json:"password" validate:"required,min=6,max=100"`
+	}
+
+	var lr LoginRequest
+	if err := utils.StrictBodyParser(c, &lr); err != nil {
+		Logger.Warn(c.Context()).Logs(fmt.Sprintf("Failed to parse login request body: %v", err))
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request format",
+		})
+	}
+
+	ipKey := "login:ip:" + c.IP()
+	count, err := Redis.Get(c.Context(), ipKey).Int()
+	if err != nil && count >= 5 {
+		Logger.Warn(c.Context()).WithFields("ip", c.IP()).Logs("Login rate limit exceeded")
+		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+			"error": "Too many login attempts. Try again later.",
+		})
+	}
+	Redis.Incr(c.Context(), ipKey)
+	Redis.Expire(c.Context(), ipKey, 15*time.Minute)
+
+	if err := Validator.Validate(lr); err != nil {
+		Logger.Warn(c.Context()).WithFields("errors", err).Logs("Login validation failed")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Validation failed",
+			"details": fiber.Map{
+				"errors": err,
+			},
+		})
+	}
+
+	lr.Email = strings.ToLower(strings.TrimSpace(lr.Email))
+
+	user, err := models.GetUserBy(c.Context(), Redis, DB, "email = ?", []interface{}{lr.Email})
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			Logger.Warn(c.Context()).WithFields("email", user.Email).Logs("User not found")
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error": "User not found",
+			})
+		}
+		Logger.Error(c.Context()).WithFields("error", err).Logs("Failed to fetch user")
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to process activation",
+		})
+	}
+
+	if !user.IsActive || !user.IsEmailVerified {
+		Logger.Warn(c.Context()).WithFields("user_id", user.ID).Logs("Login attempt on inactive account")
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error": "Account not activated. Check your email.",
+		})
+	}
+
+	if err := utils.ComparePasswords(user.Password, lr.Password); err != nil {
+		Logger.Warn(c.Context()).WithFields("email", lr.Email).Logs("Invalid password provided")
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "Invalid email or password",
+		})
+	}
+
+	Redis.Del(c.Context(), ipKey)
+
+	Logger.Info(c.Context()).WithFields("user_id", user.ID).Logs(fmt.Sprintf("User logged in successfully: %s", user.Username))
+
+	key := "user:" + user.Email
+	userJSON, err := json.Marshal(user)
+	if err != nil {
+		Logger.Warn(c.Context()).WithFields("error", err).Logs("Failed to serialize user data")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Failed to serialize user data",
+		})
+	}
+	if err := Redis.Set(c.Context(), key, userJSON, 0).Err(); err != nil {
+		Logger.Warn(c.Context()).Logs(fmt.Sprintf("Failed to cache user in Redis: %v, key: %s", err, key))
+	} else {
+		Logger.Info(c.Context()).Logs(fmt.Sprintf("User cached in Redis: %s", key))
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "Login successful",
+		"user": fiber.Map{
+			"id":       user.ID,
+			"username": user.Username,
+			"email":    user.Email,
+			"name":     user.Profile.Name,
+			"avatar":   user.Profile.AvatarURL,
 		},
 	})
 }

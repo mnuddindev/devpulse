@@ -50,6 +50,7 @@ func NewRoutes(ctx context.Context, app *fiber.App, cfg *config.Config, db *gorm
 
 	app.Post("/register", v1.Register)
 	app.Post("/activate", v1.ActivateUser)
+	app.Post("/login", v1.Login)
 
 	go func() {
 		<-ctx.Done()
