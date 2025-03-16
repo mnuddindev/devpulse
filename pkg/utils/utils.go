@@ -3,6 +3,7 @@ package utils
 import (
 	"bytes"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -11,6 +12,35 @@ import (
 )
 
 type Map map[string]string
+
+// GenerateRandomToken generates a random token with a length between minLength and maxLength.
+func GenerateRandomToken(minLength, maxLength int) (string, error) {
+	lengthRange := big.NewInt(int64(maxLength - minLength + 1))
+	randomOffset, err := rand.Int(rand.Reader, lengthRange)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate random length: %v", err)
+	}
+	length := minLength + int(randomOffset.Int64())
+
+	byteLength := (length * 6) / 8
+	if (length*6)%8 != 0 {
+		byteLength++
+	}
+
+	randomBytes := make([]byte, byteLength)
+	_, err = rand.Read(randomBytes)
+	if err != nil {
+		return "", fmt.Errorf("failed to generate random bytes: %v", err)
+	}
+
+	token := base64.URLEncoding.EncodeToString(randomBytes)
+
+	if len(token) > length {
+		token = token[:length]
+	}
+
+	return token, nil
+}
 
 func GenerateOTP() (int64, error) {
 	max := big.NewInt(99999999) // 8 digits max

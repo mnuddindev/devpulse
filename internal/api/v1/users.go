@@ -3,6 +3,7 @@ package v1
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -14,12 +15,12 @@ import (
 
 func Register(c *fiber.Ctx) error {
 	type UserInput struct {
-		AvatarURL       string `json:"avatar_url" validate:"required,url"`
-		Name            string `json:"name" validate:"required,min=8,max=100,alphanum"`
+		AvatarURL       string `json:"avatar_url" validate:"omitempty,url"`
+		Name            string `json:"name" validate:"required,min=8,max=100"`
 		Username        string `json:"username" validate:"required,min=3,max=50,alphanum"`
 		Email           string `json:"email" validate:"required,email,max=100"`
-		Password        string `json:"password" validate:"required,min=8,max=100"`
-		ConfirmPassword string `json:"confirm_password" validate:"required,min=8,max=100"`
+		Password        string `json:"password" validate:"required,min=6,eqfield=ConfirmPassword"`
+		ConfirmPassword string `json:"confirm_password" validate:"required,min=6"`
 	}
 	ui := new(UserInput)
 	if err := utils.StrictBodyParser(c, &ui); err != nil {
@@ -55,7 +56,7 @@ func Register(c *fiber.Ctx) error {
 		})
 	}
 
-	user, err := models.NewUser(c.Context(), Redis, DB, ui.Username, ui.Email, hashedPass, gotp)
+	user, err := models.NewUser(c.Context(), Redis, DB, ui.Username, ui.Email, hashedPass, gotp, models.WithName(ui.Name), models.WithAvatarURL(ui.AvatarURL))
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate") {
 			Logger.Warn(c.Context()).Logs(fmt.Sprintf("Duplicate username or email: %s", ui.Email))
@@ -69,11 +70,12 @@ func Register(c *fiber.Ctx) error {
 		})
 	}
 
+	token, _ := utils.GenerateRandomToken(64, 124)
 	otp, err := utils.HashPassword(fmt.Sprintf("%d", gotp))
 	if err != nil {
 		Logger.Error(c.Context()).WithFields("error", err).Logs("Failed to hash OTP")
 	} else {
-		otpKey := fmt.Sprintf("otp:%s", user.ID.String())
+		otpKey := fmt.Sprintf("otp:%s", token)
 		if err := Redis.Set(c.Context(), otpKey, otp, 24*time.Hour).Err(); err != nil {
 			Logger.Warn(c.Context()).WithFields("key", otpKey).Logs(fmt.Sprintf("Failed to store OTP in Redis: %v", err))
 		} else {
@@ -81,15 +83,21 @@ func Register(c *fiber.Ctx) error {
 		}
 	}
 
-	if err := utils.SendActivationEmail(c.Context(), EmailCfg, ui.Email, ui.Username, gotp, Logger); err != nil {
+	if err := utils.SendActivationEmail(c.Context(), EmailCfg, ui.Email, ui.Username, token, gotp, Logger); err != nil {
 		Logger.Warn(c.Context()).Logs(fmt.Sprintf("Email sending failed but user created: %v", err))
 	} else {
 		Logger.Info(c.Context()).Logs(fmt.Sprintf("Activation email sent successfully for user: %s", ui.Username))
 	}
 
 	// Redis caching (already in NewUser, but log it)
-	key := "user:" + user.ID.String()
+	key := "user:" + token
 	userJSON, err := json.Marshal(user)
+	if err != nil {
+		Logger.Warn(c.Context()).WithFields("error", err).Logs("Failed to serialize user data")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Failed to serialize user data",
+		})
+	}
 	if err := Redis.Set(c.Context(), key, userJSON, 10*time.Minute).Err(); err != nil {
 		Logger.Warn(c.Context()).Logs(fmt.Sprintf("Failed to cache user in Redis: %v, key: %s", err, key))
 	} else {
@@ -111,9 +119,10 @@ func Register(c *fiber.Ctx) error {
 
 // ActivateUser verifies OTP and activates the user
 func ActivateUser(c *fiber.Ctx) error {
+	token := c.Query("token")
+
 	type ActivateRequest struct {
-		Email string `json:"email" validate:"required,email"`
-		OTP   int64  `json:"otp" validate:"required"`
+		OTP int64 `json:"otp" validate:"required"`
 	}
 
 	var ar ActivateRequest
@@ -132,10 +141,27 @@ func ActivateUser(c *fiber.Ctx) error {
 		})
 	}
 
-	user, err := models.GetUserBy(c.Context(), Redis, DB, "email = ?", []interface{}{ar.Email}, "")
+	cachedUser, err := Redis.Get(c.Context(), "user:"+token).Result()
+	if err != nil {
+		Logger.Warn(c.Context()).WithFields("error", err).Logs("User not found or expired")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid or expired User data",
+		})
+	}
+
+	var marshedUser models.User
+	err = json.Unmarshal([]byte(cachedUser), &marshedUser)
+	if err != nil {
+		Logger.Warn(c.Context()).WithFields("error", err).Logs("Failed to deserialize user data")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Failed to deserialize user data",
+		})
+	}
+
+	user, err := models.GetUserBy(c.Context(), Redis, DB, "email = ?", []interface{}{marshedUser.Email})
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			Logger.Warn(c.Context()).WithFields("email", ar.Email).Logs("User not found")
+			Logger.Warn(c.Context()).WithFields("email", marshedUser.Email).Logs("User not found")
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 				"error": "User not found",
 			})
@@ -146,7 +172,7 @@ func ActivateUser(c *fiber.Ctx) error {
 		})
 	}
 
-	otpKey := "otp:" + user.ID.String()
+	otpKey := "otp:" + token
 	otpHash, err := Redis.Get(c.Context(), otpKey).Result()
 	if err != nil || otpHash == "" {
 		Logger.Warn(c.Context()).WithFields("key", otpKey).Logs("OTP not found or expired")
@@ -155,8 +181,8 @@ func ActivateUser(c *fiber.Ctx) error {
 		})
 	}
 
-	if err := utils.ComparePasswords(otpHash, string(ar.OTP)); err != nil {
-		Logger.Warn(c.Context()).WithFields("email", ar.Email).Logs("Invalid OTP provided")
+	if err := utils.ComparePasswords(otpHash, strconv.FormatInt(ar.OTP, 10)); err != nil {
+		Logger.Warn(c.Context()).WithFields("email", user.Email).Logs("Invalid OTP provided")
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid activation code",
 		})
@@ -171,6 +197,7 @@ func ActivateUser(c *fiber.Ctx) error {
 	}
 
 	Redis.Del(c.Context(), otpKey)
+	Redis.Del(c.Context(), "user:"+token)
 	Logger.Info(c.Context()).WithFields("user_id", user.ID).Logs(fmt.Sprintf("User activated successfully: %s", user.Username))
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{

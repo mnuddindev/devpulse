@@ -20,8 +20,8 @@ type EmailConfig struct {
 }
 
 // SendActivationEmail sends a professional activation email with OTP and link
-func SendActivationEmail(ctx context.Context, config EmailConfig, email, username string, otp int64, logger *logger.Logger) error {
-	activationLink := fmt.Sprintf("%s/activate?otp=%d&email=%s", config.AppURL, otp, email)
+func SendActivationEmail(ctx context.Context, config EmailConfig, email, username, token string, otp int64, logger *logger.Logger) error {
+	activationLink := fmt.Sprintf("%s/activate?token=%s", config.AppURL, token)
 
 	htmlBody := fmt.Sprintf(`
 <!DOCTYPE html>
@@ -108,7 +108,7 @@ func SendActivationEmail(ctx context.Context, config EmailConfig, email, usernam
             <p><strong>Instructions:</strong></p>
             <ul>
                 <li>Use the OTP code above if the link doesn’t work.</li>
-                <li>Enter it on the activation page at <a href="%s">%s/activate</a>.</li>
+                <li>Enter it on the activation page at <a href="%s">%s</a>.</li>
                 <li>This code expires in 24 hours for your security.</li>
             </ul>
             <p>If you didn’t sign up, please ignore this email or contact our support team.</p>
@@ -122,7 +122,7 @@ func SendActivationEmail(ctx context.Context, config EmailConfig, email, usernam
     </div>
 </body>
 </html>
-`, username, otp, activationLink, config.AppURL, config.AppURL, time.Now().Year(), config.AppURL, config.AppURL)
+`, username, otp, activationLink, activationLink, activationLink, time.Now().Year(), config.AppURL, config.AppURL)
 
 	// Plain text fallback
 	textBody := fmt.Sprintf(`

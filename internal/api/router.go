@@ -48,6 +48,9 @@ func NewRoutes(ctx context.Context, app *fiber.App, cfg *config.Config, db *gorm
 	v1.Redis = rclient
 	v1.Logger = log
 
+	app.Post("/register", v1.Register)
+	app.Post("/activate", v1.ActivateUser)
+
 	go func() {
 		<-ctx.Done()
 		rclient.Close(log)

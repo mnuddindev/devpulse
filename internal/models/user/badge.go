@@ -123,7 +123,7 @@ func DeleteBadge(ctx context.Context, redisClient *storage.RedisClient, gormDB *
 
 // AddBadgeToUser assigns a badge to a user (utility).
 func AddBadgeToUser(ctx context.Context, redisClient *storage.RedisClient, gormDB *gorm.DB, userID, badgeID uuid.UUID) error {
-	u, err := GetUser(ctx, redisClient, gormDB, userID)
+	u, err := GetUserBy(ctx, redisClient, gormDB, "id = ?", []interface{}{userID}, "")
 	if err != nil {
 		return err
 	}

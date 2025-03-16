@@ -24,7 +24,7 @@ func WithOTP(otp int64) UserOption {
 }
 
 func WithIsActive(active bool) UserOption {
-	return func(u *User) { u.IsActive = active }
+	return func(u *User) { u.IsActive = true; u.IsEmailVerified = true }
 }
 
 func WithEmailVerified(verified bool) UserOption {

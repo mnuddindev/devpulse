@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/go-playground/validator/v10"
 	"github.com/google/uuid"
 	storage "github.com/mnuddindev/devpulse/pkg/redis"
 	"github.com/mnuddindev/devpulse/pkg/utils"
@@ -14,7 +13,7 @@ import (
 )
 
 type User struct {
-	ID        uuid.UUID `gorm:"type:uuid;primary_key;default:uuid_generate_v4()" json:"id" validate:"requried"`
+	ID        uuid.UUID `gorm:"type:uuid;primary_key;default:uuid_generate_v4()" json:"id"`
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 	DeletedAt time.Time `gorm:"index" json:"-"`
@@ -95,11 +94,6 @@ func NewUser(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, use
 		opt(u)
 	}
 
-	validate := validator.New()
-	if err := validate.Struct(u); err != nil {
-		return nil, utils.NewError(utils.ErrBadRequest.Code, "Invalid user data", err.Error())
-	}
-
 	if err := db.WithContext(ctx).Create(u).Error; err != nil {
 		return nil, utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to create user in database")
 	}
@@ -117,26 +111,18 @@ func NewUser(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, use
 func GetUserBy(ctx context.Context, redisClient *storage.RedisClient, gormDB *gorm.DB, condition string, args []interface{}, preload ...string) (*User, error) {
 	var u User
 	query := gormDB.WithContext(ctx).Where(condition, args...)
-	for _, p := range preload {
-		query = query.Preload(p)
+	if len(preload) > 0 && preload[0] != "" {
+		for _, p := range preload {
+			query = query.Preload(p)
+		}
 	}
-	if err := query.First(&u).Error; err != nil {
+	if err := query.Find(&u).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, utils.NewError(utils.ErrNotFound.Code, "User not found")
 		}
 		return nil, utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to get user")
 	}
 
-	key := "user:" + u.ID.String()
-	if cached, err := redisClient.Get(ctx, key).Result(); err == nil {
-		var u User
-		if err := json.Unmarshal([]byte(cached), &u); err == nil {
-			return &u, nil
-		}
-	}
-
-	userJSON, _ := json.Marshal(u)
-	redisClient.Set(ctx, key, userJSON, 10*time.Minute)
 	return &u, nil
 }
 
@@ -175,18 +161,10 @@ func UpdateUser(ctx context.Context, redisClient *storage.RedisClient, gormDB *g
 		opt(u)
 	}
 
-	validate := validator.New()
-	if err := validate.Struct(u); err != nil {
-		return nil, utils.NewError(utils.ErrBadRequest.Code, "Invalid user data", err.Error())
-	}
-
 	if err := gormDB.WithContext(ctx).Save(u).Error; err != nil {
 		return nil, utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to update user")
 	}
 
-	userJSON, _ := json.Marshal(u)
-	key := "user:" + u.ID.String()
-	redisClient.Set(ctx, key, userJSON, 10*time.Minute)
 	return u, nil
 }
 
