@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/mnuddindev/devpulse/internal/auth"
 	"github.com/mnuddindev/devpulse/internal/models"
 	"github.com/mnuddindev/devpulse/pkg/utils"
 	"gorm.io/gorm"
@@ -290,6 +291,42 @@ func Login(c *fiber.Ctx) error {
 		})
 	}
 
+	accessToken, err := auth.GenerateAccessToken(user.ID.String(), user.RoleID.String())
+	if err != nil {
+		Logger.Error(c.Context()).WithFields("error", err).Logs("Failed to generate access token")
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to process login",
+		})
+	}
+	refreshToken := auth.GenerateRefreshToken()
+
+	refreshKey := "refresh:" + refreshToken
+	refreshData := map[string]interface{}{
+		"user_id": user.ID.String(),
+		"ip":      c.IP(),
+	}
+	refreshJSON, _ := json.Marshal(refreshData)
+	if err := Redis.Set(c.Context(), refreshKey, refreshJSON, 7*24*time.Hour).Err(); err != nil {
+		Logger.Warn(c.Context()).WithFields("key", refreshKey).Logs(fmt.Sprintf("Failed to store refresh token: %v", err))
+	}
+
+	c.Cookie(&fiber.Cookie{
+		Name:     "access_token",
+		Value:    accessToken,
+		Expires:  time.Now().Add(15 * time.Minute),
+		HTTPOnly: true,
+		Secure:   true,
+		SameSite: "Strict",
+	})
+	c.Cookie(&fiber.Cookie{
+		Name:     "refresh_token",
+		Value:    refreshToken,
+		Expires:  time.Now().Add(7 * 24 * time.Hour),
+		HTTPOnly: true,
+		Secure:   true,
+		SameSite: "Strict",
+	})
+
 	Redis.Del(c.Context(), ipKey)
 
 	Logger.Info(c.Context()).WithFields("user_id", user.ID).Logs(fmt.Sprintf("User logged in successfully: %s", user.Username))
@@ -308,7 +345,7 @@ func Login(c *fiber.Ctx) error {
 		Logger.Info(c.Context()).Logs(fmt.Sprintf("User cached in Redis: %s", key))
 	}
 
-	return c.JSON(fiber.Map{
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"message": "Login successful",
 		"user": fiber.Map{
 			"id":       user.ID,
@@ -317,5 +354,60 @@ func Login(c *fiber.Ctx) error {
 			"name":     user.Profile.Name,
 			"avatar":   user.Profile.AvatarURL,
 		},
+	})
+}
+
+// Logout ensures user logged out from the server.
+func Logout(c *fiber.Ctx) error {
+	refreshToken := c.Cookies("refresh_token")
+	if refreshToken == "" {
+		// Fallback: Parse Cookie header
+		cookieHeader := c.Get("Cookie")
+		Logger.Info(c.Context()).WithFields("cookies", cookieHeader).Logs("Cookies received in logout")
+		for _, cookie := range strings.Split(cookieHeader, ";") {
+			parts := strings.SplitN(strings.TrimSpace(cookie), "=", 2)
+			if len(parts) == 2 && parts[0] == "refresh_token" {
+				refreshToken = parts[1]
+				break
+			}
+		}
+		if refreshToken == "" {
+			Logger.Warn(c.Context()).Logs("No refresh token provided for logout")
+		}
+	}
+
+	if refreshToken != "" {
+		refreshKey := "refresh:" + refreshToken
+		refreshDataJSON, err := Redis.Get(c.Context(), refreshKey).Result()
+		if err == nil && refreshDataJSON != "" {
+			var refreshData map[string]interface{}
+			if err := json.Unmarshal([]byte(refreshDataJSON), &refreshData); err == nil {
+				if userID, ok := refreshData["user_id"].(string); ok {
+					Logger.Info(c.Context()).WithFields("user_id", userID).Logs("User logged out, refresh token revoked")
+				}
+			}
+			Redis.Del(c.Context(), refreshKey)
+		}
+	}
+
+	c.Cookie(&fiber.Cookie{
+		Name:     "access_token",
+		Value:    "",
+		Expires:  time.Now().Add(-time.Hour),
+		HTTPOnly: true,
+		Secure:   true,
+		SameSite: "Strict",
+	})
+	c.Cookie(&fiber.Cookie{
+		Name:     "refresh_token",
+		Value:    "",
+		Expires:  time.Now().Add(-time.Hour),
+		HTTPOnly: true,
+		Secure:   true,
+		SameSite: "Strict",
+	})
+
+	return c.JSON(fiber.Map{
+		"message": "Logout successful",
 	})
 }
