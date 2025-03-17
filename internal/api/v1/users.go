@@ -371,7 +371,7 @@ func Logout(c *fiber.Ctx) error {
 	}
 
 	if refreshToken != "" {
-		if err := Redis.Set(c.Context(), refreshTokenKey, "invalid", 15*time.Minute).Err(); err != nil {
+		if err := Redis.Set(c.Context(), refreshTokenKey, "invalid", 7*24*time.Hour).Err(); err != nil {
 			Logger.Warn(c.Context()).WithFields("error", err).Logs("Failed to blacklist refresh token in Redis")
 		}
 	}
