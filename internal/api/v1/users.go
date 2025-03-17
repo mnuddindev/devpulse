@@ -359,34 +359,20 @@ func Login(c *fiber.Ctx) error {
 
 // Logout ensures user logged out from the server.
 func Logout(c *fiber.Ctx) error {
+	accessToken := c.Cookies("access_token")
 	refreshToken := c.Cookies("refresh_token")
-	if refreshToken == "" {
-		// Fallback: Parse Cookie header
-		cookieHeader := c.Get("Cookie")
-		Logger.Info(c.Context()).WithFields("cookies", cookieHeader).Logs("Cookies received in logout")
-		for _, cookie := range strings.Split(cookieHeader, ";") {
-			parts := strings.SplitN(strings.TrimSpace(cookie), "=", 2)
-			if len(parts) == 2 && parts[0] == "refresh_token" {
-				refreshToken = parts[1]
-				break
-			}
-		}
-		if refreshToken == "" {
-			Logger.Warn(c.Context()).Logs("No refresh token provided for logout")
+	accessTokenKey := "blacklist:access:" + accessToken
+	refreshTokenKey := "blacklist:refresh:" + refreshToken
+
+	if accessToken != "" {
+		if err := Redis.Set(c.Context(), accessTokenKey, "invalid", 15*time.Minute).Err(); err != nil {
+			Logger.Warn(c.Context()).WithFields("error", err).Logs("Failed to blacklist access token in Redis")
 		}
 	}
 
 	if refreshToken != "" {
-		refreshKey := "refresh:" + refreshToken
-		refreshDataJSON, err := Redis.Get(c.Context(), refreshKey).Result()
-		if err == nil && refreshDataJSON != "" {
-			var refreshData map[string]interface{}
-			if err := json.Unmarshal([]byte(refreshDataJSON), &refreshData); err == nil {
-				if userID, ok := refreshData["user_id"].(string); ok {
-					Logger.Info(c.Context()).WithFields("user_id", userID).Logs("User logged out, refresh token revoked")
-				}
-			}
-			Redis.Del(c.Context(), refreshKey)
+		if err := Redis.Set(c.Context(), refreshTokenKey, "invalid", 15*time.Minute).Err(); err != nil {
+			Logger.Warn(c.Context()).WithFields("error", err).Logs("Failed to blacklist refresh token in Redis")
 		}
 	}
 
@@ -407,7 +393,17 @@ func Logout(c *fiber.Ctx) error {
 		SameSite: "Strict",
 	})
 
-	return c.JSON(fiber.Map{
+	c.Set("Authorization", "")
+	c.Set("Cache-Control", "no-store, no-cache, must-revalidate, private")
+	c.Set("Pragma", "no-cache")
+	c.Set("X-Content-Type-Options", "nosniff")
+	c.Set("X-Frame-Options", "DENY")
+	c.Set("Content-Security-Policy", "default-src 'self'")
+
+	Logger.Info(c.Context()).Logs("User logged out successfully")
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"message": "Logout successful",
+		"status":  fiber.StatusOK,
 	})
 }
