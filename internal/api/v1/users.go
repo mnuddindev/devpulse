@@ -315,16 +315,16 @@ func Login(c *fiber.Ctx) error {
 		Value:    accessToken,
 		Expires:  time.Now().Add(15 * time.Minute),
 		HTTPOnly: true,
-		Secure:   true,
-		SameSite: "Strict",
+		// Secure:   true,
+		// SameSite: "Strict",
 	})
 	c.Cookie(&fiber.Cookie{
 		Name:     "refresh_token",
 		Value:    refreshToken,
 		Expires:  time.Now().Add(7 * 24 * time.Hour),
 		HTTPOnly: true,
-		Secure:   true,
-		SameSite: "Strict",
+		// Secure:   true,
+		// SameSite: "Strict",
 	})
 
 	Redis.Del(c.Context(), ipKey)
@@ -374,6 +374,21 @@ func Logout(c *fiber.Ctx) error {
 		if err := Redis.Set(c.Context(), refreshTokenKey, "invalid", 7*24*time.Hour).Err(); err != nil {
 			Logger.Warn(c.Context()).WithFields("error", err).Logs("Failed to blacklist refresh token in Redis")
 		}
+		refreshKey := "refresh:" + refreshToken
+		refreshDataJSON, err := Redis.Get(c.Context(), refreshKey).Result()
+		if err == nil && refreshDataJSON != "" {
+			var refreshData map[string]interface{}
+			if err := json.Unmarshal([]byte(refreshDataJSON), &refreshData); err == nil {
+				if userID, ok := refreshData["user_id"].(string); ok {
+					Logger.Info(c.Context()).WithFields("user_id", userID).Logs("User logged out, refresh token revoked")
+				}
+			}
+			Redis.Del(c.Context(), refreshKey)
+		} else {
+			Logger.Warn(c.Context()).WithFields("refresh_key", refreshKey).Logs("Refresh token not found in Redis")
+		}
+	} else {
+		Logger.Warn(c.Context()).Logs("No refresh token provided for logout")
 	}
 
 	c.Cookie(&fiber.Cookie{
@@ -399,8 +414,6 @@ func Logout(c *fiber.Ctx) error {
 	c.Set("X-Content-Type-Options", "nosniff")
 	c.Set("X-Frame-Options", "DENY")
 	c.Set("Content-Security-Policy", "default-src 'self'")
-
-	Logger.Info(c.Context()).Logs("User logged out successfully")
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"message": "Logout successful",
