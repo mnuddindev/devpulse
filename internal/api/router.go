@@ -62,7 +62,7 @@ func NewRoutes(ctx context.Context, app *fiber.App, cfg *config.Config, db *gorm
 	}
 
 	user := app.Group("/user", auth.RefreshTokenMiddleware(opt))
-	user.Post("/profile", auth.CheckPerm(opt, "create_comment"))
+	user.Post("/profile", auth.CheckPerm(opt, "create_comment"), v1.GetProfile)
 
 	go func() {
 		<-ctx.Done()
