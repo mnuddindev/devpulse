@@ -64,6 +64,10 @@ var (
 	WithLastSeen           = user.WithLastSeen
 
 	NewRole                    = user.NewRole
+	GetRoleBy                  = user.GetRoleBy
+	GetRoles                   = user.GetRoles
+	UpdateRole                 = user.UpdateRole
+	DeleteRole                 = user.DeleteRole
 	NewPermission              = user.NewPermission
 	NewBadge                   = user.NewBadge
 	NewNotification            = user.NewNotification

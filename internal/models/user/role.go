@@ -21,6 +21,84 @@ type Role struct {
 	UpdatedAt   time.Time    `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
+var allPermissions []string
+var permissions = []Permission{
+	// Post-related permissions
+	{Name: "create_post"}, {Name: "delete_any_post"}, {Name: "delete_own_post"}, {Name: "edit_any_post"},
+	{Name: "edit_own_post"}, {Name: "feature_posts"}, {Name: "moderate_post"},
+	{Name: "read_post"},
+
+	// Comment-related permissions
+	{Name: "create_comment"}, {Name: "delete_any_comment"}, {Name: "delete_own_comment"},
+	{Name: "edit_any_comment"}, {Name: "edit_own_comment"},
+	{Name: "moderate_comment"},
+
+	// User-related permissions
+	{Name: "ban_user"}, {Name: "create_user"}, {Name: "delete_any_user"}, {Name: "delete_own_profile"},
+	{Name: "edit_any_user"}, {Name: "edit_own_profile"}, {Name: "follow_user"},
+	{Name: "moderate_user"}, {Name: "read_user_profile"},
+	{Name: "unfollow_user"},
+
+	// Role and permission management
+	{Name: "assign_roles"}, {Name: "create_roles"}, {Name: "delete_roles"},
+	{Name: "edit_roles"}, {Name: "manage_roles"},
+
+	// Reaction-related permissions
+	{Name: "create_reaction"}, {Name: "delete_any_reaction"}, {Name: "delete_own_reaction"},
+	{Name: "edit_any_reaction"}, {Name: "edit_own_reaction"},
+
+	// Tag-related permissions
+	{Name: "create_tag"}, {Name: "delete_tag"}, {Name: "edit_tag"},
+	{Name: "follow_tag"}, {Name: "moderate_tag"},
+	{Name: "unfollow_tag"},
+
+	// Site-wide and moderation permissions
+	{Name: "give_suggestion"}, {Name: "manage_analytics"}, {Name: "manage_notifications"},
+	{Name: "manage_site_settings"}, {Name: "need_moderation"},
+	{Name: "report_content"},
+}
+
+var roles = []struct {
+	Name        string
+	Permissions []string
+}{
+	{"member", []string{
+		"read_post", "create_comment", "edit_own_comment", "delete_own_comment",
+		"give_reaction", "follow_tag", "unfollow_tag", "follow_user", "unfollow_user",
+		"delete_own_profile", "edit_own_profile", "need_moderation", "report_content",
+	}},
+	{"author", []string{
+		"read_post", "create_post", "edit_own_post", "delete_own_post",
+		"create_comment", "edit_own_comment", "delete_own_comment",
+		"give_reaction", "follow_tag", "unfollow_tag", "follow_user", "unfollow_user",
+		"delete_own_profile", "edit_own_profile", "report_content",
+	}},
+	{"trusted_member", []string{
+		"read_post", "create_post", "edit_own_post", "delete_own_post",
+		"create_comment", "edit_own_comment", "delete_own_comment",
+		"give_reaction", "follow_tag", "unfollow_tag", "follow_user", "unfollow_user",
+		"delete_own_profile", "edit_own_profile", "give_suggestion", "report_content",
+	}},
+	{"tag_moderator", []string{
+		"read_post", "create_post", "edit_own_post", "delete_own_post",
+		"create_comment", "edit_own_comment", "delete_own_comment",
+		"give_reaction", "follow_tag", "unfollow_tag", "follow_user", "unfollow_user",
+		"delete_own_profile", "edit_own_profile", "give_suggestion",
+		"moderate_tag", "feature_posts", "ban_user", "report_content",
+	}},
+	{"moderator", []string{
+		"read_post", "create_post", "edit_own_post", "delete_own_post", "edit_any_post",
+		"delete_any_post", "moderate_post", "create_comment", "edit_own_comment",
+		"delete_own_comment", "edit_any_comment", "moderate_comment", "create_user",
+		"edit_user", "delete_user", "moderate_user", "ban_user", "follow_user",
+		"unfollow_user", "create_roles", "edit_roles", "delete_roles", "create_reaction",
+		"edit_reaction", "delete_reaction", "give_reaction", "create_tag", "edit_tag",
+		"delete_tag", "moderate_tag", "follow_tag", "unfollow_tag", "give_suggestion",
+		"feature_posts", "report_content",
+	}},
+	{"admin", allPermissions},
+}
+
 // NewRole creates a new role.
 func NewRole(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, name string, permissions ...string) (*Role, error) {
 	r := &Role{Name: name}
@@ -48,17 +126,10 @@ func NewRole(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, nam
 }
 
 // GetRole retrieves a role by ID.
-func GetRole(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, id uuid.UUID) (*Role, error) {
-	key := "role:" + id.String()
-	if cached, err := rclient.Get(ctx, key).Result(); err == nil {
-		var r Role
-		if err := json.Unmarshal([]byte(cached), &r); err == nil {
-			return &r, nil
-		}
-	}
-
+func GetRoleBy(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, condition string, args []interface{}) (*Role, error) {
 	var r Role
-	if err := db.WithContext(ctx).Preload("Permissions").Where("id = ?", id).First(&r).Error; err != nil {
+	query := db.WithContext(ctx).Where(condition, args...)
+	if err := query.Preload("Permissions").Find(&r).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, utils.NewError(utils.ErrNotFound.Code, "Role not found")
 		}
@@ -66,7 +137,7 @@ func GetRole(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, id 
 	}
 
 	roleJSON, _ := json.Marshal(r)
-	rclient.Set(ctx, key, roleJSON, 10*time.Minute)
+	rclient.Set(ctx, "role:"+r.ID.String(), roleJSON, 10*time.Minute)
 	return &r, nil
 }
 
@@ -92,7 +163,7 @@ func GetRoles(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB) ([
 
 // UpdateRole updates a role’s name or permissions.
 func UpdateRole(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, id uuid.UUID, name string, permissions []string) (*Role, error) {
-	r, err := GetRole(ctx, rclient, db, id)
+	r, err := GetRoleBy(ctx, rclient, db, "id = ?", []interface{}{id})
 	if err != nil {
 		return nil, err
 	}
@@ -126,7 +197,7 @@ func UpdateRole(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, 
 
 // DeleteRole deletes a role.
 func DeleteRole(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, id uuid.UUID) error {
-	r, err := GetRole(ctx, rclient, db, id)
+	r, err := GetRoleBy(ctx, rclient, db, "id = ?", []interface{}{id})
 	if err != nil {
 		return err
 	}
@@ -142,86 +213,9 @@ func DeleteRole(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, 
 
 // SeedRoles initializes default roles and permissions.
 func SeedRoles(ctx context.Context, db *gorm.DB, redisClient *storage.RedisClient, logger *logger.Logger) error {
-	var allPermissions []string
-	permissions := []Permission{
-		// Post-related permissions
-		{Name: "create_post"}, {Name: "delete_any_post"}, {Name: "delete_own_post"}, {Name: "edit_any_post"},
-		{Name: "edit_own_post"}, {Name: "feature_posts"}, {Name: "moderate_post"},
-		{Name: "read_post"},
-
-		// Comment-related permissions
-		{Name: "create_comment"}, {Name: "delete_any_comment"}, {Name: "delete_own_comment"},
-		{Name: "edit_any_comment"}, {Name: "edit_own_comment"},
-		{Name: "moderate_comment"},
-
-		// User-related permissions
-		{Name: "ban_user"}, {Name: "create_user"}, {Name: "delete_any_user"}, {Name: "delete_own_profile"},
-		{Name: "edit_any_user"}, {Name: "edit_own_profile"}, {Name: "follow_user"},
-		{Name: "moderate_user"}, {Name: "read_user_profile"},
-		{Name: "unfollow_user"},
-
-		// Role and permission management
-		{Name: "assign_roles"}, {Name: "create_roles"}, {Name: "delete_roles"},
-		{Name: "edit_roles"}, {Name: "manage_roles"},
-
-		// Reaction-related permissions
-		{Name: "create_reaction"}, {Name: "delete_any_reaction"}, {Name: "delete_own_reaction"},
-		{Name: "edit_any_reaction"}, {Name: "edit_own_reaction"},
-
-		// Tag-related permissions
-		{Name: "create_tag"}, {Name: "delete_tag"}, {Name: "edit_tag"},
-		{Name: "follow_tag"}, {Name: "moderate_tag"},
-		{Name: "unfollow_tag"},
-
-		// Site-wide and moderation permissions
-		{Name: "give_suggestion"}, {Name: "manage_analytics"}, {Name: "manage_notifications"},
-		{Name: "manage_site_settings"}, {Name: "need_moderation"},
-		{Name: "report_content"},
-	}
 	for _, perm := range permissions {
 		allPermissions = append(allPermissions, perm.Name)
 		db.FirstOrCreate(&perm, Permission{Name: perm.Name})
-	}
-	// Define roles with permissions
-	roles := []struct {
-		Name        string
-		Permissions []string
-	}{
-		{"member", []string{
-			"read_post", "create_comment", "edit_own_comment", "delete_own_comment",
-			"give_reaction", "follow_tag", "unfollow_tag", "follow_user", "unfollow_user",
-			"delete_own_profile", "edit_own_profile", "need_moderation", "report_content",
-		}},
-		{"author", []string{
-			"read_post", "create_post", "edit_own_post", "delete_own_post",
-			"create_comment", "edit_own_comment", "delete_own_comment",
-			"give_reaction", "follow_tag", "unfollow_tag", "follow_user", "unfollow_user",
-			"delete_own_profile", "edit_own_profile", "report_content",
-		}},
-		{"trusted_member", []string{
-			"read_post", "create_post", "edit_own_post", "delete_own_post",
-			"create_comment", "edit_own_comment", "delete_own_comment",
-			"give_reaction", "follow_tag", "unfollow_tag", "follow_user", "unfollow_user",
-			"delete_own_profile", "edit_own_profile", "give_suggestion", "report_content",
-		}},
-		{"tag_moderator", []string{
-			"read_post", "create_post", "edit_own_post", "delete_own_post",
-			"create_comment", "edit_own_comment", "delete_own_comment",
-			"give_reaction", "follow_tag", "unfollow_tag", "follow_user", "unfollow_user",
-			"delete_own_profile", "edit_own_profile", "give_suggestion",
-			"moderate_tag", "feature_posts", "ban_user", "report_content",
-		}},
-		{"moderator", []string{
-			"read_post", "create_post", "edit_own_post", "delete_own_post", "edit_any_post",
-			"delete_any_post", "moderate_post", "create_comment", "edit_own_comment",
-			"delete_own_comment", "edit_any_comment", "moderate_comment", "create_user",
-			"edit_user", "delete_user", "moderate_user", "ban_user", "follow_user",
-			"unfollow_user", "create_roles", "edit_roles", "delete_roles", "create_reaction",
-			"edit_reaction", "delete_reaction", "give_reaction", "create_tag", "edit_tag",
-			"delete_tag", "moderate_tag", "follow_tag", "unfollow_tag", "give_suggestion",
-			"feature_posts", "report_content",
-		}},
-		{"admin", allPermissions},
 	}
 
 	// Seed roles and permissions into the database

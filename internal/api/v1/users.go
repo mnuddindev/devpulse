@@ -331,7 +331,7 @@ func Login(c *fiber.Ctx) error {
 
 	Logger.Info(c.Context()).WithFields("user_id", user.ID).Logs(fmt.Sprintf("User logged in successfully: %s", user.Username))
 
-	key := "user:" + user.Email
+	key := "user:" + user.ID.String()
 	userJSON, err := json.Marshal(user)
 	if err != nil {
 		Logger.Warn(c.Context()).WithFields("error", err).Logs("Failed to serialize user data")
@@ -339,7 +339,7 @@ func Login(c *fiber.Ctx) error {
 			"error": "Failed to serialize user data",
 		})
 	}
-	if err := Redis.Set(c.Context(), key, userJSON, 0).Err(); err != nil {
+	if err := Redis.Set(c.Context(), key, userJSON, 30*time.Minute).Err(); err != nil {
 		Logger.Warn(c.Context()).Logs(fmt.Sprintf("Failed to cache user in Redis: %v, key: %s", err, key))
 	} else {
 		Logger.Info(c.Context()).Logs(fmt.Sprintf("User cached in Redis: %s", key))
@@ -370,6 +370,7 @@ func Logout(c *fiber.Ctx) error {
 		}
 	}
 
+	var refreshData map[string]interface{}
 	if refreshToken != "" {
 		if err := Redis.Set(c.Context(), refreshTokenKey, "invalid", 7*24*time.Hour).Err(); err != nil {
 			Logger.Warn(c.Context()).WithFields("error", err).Logs("Failed to blacklist refresh token in Redis")
@@ -377,7 +378,6 @@ func Logout(c *fiber.Ctx) error {
 		refreshKey := "refresh:" + refreshToken
 		refreshDataJSON, err := Redis.Get(c.Context(), refreshKey).Result()
 		if err == nil && refreshDataJSON != "" {
-			var refreshData map[string]interface{}
 			if err := json.Unmarshal([]byte(refreshDataJSON), &refreshData); err == nil {
 				if userID, ok := refreshData["user_id"].(string); ok {
 					Logger.Info(c.Context()).WithFields("user_id", userID).Logs("User logged out, refresh token revoked")
@@ -407,6 +407,8 @@ func Logout(c *fiber.Ctx) error {
 		Secure:   true,
 		SameSite: "Strict",
 	})
+
+	Redis.Del(c.Context(), refreshData["user_id"].(string))
 
 	c.Set("Authorization", "")
 	c.Set("Cache-Control", "no-store, no-cache, must-revalidate, private")
