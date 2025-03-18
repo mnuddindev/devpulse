@@ -8,9 +8,11 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 	"github.com/mnuddindev/devpulse/internal/auth"
 	"github.com/mnuddindev/devpulse/internal/models"
 	"github.com/mnuddindev/devpulse/pkg/utils"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
@@ -420,5 +422,132 @@ func Logout(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"message": "Logout successful",
 		"status":  fiber.StatusOK,
+	})
+}
+
+// UserProfile retrieves and returns the authenticated user’s profile, optimized with Redis caching
+func GetProfile(c *fiber.Ctx) error {
+	userID, ok := c.Locals("user_id").(string)
+	if !ok || userID == "" {
+		Logger.Warn(c.Context()).Logs("UserProfile attempted without user ID in context")
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error":  "Unauthorized",
+			"status": fiber.StatusUnauthorized,
+		})
+	}
+
+	uid, err := uuid.Parse(userID)
+	if err != nil {
+		Logger.Error(c.Context()).WithFields("error", err).Logs("Invalid user ID format in UserProfile")
+		// Return a 400 Bad Request response for invalid user ID
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":  "Invalid user ID",
+			"status": fiber.StatusBadRequest,
+		})
+	}
+
+	userKey := "user:" + uid.String()
+	// Declare a variable to hold the user struct
+	var user *models.User
+	// Attempt to fetch the user profile from Redis
+	cachedUser, err := Redis.Get(c.Context(), userKey).Result()
+	// Check if the user profile is cached in Redis
+	if err == nil {
+		// Unmarshal the cached JSON into a user struct
+		user = &models.User{}
+		if err := json.Unmarshal([]byte(cachedUser), user); err != nil {
+			// Log a warning if unmarshaling fails (fallback to DB)
+			Logger.Warn(c.Context()).WithFields("error", err, "userID", uid).Logs("Failed to unmarshal cached user from Redis")
+			user = nil
+		}
+	}
+	// Check if the user wasn’t found in Redis or unmarshaling failed
+	if err == redis.Nil || user == nil {
+		// Fetch the user profile from the database by ID
+		user, err = models.GetUserBy(c.Context(), Redis, DB, "id = ?", []interface{}{uid})
+		// Check if fetching the user failed
+		if err != nil {
+			// Log an error with details if the user isn’t found or DB fails
+			Logger.Error(c.Context()).WithFields("error", err, "userID", uid).Logs("Database error while fetching user profile")
+			// Return a 500 Internal Server Error if DB query fails
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error":  "Failed to fetch user profile",
+				"status": fiber.StatusInternalServerError,
+			})
+		}
+		// Marshal the user to JSON for caching
+		userJSON, err := json.Marshal(user)
+		// Check if marshaling failed
+		if err != nil {
+			// Log a warning if marshaling fails (non-critical, proceed)
+			Logger.Warn(c.Context()).WithFields("error", err, "userID", uid).Logs("Failed to marshal user for Redis caching")
+		} else {
+			// Cache the user profile in Redis with a 30-minute TTL
+			if err := Redis.Set(c.Context(), userKey, userJSON, 30*time.Minute).Err(); err != nil {
+				// Log a warning if caching fails (non-critical)
+				Logger.Warn(c.Context()).WithFields("error", err, "userID", uid).Logs("Failed to cache user profile in Redis")
+			}
+		}
+	} else if err != nil {
+		// Log an error if Redis fails for another reason (proceed with DB fallback)
+		Logger.Error(c.Context()).WithFields("error", err, "userID", uid).Logs("Redis error fetching user profile")
+		// Fetch from DB as a fallback
+		user, err = models.GetUserBy(c.Context(), Redis, DB, "id = ?", []interface{}{uid})
+		if err != nil {
+			Logger.Error(c.Context()).WithFields("error", err, "userID", uid).Logs("Database error while fetching user profile")
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error":  "Failed to fetch user profile",
+				"status": fiber.StatusInternalServerError,
+			})
+		}
+	}
+
+	// Prepare user profile response with selective fields
+	profileResponse := fiber.Map{
+		"id":                       user.ID,
+		"username":                 user.Username,
+		"email":                    user.Email,
+		"name":                     user.Profile.Name,
+		"bio":                      user.Profile.Bio,
+		"avatar_url":               user.Profile.AvatarURL,
+		"job_title":                user.Profile.JobTitle,
+		"employer":                 user.Profile.Employer,
+		"location":                 user.Profile.Location,
+		"social_links":             user.Profile.SocialLinks,
+		"current_learning":         user.Profile.CurrentLearning,
+		"available_for":            user.Profile.AvailableFor,
+		"currently_hacking_on":     user.Profile.CurrentlyHackingOn,
+		"pronouns":                 user.Profile.Pronouns,
+		"education":                user.Profile.Education,
+		"brand_color":              user.Settings.BrandColor,
+		"posts_count":              user.Stats.PostsCount,
+		"comments_count":           user.Stats.CommentsCount,
+		"likes_count":              user.Stats.LikesCount,
+		"bookmarks_count":          user.Stats.BookmarksCount,
+		"last_seen":                user.Stats.LastSeen,
+		"theme_preference":         user.Settings.ThemePreference,
+		"base_font":                user.Settings.BaseFont,
+		"site_navbar":              user.Settings.SiteNavbar,
+		"content_editor":           user.Settings.ContentEditor,
+		"content_mode":             user.Settings.ContentMode,
+		"created_at":               user.CreatedAt,
+		"updated_at":               user.UpdatedAt,
+		"skills":                   user.Profile.Skills,
+		"interests":                user.Profile.Interests,
+		"badges":                   user.Badges,
+		"roles":                    user.Role,
+		"followers":                user.Followers,
+		"following":                user.Following,
+		"notifications":            user.Notifications,
+		"notification_preferences": user.NotificationPreferences,
+	}
+
+	// Log successful profile retrieval
+	Logger.Info(c.Context()).WithFields("userID", uid).Logs("User profile retrieved successfully")
+	// Return a 200 OK response with the user profile
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "Profile retrieved successfully",
+		"status":  fiber.StatusOK,
+		"user":    profileResponse,
 	})
 }

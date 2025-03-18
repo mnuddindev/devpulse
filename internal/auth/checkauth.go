@@ -20,7 +20,7 @@ func CheckPerm(opt Options, perms ...string) fiber.Handler {
 		user_id := c.Locals("user_id").(string)
 		userKey := "user:" + user_id
 		var user *models.User
-		cachedUser, err := opt.rclient.Get(c.Context(), userKey).Result()
+		cachedUser, err := opt.Rclient.Get(c.Context(), userKey).Result()
 		if err == nil && cachedUser != "" {
 			user = &models.User{}
 			if err := json.Unmarshal([]byte(cachedUser), user); err != nil {

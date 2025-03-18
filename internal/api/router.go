@@ -10,6 +10,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/limiter"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	v1 "github.com/mnuddindev/devpulse/internal/api/v1"
+	"github.com/mnuddindev/devpulse/internal/auth"
 	"github.com/mnuddindev/devpulse/internal/config"
 	"github.com/mnuddindev/devpulse/pkg/logger"
 	storage "github.com/mnuddindev/devpulse/pkg/redis"
@@ -53,6 +54,15 @@ func NewRoutes(ctx context.Context, app *fiber.App, cfg *config.Config, db *gorm
 	app.Post("/login", v1.Login)
 	app.Post("/logout", v1.Logout)
 	app.Post("/refresh-token", v1.Refresh)
+
+	opt := auth.Options{
+		DB:      db,
+		Rclient: rclient,
+		Logger:  log,
+	}
+
+	user := app.Group("/user", auth.RefreshTokenMiddleware(opt))
+	user.Post("/profile", auth.CheckPerm(opt, "create_comment"))
 
 	go func() {
 		<-ctx.Done()

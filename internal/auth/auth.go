@@ -7,7 +7,7 @@ import (
 )
 
 type Options struct {
-	db      *gorm.DB
-	rclient *storage.RedisClient
+	DB      *gorm.DB
+	Rclient *storage.RedisClient
 	Logger  *logger.Logger
 }

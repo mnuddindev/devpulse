@@ -31,7 +31,7 @@ func RefreshTokenMiddleware(opt Options) fiber.Handler {
 
 		if accessToken != "" {
 			accessTokenKey := "blacklist:access:" + accessToken
-			if opt.rclient.Exists(c.Context(), accessTokenKey).Val() > 0 {
+			if opt.Rclient.Exists(c.Context(), accessTokenKey).Val() > 0 {
 				opt.Logger.Warn(c.Context()).WithFields("token", accessToken).Logs("Attempted use of blacklisted access token")
 				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 					"error": "Access token has been invalidated",
@@ -40,7 +40,7 @@ func RefreshTokenMiddleware(opt Options) fiber.Handler {
 		}
 		if refreshToken != "" {
 			refreshTokenKey := "blacklist:refresh:" + refreshToken
-			if opt.rclient.Exists(c.Context(), refreshTokenKey).Val() > 0 {
+			if opt.Rclient.Exists(c.Context(), refreshTokenKey).Val() > 0 {
 				opt.Logger.Warn(c.Context()).WithFields("token", refreshToken).Logs("Attempted use of blacklisted refresh token")
 				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 					"error": "Refresh token has been invalidated",
@@ -67,7 +67,7 @@ func RefreshTokenMiddleware(opt Options) fiber.Handler {
 
 		userKey := "user:" + claims.UserID
 		var user *models.User
-		cachedUser, err := opt.rclient.Get(c.Context(), userKey).Result()
+		cachedUser, err := opt.Rclient.Get(c.Context(), userKey).Result()
 		if err == nil && cachedUser != "" {
 			user = &models.User{}
 			if err := json.Unmarshal([]byte(cachedUser), user); err != nil {
@@ -76,7 +76,7 @@ func RefreshTokenMiddleware(opt Options) fiber.Handler {
 			}
 		}
 		if err == redis.Nil || user == nil {
-			user, err = models.GetUserBy(c.Context(), opt.rclient, opt.db, "id = ?", []interface{}{uuid.MustParse(claims.UserID)}, "")
+			user, err = models.GetUserBy(c.Context(), opt.Rclient, opt.DB, "id = ?", []interface{}{uuid.MustParse(claims.UserID)}, "")
 			if err != nil {
 				opt.Logger.Warn(c.Context()).WithFields("user_id", claims.UserID).Logs("User not found")
 				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
@@ -84,10 +84,10 @@ func RefreshTokenMiddleware(opt Options) fiber.Handler {
 				})
 			}
 			userJSON, _ := json.Marshal(user)
-			opt.rclient.Set(c.Context(), userKey, userJSON, 30*time.Minute)
+			opt.Rclient.Set(c.Context(), userKey, userJSON, 30*time.Minute)
 		} else if err != nil {
 			opt.Logger.Warn(c.Context()).WithFields("user_id", claims.UserID).Logs("Redis error fetching user")
-			user, err = models.GetUserBy(c.Context(), opt.rclient, opt.db, "id = ?", []interface{}{uuid.MustParse(claims.UserID)}, "")
+			user, err = models.GetUserBy(c.Context(), opt.Rclient, opt.DB, "id = ?", []interface{}{uuid.MustParse(claims.UserID)}, "")
 			if err != nil {
 				opt.Logger.Warn(c.Context()).WithFields("user_id", claims.UserID).Logs("User not found during access token validation")
 				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
@@ -118,7 +118,7 @@ func handleTokenRefresh(c *fiber.Ctx, cfg Options, refreshToken string) error {
 	}
 
 	refreshTokenKey := "blacklist:refresh:" + refreshToken
-	if cfg.rclient.Exists(c.Context(), refreshTokenKey).Val() > 0 {
+	if cfg.Rclient.Exists(c.Context(), refreshTokenKey).Val() > 0 {
 		cfg.Logger.Warn(c.Context()).WithFields("token", refreshToken).Logs("Attempted use of blacklisted refresh token")
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error":  "Refresh token has been invalidated",
@@ -127,7 +127,7 @@ func handleTokenRefresh(c *fiber.Ctx, cfg Options, refreshToken string) error {
 	}
 
 	refreshKey := "refresh:" + refreshToken
-	refreshDataJSON, err := cfg.rclient.Get(c.Context(), refreshKey).Result()
+	refreshDataJSON, err := cfg.Rclient.Get(c.Context(), refreshKey).Result()
 	if err != nil || refreshDataJSON == "" {
 		cfg.Logger.Warn(c.Context()).WithFields("token", refreshToken).Logs("Invalid/expired refresh token")
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid/expired refresh token"})
@@ -147,12 +147,12 @@ func handleTokenRefresh(c *fiber.Ctx, cfg Options, refreshToken string) error {
 
 	if ip, ok := refreshData["ip"].(string); !ok || ip != c.IP() {
 		cfg.Logger.Warn(c.Context()).WithFields("user_id", userID).Logs("IP mismatch")
-		cfg.rclient.Del(c.Context(), refreshKey)
+		cfg.Rclient.Del(c.Context(), refreshKey)
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "IP mismatch"})
 	}
 
 	var user *models.User
-	cachedUser, err := cfg.rclient.Get(c.Context(), "user:"+userID).Result()
+	cachedUser, err := cfg.Rclient.Get(c.Context(), "user:"+userID).Result()
 	if err == nil {
 		user := &models.User{}
 		if err := json.Unmarshal([]byte(cachedUser), user); err != nil {
@@ -162,7 +162,7 @@ func handleTokenRefresh(c *fiber.Ctx, cfg Options, refreshToken string) error {
 	}
 
 	if err == redis.Nil || user == nil {
-		user, err = models.GetUserBy(c.Context(), cfg.rclient, cfg.db, "id = ?", []interface{}{uuid.MustParse(userID)}, "Role", "Permissions")
+		user, err = models.GetUserBy(c.Context(), cfg.Rclient, cfg.DB, "id = ?", []interface{}{uuid.MustParse(userID)}, "Role", "Permissions")
 		if err != nil {
 			cfg.Logger.Warn(c.Context()).WithFields("user_id", userID).Logs("User not found")
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "User not found"})
@@ -172,13 +172,13 @@ func handleTokenRefresh(c *fiber.Ctx, cfg Options, refreshToken string) error {
 		if err != nil {
 			cfg.Logger.Warn(c.Context()).WithFields("error", err, "user_id", userID).Logs("Failed to marshal cached user from Redis")
 		} else {
-			if err := cfg.rclient.Set(c.Context(), "user:"+userID, userJson, 30*time.Minute).Err(); err != nil {
+			if err := cfg.Rclient.Set(c.Context(), "user:"+userID, userJson, 30*time.Minute).Err(); err != nil {
 				cfg.Logger.Warn(c.Context()).WithFields("error", err, "user_id", refreshData["user_id"]).Logs("refreshData")
 			}
 		}
 	} else if err != nil {
 		cfg.Logger.Warn(c.Context()).WithFields("error", err).Logs("Redis error fetching user")
-		user, err = models.GetUserBy(c.Context(), cfg.rclient, cfg.db, "id = ?", []interface{}{refreshData["user_id"]}, "")
+		user, err = models.GetUserBy(c.Context(), cfg.Rclient, cfg.DB, "id = ?", []interface{}{refreshData["user_id"]}, "")
 		if err != nil {
 			cfg.Logger.Warn(c.Context()).WithFields("user_id", userID).Logs("User not found")
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "User not found"})
@@ -203,8 +203,8 @@ func handleTokenRefresh(c *fiber.Ctx, cfg Options, refreshToken string) error {
 		"ip":      c.IP(),
 	}
 	newRefreshJSON, _ := json.Marshal(newRefreshData)
-	cfg.rclient.Set(c.Context(), newRefreshKey, newRefreshJSON, 7*24*time.Hour)
-	cfg.rclient.Del(c.Context(), refreshKey)
+	cfg.Rclient.Set(c.Context(), newRefreshKey, newRefreshJSON, 7*24*time.Hour)
+	cfg.Rclient.Del(c.Context(), refreshKey)
 
 	c.Cookie(&fiber.Cookie{
 		Name:     "access_token",
