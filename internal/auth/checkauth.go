@@ -2,21 +2,15 @@ package auth
 
 import (
 	"encoding/json"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 	"github.com/mnuddindev/devpulse/internal/models"
-	"github.com/mnuddindev/devpulse/pkg/utils"
 )
 
 func CheckPerm(opt Options, perms ...string) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		var perm []string
-		if len(perms) > 0 && perms[0] != "" {
-			for _, p := range perms {
-				perm = append(perm, p)
-			}
-		}
-
 		user_id := c.Locals("user_id").(string)
 		userKey := "user:" + user_id
 		var user *models.User
@@ -35,22 +29,23 @@ func CheckPerm(opt Options, perms ...string) fiber.Handler {
 			})
 		}
 
-		permissions := GetPermissions(user)
+		permMap := make(map[string]bool)
+		for _, p := range perms {
+			permMap[p] = true
+		}
 
-		hasPermission := false
-		for _, required := range perm {
-			ok := utils.Contains(permissions, required)
-			if !ok {
-				hasPermission = true
-				break
-			}
+		hasPermission, err := GetPermissions(c, opt, user.RoleID, permMap)
+		if err != nil {
+			opt.Logger.Warn(c.Context()).WithFields("error", err).Logs("Failed to get permissions")
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Internal Server Error",
+			})
 		}
 
 		if !hasPermission {
 			opt.Logger.Warn(c.Context()).WithFields(
 				"user_id", c.Locals("user_id").(string),
-				"required_perms", perm,
-				"user_permissions", permissions,
+				"required_perms", perms,
 			).Logs("Insufficient permissions")
 			// Return a 403 Forbidden response if the non-admin user lacks all required permissions
 			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
@@ -65,13 +60,44 @@ func CheckPerm(opt Options, perms ...string) fiber.Handler {
 }
 
 // GetPermissions extracts permission names into a []string
-func GetPermissions(u *models.User) []string {
-	if u == nil || len(u.Role.Permissions) == 0 {
-		return []string{}
+func GetPermissions(c *fiber.Ctx, opt Options, roleid uuid.UUID, permName map[string]bool) (bool, error) {
+	key := "role_perms:" + roleid.String()
+
+	cachedPerms, err := opt.Rclient.Get(c.Context(), key).Result()
+	if err == nil && cachedPerms != "" {
+		var permissions []string
+		if err := json.Unmarshal([]byte(cachedPerms), &permissions); err != nil {
+			opt.Logger.Warn(c.Context()).WithFields("error", err, "role_id", roleid).Logs("Failed to unmarshal cached permissions")
+			permissions = nil
+		} else {
+			for _, perm := range permissions {
+				if permName[perm] {
+					return true, nil
+				}
+			}
+			return false, nil
+		}
 	}
-	permissions := make([]string, len(u.Role.Permissions))
-	for i, perm := range u.Role.Permissions {
-		permissions[i] = perm.Name
+
+	// Fall back role
+	var role models.Role
+	if err := opt.DB.WithContext(c.Context()).Preload("Permissions").Where("id = ?", roleid).First(&role).Error; err != nil {
+		opt.Logger.Warn(c.Context()).WithFields("error", err).WithFields("role_id", roleid).Logs("Role not found in DB")
+		return false, err
 	}
-	return permissions
+
+	for _, perm := range role.Permissions {
+		if permName[perm.Name] {
+			// Cache in Redis
+			permNames := make([]string, len(role.Permissions))
+			for i, p := range role.Permissions {
+				permNames[i] = p.Name
+			}
+			permJSON, _ := json.Marshal(permNames)
+			opt.Rclient.Set(c.Context(), key, permJSON, 24*time.Hour)
+			return true, nil
+		}
+	}
+
+	return false, nil
 }

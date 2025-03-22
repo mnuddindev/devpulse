@@ -162,7 +162,7 @@ func handleTokenRefresh(c *fiber.Ctx, cfg Options, refreshToken string) error {
 	}
 
 	if err == redis.Nil || user == nil {
-		user, err = models.GetUserBy(c.Context(), cfg.Rclient, cfg.DB, "id = ?", []interface{}{uuid.MustParse(userID)}, "Role", "Permissions")
+		user, err = models.GetUserBy(c.Context(), cfg.Rclient, cfg.DB, "id = ?", []interface{}{uuid.MustParse(userID)}, "Role")
 		if err != nil {
 			cfg.Logger.Warn(c.Context()).WithFields("user_id", userID).Logs("User not found")
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "User not found"})

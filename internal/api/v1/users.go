@@ -464,7 +464,7 @@ func GetProfile(c *fiber.Ctx) error {
 	// Check if the user wasn’t found in Redis or unmarshaling failed
 	if err == redis.Nil || user == nil {
 		// Fetch the user profile from the database by ID
-		user, err = models.GetUserBy(c.Context(), Redis, DB, "id = ?", []interface{}{uid})
+		user, err = models.GetUserBy(c.Context(), Redis, DB, "id = ?", []interface{}{uid}, "")
 		// Check if fetching the user failed
 		if err != nil {
 			// Log an error with details if the user isn’t found or DB fails

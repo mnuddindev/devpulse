@@ -231,6 +231,13 @@ func SeedRoles(ctx context.Context, db *gorm.DB, redisClient *storage.RedisClien
 					}).Logs("Failed to create role")
 					continue
 				}
+				permNames := make([]string, len(r.Permissions))
+				for i, perm := range r.Permissions {
+					permNames[i] = perm
+				}
+				permJSON, _ := json.Marshal(permNames)
+				key := "role_perms:" + role.ID.String()
+				redisClient.Set(ctx, key, permJSON, 24*time.Hour)
 			} else {
 				logger.Error(ctx).WithMeta(utils.Map{
 					"error": err.Error(),
