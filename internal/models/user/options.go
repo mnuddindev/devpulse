@@ -64,9 +64,8 @@ func WithLocation(location string) UserOption {
 	return func(u *User) { u.Profile.Location = location }
 }
 
-func WithSocialLinks(github, website, twitter string) UserOption {
+func WithSocialLinks(links string) UserOption {
 	return func(u *User) {
-		links := map[string]string{"github": github, "website": website, "twitter": twitter}
 		if json, err := json.Marshal(links); err == nil {
 			u.Profile.SocialLinks = string(json)
 		}

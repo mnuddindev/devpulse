@@ -68,6 +68,42 @@ type User struct {
 	NotificationPreferences NotificationPreferences `gorm:"foreignKey:UserID" json:"notification_preferences"`
 }
 
+type UpdateUserRequest struct {
+	Username *string `json:"username" validate:"omitempty,min=3,max=255,alphanum"`
+	Email    *string `json:"email" validate:"omitempty,email,max=100"`
+	Password *string `json:"password" validate:"omitempty,min=6"`
+
+	Profile *struct {
+		Name               *string `json:"name" validate:"omitempty,max=100"`
+		Bio                *string `json:"bio" validate:"omitempty,max=255"`
+		AvatarURL          *string `json:"avatar_url" validate:"omitempty,url"`
+		JobTitle           *string `json:"job_title" validate:"omitempty,max=100"`
+		Employer           *string `json:"employer" validate:"omitempty,max=100"`
+		Location           *string `json:"location" validate:"omitempty,max=100"`
+		SocialLinks        *string `json:"social_links" validate:"omitempty"` // JSON string
+		CurrentLearning    *string `json:"current_learning" validate:"omitempty,max=200"`
+		AvailableFor       *string `json:"available_for" validate:"omitempty,max=200"`
+		CurrentlyHackingOn *string `json:"currently_hacking_on" validate:"omitempty,max=200"`
+		Pronouns           *string `json:"pronouns" validate:"omitempty,max=100"`
+		Education          *string `json:"education" validate:"omitempty,max=100"`
+		Skills             *string `json:"skills" validate:"omitempty"`    // JSON string
+		Interests          *string `json:"interests" validate:"omitempty"` // JSON string
+	} `json:"profile"`
+
+	Settings *struct {
+		BrandColor      *string `json:"brand_color" validate:"omitempty,max=7"`
+		ThemePreference *string `json:"theme_preference" validate:"omitempty,oneof=light dark"`
+		BaseFont        *string `json:"base_font" validate:"omitempty,oneof=sans-serif sans jetbrainsmono hind-siliguri comic-sans"`
+		SiteNavbar      *string `json:"site_navbar" validate:"omitempty,oneof=fixed static"`
+		ContentEditor   *string `json:"content_editor" validate:"omitempty,oneof=rich basic"`
+		ContentMode     *int    `json:"content_mode" validate:"omitempty,oneof=1 2 3 4 5"`
+	} `json:"settings"`
+
+	Badges                   *[]Badge                   `json:"badges"`
+	Roles                    *[]Role                    `json:"roles"`
+	NotificationsPreferences *[]NotificationPreferences `json:"notifipre"`
+}
+
 // UserOption configures a User.
 type UserOption func(*User)
 
@@ -152,6 +188,7 @@ func GetUsers(ctx context.Context, redisClient *storage.RedisClient, gormDB *gor
 
 // UpdateUser updates a user’s fields and refreshes cache.
 func UpdateUser(ctx context.Context, redisClient *storage.RedisClient, gormDB *gorm.DB, id uuid.UUID, opts ...UserOption) (*User, error) {
+	tx := gormDB.WithContext(ctx).Begin()
 	u, err := GetUserBy(ctx, redisClient, gormDB, "id = ?", []interface{}{id}, "")
 	if err != nil {
 		return nil, err
@@ -161,9 +198,11 @@ func UpdateUser(ctx context.Context, redisClient *storage.RedisClient, gormDB *g
 		opt(u)
 	}
 
-	if err := gormDB.WithContext(ctx).Save(u).Error; err != nil {
+	if err := tx.WithContext(ctx).Save(u).Error; err != nil {
+		tx.Rollback()
 		return nil, utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to update user")
 	}
+	tx.Commit()
 
 	return u, nil
 }

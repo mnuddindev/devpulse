@@ -1,6 +1,8 @@
 package models
 
-import user "github.com/mnuddindev/devpulse/internal/models/user"
+import (
+	user "github.com/mnuddindev/devpulse/internal/models/user"
+)
 
 func RegisterModels() []interface{} {
 	return []interface{}{
@@ -15,11 +17,13 @@ func RegisterModels() []interface{} {
 
 type (
 	User                    = user.User
+	UpdateUserRequest       = user.UpdateUserRequest
 	Role                    = user.Role
 	Permission              = user.Permission
 	Badge                   = user.Badge
 	Notification            = user.Notification
 	NotificationPreferences = user.NotificationPreferences
+	UserOption              = user.UserOption
 )
 
 var (
