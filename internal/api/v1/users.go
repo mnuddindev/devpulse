@@ -439,7 +439,6 @@ func GetProfile(c *fiber.Ctx) error {
 	uid, err := uuid.Parse(userID)
 	if err != nil {
 		Logger.Error(c.Context()).WithFields("error", err).Logs("Invalid user ID format in UserProfile")
-		// Return a 400 Bad Request response for invalid user ID
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":  "Invalid user ID",
 			"status": fiber.StatusBadRequest,
@@ -447,51 +446,34 @@ func GetProfile(c *fiber.Ctx) error {
 	}
 
 	userKey := "user:" + uid.String()
-	// Declare a variable to hold the user struct
 	var user *models.User
-	// Attempt to fetch the user profile from Redis
 	cachedUser, err := Redis.Get(c.Context(), userKey).Result()
-	// Check if the user profile is cached in Redis
 	if err == nil {
-		// Unmarshal the cached JSON into a user struct
 		user = &models.User{}
 		if err := json.Unmarshal([]byte(cachedUser), user); err != nil {
-			// Log a warning if unmarshaling fails (fallback to DB)
 			Logger.Warn(c.Context()).WithFields("error", err, "userID", uid).Logs("Failed to unmarshal cached user from Redis")
 			user = nil
 		}
 	}
-	// Check if the user wasn’t found in Redis or unmarshaling failed
 	if err == redis.Nil || user == nil {
-		// Fetch the user profile from the database by ID
 		user, err = models.GetUserBy(c.Context(), Redis, DB, "id = ?", []interface{}{uid}, "")
-		// Check if fetching the user failed
 		if err != nil {
-			// Log an error with details if the user isn’t found or DB fails
 			Logger.Error(c.Context()).WithFields("error", err, "userID", uid).Logs("Database error while fetching user profile")
-			// Return a 500 Internal Server Error if DB query fails
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"error":  "Failed to fetch user profile",
 				"status": fiber.StatusInternalServerError,
 			})
 		}
-		// Marshal the user to JSON for caching
 		userJSON, err := json.Marshal(user)
-		// Check if marshaling failed
 		if err != nil {
-			// Log a warning if marshaling fails (non-critical, proceed)
 			Logger.Warn(c.Context()).WithFields("error", err, "userID", uid).Logs("Failed to marshal user for Redis caching")
 		} else {
-			// Cache the user profile in Redis with a 30-minute TTL
 			if err := Redis.Set(c.Context(), userKey, userJSON, 30*time.Minute).Err(); err != nil {
-				// Log a warning if caching fails (non-critical)
 				Logger.Warn(c.Context()).WithFields("error", err, "userID", uid).Logs("Failed to cache user profile in Redis")
 			}
 		}
 	} else if err != nil {
-		// Log an error if Redis fails for another reason (proceed with DB fallback)
 		Logger.Error(c.Context()).WithFields("error", err, "userID", uid).Logs("Redis error fetching user profile")
-		// Fetch from DB as a fallback
 		user, err = models.GetUserBy(c.Context(), Redis, DB, "id = ?", []interface{}{uid})
 		if err != nil {
 			Logger.Error(c.Context()).WithFields("error", err, "userID", uid).Logs("Database error while fetching user profile")
@@ -502,7 +484,6 @@ func GetProfile(c *fiber.Ctx) error {
 		}
 	}
 
-	// Prepare user profile response with selective fields
 	profileResponse := fiber.Map{
 		"id":                       user.ID,
 		"username":                 user.Username,
@@ -542,9 +523,7 @@ func GetProfile(c *fiber.Ctx) error {
 		"notification_preferences": user.NotificationPreferences,
 	}
 
-	// Log successful profile retrieval
 	Logger.Info(c.Context()).WithFields("userID", uid).Logs("User profile retrieved successfully")
-	// Return a 200 OK response with the user profile
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"message": "Profile retrieved successfully",
 		"status":  fiber.StatusOK,
@@ -556,9 +535,7 @@ func GetProfile(c *fiber.Ctx) error {
 func UpdateUserProfile(c *fiber.Ctx) error {
 	userIDRaw, ok := c.Locals("user_id").(string)
 	if !ok || userIDRaw == "" {
-		// Log a warning for an unauthorized access attempt
 		Logger.Warn(c.Context()).Logs("UpdateUserProfile attempted without user ID in context")
-		// Return a 401 Unauthorized response if user ID isn’t present
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error":  "Unauthorized",
 			"status": fiber.StatusUnauthorized,
@@ -567,9 +544,7 @@ func UpdateUserProfile(c *fiber.Ctx) error {
 
 	userID, err := uuid.Parse(userIDRaw)
 	if err != nil {
-		// Log an error with details about the invalid user ID
 		Logger.Error(c.Context()).WithFields("error", err, "userID", userIDRaw).Logs("Invalid user ID format in UpdateUserProfile")
-		// Return a 400 Bad Request response for invalid user ID
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":  "Invalid user ID",
 			"status": fiber.StatusBadRequest,
@@ -584,7 +559,6 @@ func UpdateUserProfile(c *fiber.Ctx) error {
 		count = 0
 	} else if err != nil {
 		Logger.Warn(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Failed to check rate limit")
-		// Proceed without rate limiting if Redis fails
 	}
 	if count >= maxUpdates {
 		Logger.Warn(c.Context()).WithFields("user_id", userID).Logs("Rate limit exceeded")
@@ -618,7 +592,7 @@ func UpdateUserProfile(c *fiber.Ctx) error {
 		})
 	}
 
-	userKey := "user:id:" + userIDRaw
+	userKey := "user:" + userIDRaw
 	var user *models.User
 	cachedUser, err := Redis.Get(c.Context(), userKey).Result()
 	if err == nil {
@@ -748,10 +722,163 @@ func UpdateUserProfile(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update profile"})
 	}
 
+	Redis.Del(c.Context(), userKey)
 	userJSON, _ := json.Marshal(updatedUser)
 	if err := Redis.Set(c.Context(), userKey, userJSON, 30*time.Minute).Err(); err != nil {
 		Logger.Warn(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Failed to update Redis cache")
 	}
 
-	return nil
+	Logger.Info(c.Context()).WithFields("user_id", userID).Logs("User profile updated successfully")
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "Section updated successfully",
+		"status":  fiber.StatusOK,
+		"user":    updatedUser,
+	})
+}
+
+// UpdateUserNotificationPrefrences updates the user's notification preferences
+func UpdateUserNotificationPrefrences(c *fiber.Ctx) error {
+	type UpdateData struct {
+		EmailOnLikes    *bool `json:"email_on_likes" validate:"omitempty"`
+		EmailOnComments *bool `json:"email_on_comments" validate:"omitempty"`
+		EmailOnMentions *bool `json:"email_on_mentions" validate:"omitempty"`
+		EmailOnFollower *bool `json:"email_on_followers" validate:"omitempty"`
+		EmailOnBadge    *bool `json:"email_on_badge" validate:"omitempty"`
+		EmailOnUnread   *bool `json:"email_on_unread" validate:"omitempty"`
+		EmailOnNewPosts *bool `json:"email_on_new_posts" validate:"omitempty"`
+	}
+
+	userIDRaw, ok := c.Locals("user_id").(string)
+	if !ok || userIDRaw == "" {
+		Logger.Warn(c.Context()).Logs("UpdateUserProfile attempted without user ID in context")
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error":  "Unauthorized",
+			"status": fiber.StatusUnauthorized,
+		})
+	}
+
+	userID, err := uuid.Parse(userIDRaw)
+	if err != nil {
+		Logger.Error(c.Context()).WithFields("error", err, "userID", userIDRaw).Logs("Invalid user ID format in UpdateUserProfile")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":  "Invalid user ID",
+			"status": fiber.StatusBadRequest,
+		})
+	}
+
+	rateKey := "profile_update_rate:" + userID.String()
+	const maxUpdates = 5
+	const rateTTL = 1 * time.Minute
+	count, err := Redis.Get(c.Context(), rateKey).Int()
+	if err == redis.Nil {
+		count = 0
+	} else if err != nil {
+		Logger.Warn(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Failed to check rate limit")
+	}
+	if count >= maxUpdates {
+		Logger.Warn(c.Context()).WithFields("user_id", userID).Logs("Rate limit exceeded")
+		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+			"error":  "Too many update attempts, try again later",
+			"status": fiber.StatusTooManyRequests,
+		})
+	}
+
+	pipe := Redis.TxPipeline()
+	pipe.Incr(c.Context(), rateKey)
+	pipe.Expire(c.Context(), rateKey, rateTTL)
+	if _, err := pipe.Exec(c.Context()); err != nil {
+		Logger.Warn(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Failed to update rate limit")
+	}
+
+	data := new(UpdateData)
+	if err := utils.StrictBodyParser(c, &data); err != nil {
+		Logger.Warn(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Invalid request body")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":  "Invalid request body",
+			"status": fiber.StatusBadRequest,
+		})
+	}
+
+	if err := Validator.Validate(data); err != nil {
+		Logger.Warn(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Validation failed")
+		return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{
+			"error":  err,
+			"status": fiber.StatusUnprocessableEntity,
+		})
+	}
+
+	userKey := "user:" + userIDRaw
+	var user *models.User
+	cachedUser, err := Redis.Get(c.Context(), userKey).Result()
+	if err == nil {
+		user = &models.User{}
+		if err := json.Unmarshal([]byte(cachedUser), user); err != nil {
+			Logger.Warn(c.Context()).WithFields("error", err, "userID", userIDRaw).Logs("Failed to unmarshal cached user from Redis")
+			user = nil
+		}
+	}
+
+	var opts []models.UserOption
+	updatedFields := []string{}
+	if data.EmailOnLikes != nil {
+		opts = append(opts, models.WithEmailOnLikes(*data.EmailOnLikes))
+		updatedFields = append(updatedFields, "notification_preferences.email_on_likes")
+	}
+	if data.EmailOnComments != nil {
+		opts = append(opts, models.WithEmailOnComments(*data.EmailOnComments))
+		updatedFields = append(updatedFields, "notification_preferences.email_on_comments")
+	}
+	if data.EmailOnFollower != nil {
+		opts = append(opts, models.WithEmailOnFollowers(*data.EmailOnFollower))
+		updatedFields = append(updatedFields, "notification_preferences.email_on_follower")
+	}
+	if data.EmailOnBadge != nil {
+		opts = append(opts, models.WithEmailOnBadge(*data.EmailOnBadge))
+		updatedFields = append(updatedFields, "notification_preferences.email_on_badge")
+	}
+	if data.EmailOnMentions != nil {
+		opts = append(opts, models.WithEmailOnFollowers(*data.EmailOnMentions))
+		updatedFields = append(updatedFields, "notification_preferences.email_on_mentions")
+	}
+	if data.EmailOnNewPosts != nil {
+		opts = append(opts, models.WithEmailOnFollowers(*data.EmailOnNewPosts))
+		updatedFields = append(updatedFields, "notification_preferences.email_on_new_posts")
+	}
+	if data.EmailOnUnread != nil {
+		opts = append(opts, models.WithEmailOnFollowers(*data.EmailOnUnread))
+		updatedFields = append(updatedFields, "notification_preferences.email_on_unread")
+	}
+
+	if len(opts) == 0 {
+		Logger.Info(c.Context()).WithFields("user_id", userID).Logs("No fields provided for update")
+		return c.Status(fiber.StatusOK).JSON(fiber.Map{
+			"message": "No changes provided",
+			"status":  fiber.StatusOK,
+			"user":    user,
+		})
+	}
+
+	updatedUser, err := models.UpdateUser(c.Context(), Redis, DB, userID, opts...)
+	if err != nil {
+		Logger.Error(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Failed to update user")
+		if err.Error() == "user not found" {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "User not found"})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update profile"})
+	}
+
+	Redis.Del(c.Context(), userKey)
+	userJSON, _ := json.Marshal(updatedUser)
+	if err := Redis.Set(c.Context(), userKey, userJSON, 30*time.Minute).Err(); err != nil {
+		Logger.Warn(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Failed to update Redis cache")
+	}
+
+	Logger.Info(c.Context()).WithFields("user_id", userID).Logs("User profile updated successfully")
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "Section updated successfully",
+		"status":  fiber.StatusOK,
+		"user":    updatedUser,
+	})
 }

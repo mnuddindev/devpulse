@@ -153,3 +153,31 @@ func WithBookmarksCount(count int) UserOption {
 func WithLastSeen(lastSeen time.Time) UserOption {
 	return func(u *User) { u.Stats.LastSeen = lastSeen }
 }
+
+func WithEmailOnLikes(ok bool) UserOption {
+	return func(u *User) { u.NotificationPreferences.EmailOnLikes = ok }
+}
+
+func WithEmailOnComments(ok bool) UserOption {
+	return func(u *User) { u.NotificationPreferences.EmailOnComments = ok }
+}
+
+func WithEmailOnMentions(ok bool) UserOption {
+	return func(u *User) { u.NotificationPreferences.EmailOnMentions = ok }
+}
+
+func WithEmailOnFollowers(ok bool) UserOption {
+	return func(u *User) { u.NotificationPreferences.EmailOnFollowers = ok }
+}
+
+func WithEmailOnBadge(ok bool) UserOption {
+	return func(u *User) { u.NotificationPreferences.EmailOnBadge = ok }
+}
+
+func WithEmailOnUnread(ok bool) UserOption {
+	return func(u *User) { u.NotificationPreferences.EmailOnUnread = ok }
+}
+
+func WithEmailOnNewPosts(ok bool) UserOption {
+	return func(u *User) { u.NotificationPreferences.EmailOnNewPosts = ok }
+}

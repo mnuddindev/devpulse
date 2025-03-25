@@ -66,6 +66,13 @@ var (
 	WithLikesCount         = user.WithLikesCount
 	WithBookmarksCount     = user.WithBookmarksCount
 	WithLastSeen           = user.WithLastSeen
+	WithEmailOnLikes       = user.WithEmailOnLikes
+	WithEmailOnComments    = user.WithEmailOnComments
+	WithEmailOnMentions    = user.WithEmailOnMentions
+	WithEmailOnFollowers   = user.WithEmailOnFollowers
+	WithEmailOnBadge       = user.WithEmailOnBadge
+	WithEmailOnUnread      = user.WithEmailOnUnread
+	WithEmailOnNewPosts    = user.WithEmailOnNewPosts
 
 	NewRole                    = user.NewRole
 	GetRoleBy                  = user.GetRoleBy
