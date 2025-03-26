@@ -689,26 +689,6 @@ func UpdateUserProfile(c *fiber.Ctx) error {
 			opts = append(opts, models.WithBrandColor(*req.Settings.BrandColor))
 			updatedFields = append(updatedFields, "settings.brand_color")
 		}
-		if req.Settings.ThemePreference != nil {
-			opts = append(opts, models.WithThemePreference(*req.Settings.ThemePreference))
-			updatedFields = append(updatedFields, "settings.theme_preference")
-		}
-		if req.Settings.BaseFont != nil {
-			opts = append(opts, models.WithBaseFont(*req.Settings.BaseFont))
-			updatedFields = append(updatedFields, "settings.base_font")
-		}
-		if req.Settings.SiteNavbar != nil {
-			opts = append(opts, models.WithSiteNavbar(*req.Settings.SiteNavbar))
-			updatedFields = append(updatedFields, "settings.site_navbar")
-		}
-		if req.Settings.ContentEditor != nil {
-			opts = append(opts, models.WithContentEditor(*req.Settings.ContentEditor))
-			updatedFields = append(updatedFields, "settings.content_editor")
-		}
-		if req.Settings.ContentMode != nil {
-			opts = append(opts, models.WithContentMode(*req.Settings.ContentMode))
-			updatedFields = append(updatedFields, "settings.content_mode")
-		}
 	}
 
 	if len(opts) == 0 {
@@ -822,17 +802,6 @@ func UpdateUserNotificationPrefrences(c *fiber.Ctx) error {
 		})
 	}
 
-	userKey := "user:" + userIDRaw
-	var user *models.User
-	cachedUser, err := Redis.Get(c.Context(), userKey).Result()
-	if err == nil {
-		user = &models.User{}
-		if err := json.Unmarshal([]byte(cachedUser), user); err != nil {
-			Logger.Warn(c.Context()).WithFields("error", err, "userID", userIDRaw).Logs("Failed to unmarshal cached user from Redis")
-			user = nil
-		}
-	}
-
 	updatedUser, err := models.UpdateNotificationPreferences(
 		c.Context(),
 		Redis,
@@ -846,6 +815,135 @@ func UpdateUserNotificationPrefrences(c *fiber.Ctx) error {
 		getBool(data.EmailOnUnread),
 		getBool(data.EmailOnNewPosts),
 	)
+	if err != nil {
+		Logger.Error(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Failed to update user")
+		if err.Error() == "user not found" {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "User not found"})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update profile"})
+	}
+
+	Logger.Info(c.Context()).WithFields("user_id", userID).Logs("User profile updated successfully")
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "Section updated successfully",
+		"status":  fiber.StatusOK,
+		"user":    updatedUser,
+	})
+}
+
+func UpdateUserCustomization(c *fiber.Ctx) error {
+	type UpdateData struct {
+		ThemePreference *string `json:"theme_preference" validate:"omitempty,oneof=Light Dark"`
+		BaseFont        *string `json:"base_font" validate:"omitempty,oneof=sans-serif sans jetbrainsmono hind-siliguri comic-sans"`
+		SiteNavbar      *string `json:"site_navbar" validate:"omitempty,oneof=fixed static"`
+		ContentEditor   *string `json:"content_editor" validate:"omitempty,oneof=rich basic"`
+		ContentMode     *int    `json:"content_mode" validate:"omitempty,oneof=1 2 3 4 5"`
+	}
+
+	userIDRaw, ok := c.Locals("user_id").(string)
+	if !ok || userIDRaw == "" {
+		Logger.Warn(c.Context()).Logs("UpdateUserProfile attempted without user ID in context")
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error":  "Unauthorized",
+			"status": fiber.StatusUnauthorized,
+		})
+	}
+
+	userID, err := uuid.Parse(userIDRaw)
+	if err != nil {
+		Logger.Error(c.Context()).WithFields("error", err, "userID", userIDRaw).Logs("Invalid user ID format in UpdateUserProfile")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":  "Invalid user ID",
+			"status": fiber.StatusBadRequest,
+		})
+	}
+
+	rateKey := "profile_update_rate:" + userID.String()
+	const maxUpdates = 5
+	const rateTTL = 1 * time.Minute
+	count, err := Redis.Get(c.Context(), rateKey).Int()
+	if err == redis.Nil {
+		count = 0
+	} else if err != nil {
+		Logger.Warn(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Failed to check rate limit")
+	}
+	if count >= maxUpdates {
+		Logger.Warn(c.Context()).WithFields("user_id", userID).Logs("Rate limit exceeded")
+		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+			"error":  "Too many update attempts, try again later",
+			"status": fiber.StatusTooManyRequests,
+		})
+	}
+
+	pipe := Redis.TxPipeline()
+	pipe.Incr(c.Context(), rateKey)
+	pipe.Expire(c.Context(), rateKey, rateTTL)
+	if _, err := pipe.Exec(c.Context()); err != nil {
+		Logger.Warn(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Failed to update rate limit")
+	}
+
+	var data UpdateData
+	if err := utils.StrictBodyParser(c, &data); err != nil {
+		Logger.Warn(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Invalid request body")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":  "Invalid request body",
+			"status": fiber.StatusBadRequest,
+		})
+	}
+
+	if err := Validator.Validate(data); err != nil {
+		Logger.Warn(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Validation failed")
+		return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{
+			"error":  err,
+			"status": fiber.StatusUnprocessableEntity,
+		})
+	}
+
+	userKey := "user:" + userIDRaw
+	var user *models.User
+	cachedUser, err := Redis.Get(c.Context(), userKey).Result()
+	if err == nil {
+		user = &models.User{}
+		if err := json.Unmarshal([]byte(cachedUser), user); err != nil {
+			Logger.Warn(c.Context()).WithFields("error", err, "userID", userIDRaw).Logs("Failed to unmarshal cached user from Redis")
+			user = nil
+		}
+	}
+
+	var opts []models.UserOption
+	updatedFields := []string{}
+	if data.ThemePreference != nil {
+		opts = append(opts, models.WithThemePreference(*data.ThemePreference))
+		updatedFields = append(updatedFields, "settings.theme_preference")
+	}
+	if data.BaseFont != nil {
+		opts = append(opts, models.WithBaseFont(*data.BaseFont))
+		updatedFields = append(updatedFields, "settings.base_font")
+	}
+	if data.SiteNavbar != nil {
+		opts = append(opts, models.WithSiteNavbar(*data.SiteNavbar))
+		updatedFields = append(updatedFields, "settings.site_navbar")
+	}
+	if data.ContentEditor != nil {
+		opts = append(opts, models.WithContentEditor(*data.ContentEditor))
+		updatedFields = append(updatedFields, "settings.content_editor")
+	}
+	if data.ContentMode != nil {
+		opts = append(opts, models.WithContentMode(*data.ContentMode))
+		updatedFields = append(updatedFields, "settings.content_mode")
+	}
+
+	if len(opts) == 0 {
+		Logger.Info(c.Context()).WithFields("user_id", userID).Logs("No fields provided for update")
+		return c.Status(fiber.StatusOK).JSON(fiber.Map{
+			"message": "No changes provided",
+			"status":  fiber.StatusOK,
+			"user":    user,
+		})
+	}
+
+	updatedUser, err := models.UpdateUser(c.Context(), Redis, DB, userID, opts...)
 	if err != nil {
 		Logger.Error(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Failed to update user")
 		if err.Error() == "user not found" {
