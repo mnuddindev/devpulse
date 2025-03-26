@@ -65,34 +65,37 @@ func RefreshTokenMiddleware(opt Options) fiber.Handler {
 			})
 		}
 
-		userKey := "user:" + claims.UserID
 		var user *models.User
-		cachedUser, err := opt.Rclient.Get(c.Context(), userKey).Result()
-		if err == nil && cachedUser != "" {
-			user = &models.User{}
-			if err := json.Unmarshal([]byte(cachedUser), user); err != nil {
-				opt.Logger.Warn(c.Context()).WithFields("error", err).Logs("Failed to unmarshal cached user")
-				user = nil
+		user, err = models.GetUserBy(c.Context(), opt.Rclient, opt.DB, "id = ?", []interface{}{uuid.MustParse(claims.UserID)}, "")
+		if err != nil {
+			opt.Logger.Warn(c.Context()).WithFields("user_id", claims.UserID).Logs("User not found")
+			c.ClearCookie("access_token")
+			c.ClearCookie("refresh_token")
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error": "User not found",
+			})
+		} else {
+			userKey := "user:" + user.ID.String()
+			cachedUser, err := opt.Rclient.Get(c.Context(), userKey).Result()
+			if err == nil && cachedUser != "" {
+				user = &models.User{}
+				if err := json.Unmarshal([]byte(cachedUser), user); err != nil {
+					opt.Logger.Warn(c.Context()).WithFields("error", err).Logs("Failed to unmarshal cached user")
+					user = nil
+				}
 			}
-		}
-		if err == redis.Nil || user == nil {
-			user, err = models.GetUserBy(c.Context(), opt.Rclient, opt.DB, "id = ?", []interface{}{uuid.MustParse(claims.UserID)}, "")
-			if err != nil {
-				opt.Logger.Warn(c.Context()).WithFields("user_id", claims.UserID).Logs("User not found")
-				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-					"error": "User not found",
-				})
-			}
-			userJSON, _ := json.Marshal(user)
-			opt.Rclient.Set(c.Context(), userKey, userJSON, 30*time.Minute)
-		} else if err != nil {
-			opt.Logger.Warn(c.Context()).WithFields("user_id", claims.UserID).Logs("Redis error fetching user")
-			user, err = models.GetUserBy(c.Context(), opt.Rclient, opt.DB, "id = ?", []interface{}{uuid.MustParse(claims.UserID)}, "")
-			if err != nil {
-				opt.Logger.Warn(c.Context()).WithFields("user_id", claims.UserID).Logs("User not found during access token validation")
-				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-					"error": "User not found",
-				})
+			if err == redis.Nil || user == nil {
+				userJSON, _ := json.Marshal(user)
+				opt.Rclient.Set(c.Context(), userKey, userJSON, 30*time.Minute)
+			} else if err != nil {
+				opt.Logger.Warn(c.Context()).WithFields("user_id", claims.UserID).Logs("Redis error fetching user")
+				user, err = models.GetUserBy(c.Context(), opt.Rclient, opt.DB, "id = ?", []interface{}{uuid.MustParse(claims.UserID)}, "")
+				if err != nil {
+					opt.Logger.Warn(c.Context()).WithFields("user_id", claims.UserID).Logs("User not found during access token validation")
+					return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+						"error": "User not found",
+					})
+				}
 			}
 		}
 

@@ -64,8 +64,8 @@ type User struct {
 	Badges                  []Badge                 `gorm:"many2many:user_badges;" json:"badges"`
 	Followers               []User                  `gorm:"many2many:user_followers;joinForeignKey:following_id;joinReferences:follower_id" json:"followers"`
 	Following               []User                  `gorm:"many2many:user_followers;joinForeignKey:follower_id;joinReferences:following_id" json:"following"`
-	Notifications           []Notification          `gorm:"foreignKey:UserID" json:"notifications"`
-	NotificationPreferences NotificationPreferences `gorm:"foreignKey:UserID" json:"notification_preferences"`
+	Notifications           []Notification          `gorm:"foreignKey:UserID;references:ID" json:"notifications"`
+	NotificationPreferences NotificationPreferences `gorm:"foreignKey:UserID;references:ID" json:"notification_preferences"`
 }
 
 type UpdateUserRequest struct {
@@ -124,6 +124,15 @@ func NewUser(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, use
 		Password: password,
 		OTP:      otp,
 		RoleID:   memberRole.ID,
+		NotificationPreferences: NotificationPreferences{
+			EmailOnLikes:     false,
+			EmailOnComments:  false,
+			EmailOnFollowers: true,
+			EmailOnMentions:  true,
+			EmailOnBadge:     false,
+			EmailOnUnread:    true,
+			EmailOnNewPosts:  false,
+		},
 	}
 
 	for _, opt := range opts {
@@ -147,16 +156,22 @@ func NewUser(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, use
 func GetUserBy(ctx context.Context, redisClient *storage.RedisClient, gormDB *gorm.DB, condition string, args []interface{}, preload ...string) (*User, error) {
 	var u User
 	query := gormDB.WithContext(ctx).Where(condition, args...)
-	if len(preload) > 0 && preload[0] != "" {
-		for _, p := range preload {
-			query = query.Preload(p)
-		}
-	}
-	if err := query.Find(&u).Error; err != nil {
+	query = query.Preload("Notifications").
+		Preload("Badges").
+		Preload("Followers").
+		Preload("Following").
+		Preload("NotificationPreferences", func(db *gorm.DB) *gorm.DB {
+			return db.Where("notification_preferences.user_id = ?", u.ID)
+		})
+	if err := query.First(&u).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, utils.NewError(utils.ErrNotFound.Code, "User not found")
 		}
 		return nil, utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to get user")
+	}
+
+	if u.ID == uuid.Nil {
+		return nil, utils.NewError(utils.ErrNotFound.Code, "User not found")
 	}
 
 	return &u, nil

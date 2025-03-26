@@ -55,7 +55,7 @@ func GetNotificationPreferences(ctx context.Context, redisClient *storage.RedisC
 	}
 
 	var np NotificationPreferences
-	if err := gormDB.WithContext(ctx).Where("id = ?", id).First(&np).Error; err != nil {
+	if err := gormDB.WithContext(ctx).Where("user_id = ?", id).First(&np).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, utils.NewError(utils.ErrNotFound.Code, "Notification preferences not found")
 		}
@@ -109,9 +109,6 @@ func UpdateNotificationPreferences(ctx context.Context, redisClient *storage.Red
 		return nil, utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to update notification preferences")
 	}
 
-	npJSON, _ := json.Marshal(np)
-	key := "notif_prefs:" + np.ID.String()
-	redisClient.Set(ctx, key, npJSON, 10*time.Minute)
 	return np, nil
 }
 

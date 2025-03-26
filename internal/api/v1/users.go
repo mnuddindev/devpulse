@@ -330,6 +330,7 @@ func Login(c *fiber.Ctx) error {
 	})
 
 	Redis.Del(c.Context(), ipKey)
+	Redis.Del(c.Context(), "user:"+user.ID.String())
 
 	Logger.Info(c.Context()).WithFields("user_id", user.ID).Logs(fmt.Sprintf("User logged in successfully: %s", user.Username))
 
@@ -456,7 +457,13 @@ func GetProfile(c *fiber.Ctx) error {
 		}
 	}
 	if err == redis.Nil || user == nil {
-		user, err = models.GetUserBy(c.Context(), Redis, DB, "id = ?", []interface{}{uid}, "")
+		user, err = models.GetUserBy(c.Context(), Redis, DB, "id = ?", []interface{}{uid},
+			"NotificationPreferences",
+			"Notifications",
+			"Badges",
+			"Followers",
+			"Following",
+		)
 		if err != nil {
 			Logger.Error(c.Context()).WithFields("error", err, "userID", uid).Logs("Database error while fetching user profile")
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -484,50 +491,50 @@ func GetProfile(c *fiber.Ctx) error {
 		}
 	}
 
-	profileResponse := fiber.Map{
-		"id":                       user.ID,
-		"username":                 user.Username,
-		"email":                    user.Email,
-		"name":                     user.Profile.Name,
-		"bio":                      user.Profile.Bio,
-		"avatar_url":               user.Profile.AvatarURL,
-		"job_title":                user.Profile.JobTitle,
-		"employer":                 user.Profile.Employer,
-		"location":                 user.Profile.Location,
-		"social_links":             user.Profile.SocialLinks,
-		"current_learning":         user.Profile.CurrentLearning,
-		"available_for":            user.Profile.AvailableFor,
-		"currently_hacking_on":     user.Profile.CurrentlyHackingOn,
-		"pronouns":                 user.Profile.Pronouns,
-		"education":                user.Profile.Education,
-		"brand_color":              user.Settings.BrandColor,
-		"posts_count":              user.Stats.PostsCount,
-		"comments_count":           user.Stats.CommentsCount,
-		"likes_count":              user.Stats.LikesCount,
-		"bookmarks_count":          user.Stats.BookmarksCount,
-		"last_seen":                user.Stats.LastSeen,
-		"theme_preference":         user.Settings.ThemePreference,
-		"base_font":                user.Settings.BaseFont,
-		"site_navbar":              user.Settings.SiteNavbar,
-		"content_editor":           user.Settings.ContentEditor,
-		"content_mode":             user.Settings.ContentMode,
-		"created_at":               user.CreatedAt,
-		"updated_at":               user.UpdatedAt,
-		"skills":                   user.Profile.Skills,
-		"interests":                user.Profile.Interests,
-		"badges":                   user.Badges,
-		"roles":                    user.Role,
-		"followers":                user.Followers,
-		"following":                user.Following,
-		"notifications":            user.Notifications,
-		"notification_preferences": user.NotificationPreferences,
-	}
+	// profileResponse := fiber.Map{
+	// 	"id":                       user.ID,
+	// 	"username":                 user.Username,
+	// 	"email":                    user.Email,
+	// 	"name":                     user.Profile.Name,
+	// 	"bio":                      user.Profile.Bio,
+	// 	"avatar_url":               user.Profile.AvatarURL,
+	// 	"job_title":                user.Profile.JobTitle,
+	// 	"employer":                 user.Profile.Employer,
+	// 	"location":                 user.Profile.Location,
+	// 	"social_links":             user.Profile.SocialLinks,
+	// 	"current_learning":         user.Profile.CurrentLearning,
+	// 	"available_for":            user.Profile.AvailableFor,
+	// 	"currently_hacking_on":     user.Profile.CurrentlyHackingOn,
+	// 	"pronouns":                 user.Profile.Pronouns,
+	// 	"education":                user.Profile.Education,
+	// 	"brand_color":              user.Settings.BrandColor,
+	// 	"posts_count":              user.Stats.PostsCount,
+	// 	"comments_count":           user.Stats.CommentsCount,
+	// 	"likes_count":              user.Stats.LikesCount,
+	// 	"bookmarks_count":          user.Stats.BookmarksCount,
+	// 	"last_seen":                user.Stats.LastSeen,
+	// 	"theme_preference":         user.Settings.ThemePreference,
+	// 	"base_font":                user.Settings.BaseFont,
+	// 	"site_navbar":              user.Settings.SiteNavbar,
+	// 	"content_editor":           user.Settings.ContentEditor,
+	// 	"content_mode":             user.Settings.ContentMode,
+	// 	"created_at":               user.CreatedAt,
+	// 	"updated_at":               user.UpdatedAt,
+	// 	"skills":                   user.Profile.Skills,
+	// 	"interests":                user.Profile.Interests,
+	// 	"badges":                   user.Badges,
+	// 	"roles":                    user.Role,
+	// 	"followers":                user.Followers,
+	// 	"following":                user.Following,
+	// 	"notifications":            user.Notifications,
+	// 	"notification_preferences": user.NotificationPreferences,
+	// }
 
 	Logger.Info(c.Context()).WithFields("userID", uid).Logs("User profile retrieved successfully")
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"message": "Profile retrieved successfully",
 		"status":  fiber.StatusOK,
-		"user":    profileResponse,
+		"user":    user,
 	})
 }
 
@@ -737,6 +744,13 @@ func UpdateUserProfile(c *fiber.Ctx) error {
 	})
 }
 
+func getBool(b *bool) bool {
+	if b != nil {
+		return *b
+	}
+	return false
+}
+
 // UpdateUserNotificationPrefrences updates the user's notification preferences
 func UpdateUserNotificationPrefrences(c *fiber.Ctx) error {
 	type UpdateData struct {
@@ -791,7 +805,7 @@ func UpdateUserNotificationPrefrences(c *fiber.Ctx) error {
 		Logger.Warn(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Failed to update rate limit")
 	}
 
-	data := new(UpdateData)
+	var data UpdateData
 	if err := utils.StrictBodyParser(c, &data); err != nil {
 		Logger.Warn(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Invalid request body")
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -819,47 +833,19 @@ func UpdateUserNotificationPrefrences(c *fiber.Ctx) error {
 		}
 	}
 
-	var opts []models.UserOption
-	updatedFields := []string{}
-	if data.EmailOnLikes != nil {
-		opts = append(opts, models.WithEmailOnLikes(*data.EmailOnLikes))
-		updatedFields = append(updatedFields, "notification_preferences.email_on_likes")
-	}
-	if data.EmailOnComments != nil {
-		opts = append(opts, models.WithEmailOnComments(*data.EmailOnComments))
-		updatedFields = append(updatedFields, "notification_preferences.email_on_comments")
-	}
-	if data.EmailOnFollower != nil {
-		opts = append(opts, models.WithEmailOnFollowers(*data.EmailOnFollower))
-		updatedFields = append(updatedFields, "notification_preferences.email_on_follower")
-	}
-	if data.EmailOnBadge != nil {
-		opts = append(opts, models.WithEmailOnBadge(*data.EmailOnBadge))
-		updatedFields = append(updatedFields, "notification_preferences.email_on_badge")
-	}
-	if data.EmailOnMentions != nil {
-		opts = append(opts, models.WithEmailOnFollowers(*data.EmailOnMentions))
-		updatedFields = append(updatedFields, "notification_preferences.email_on_mentions")
-	}
-	if data.EmailOnNewPosts != nil {
-		opts = append(opts, models.WithEmailOnFollowers(*data.EmailOnNewPosts))
-		updatedFields = append(updatedFields, "notification_preferences.email_on_new_posts")
-	}
-	if data.EmailOnUnread != nil {
-		opts = append(opts, models.WithEmailOnFollowers(*data.EmailOnUnread))
-		updatedFields = append(updatedFields, "notification_preferences.email_on_unread")
-	}
-
-	if len(opts) == 0 {
-		Logger.Info(c.Context()).WithFields("user_id", userID).Logs("No fields provided for update")
-		return c.Status(fiber.StatusOK).JSON(fiber.Map{
-			"message": "No changes provided",
-			"status":  fiber.StatusOK,
-			"user":    user,
-		})
-	}
-
-	updatedUser, err := models.UpdateUser(c.Context(), Redis, DB, userID, opts...)
+	updatedUser, err := models.UpdateNotificationPreferences(
+		c.Context(),
+		Redis,
+		DB,
+		userID,
+		getBool(data.EmailOnLikes),
+		getBool(data.EmailOnComments),
+		getBool(data.EmailOnMentions),
+		getBool(data.EmailOnFollower),
+		getBool(data.EmailOnBadge),
+		getBool(data.EmailOnUnread),
+		getBool(data.EmailOnNewPosts),
+	)
 	if err != nil {
 		Logger.Error(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Failed to update user")
 		if err.Error() == "user not found" {

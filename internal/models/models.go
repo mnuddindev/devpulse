@@ -84,4 +84,6 @@ var (
 	NewNotification            = user.NewNotification
 	NewNotificationPreferences = user.NewNotificationPreferences
 	SeedRoles                  = user.SeedRoles
+
+	UpdateNotificationPreferences = user.UpdateNotificationPreferences
 )
