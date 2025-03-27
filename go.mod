@@ -3,6 +3,7 @@ module github.com/mnuddindev/devpulse
 go 1.24.1
 
 require (
+	github.com/bsm/gomega v1.27.10
 	github.com/go-playground/validator/v10 v10.25.0
 	github.com/gofiber/fiber/v2 v2.52.6
 	github.com/golang-jwt/jwt/v5 v5.2.1

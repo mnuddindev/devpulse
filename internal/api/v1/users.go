@@ -16,6 +16,32 @@ import (
 	"gorm.io/gorm"
 )
 
+func RateLimitting(c *fiber.Ctx, userID string) bool {
+	rateKey := "profile_update_rate:" + userID
+	const maxUpdates = 5
+	const rateTTL = 1 * time.Minute
+	count, err := Redis.Get(c.Context(), rateKey).Int()
+	if err == redis.Nil {
+		count = 0
+	} else if err != nil {
+		Logger.Warn(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Failed to check rate limit")
+		return false
+	}
+	if count >= maxUpdates {
+		Logger.Warn(c.Context()).WithFields("user_id", userID).Logs("Rate limit exceeded")
+		return false
+	}
+
+	pipe := Redis.TxPipeline()
+	pipe.Incr(c.Context(), rateKey)
+	pipe.Expire(c.Context(), rateKey, rateTTL)
+	if _, err := pipe.Exec(c.Context()); err != nil {
+		Logger.Warn(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Failed to update rate limit")
+		return false
+	}
+	return true
+}
+
 func Register(c *fiber.Ctx) error {
 	type UserInput struct {
 		AvatarURL       string `json:"avatar_url" validate:"omitempty,url"`
@@ -558,28 +584,12 @@ func UpdateUserProfile(c *fiber.Ctx) error {
 		})
 	}
 
-	rateKey := "profile_update_rate:" + userID.String()
-	const maxUpdates = 5
-	const rateTTL = 1 * time.Minute
-	count, err := Redis.Get(c.Context(), rateKey).Int()
-	if err == redis.Nil {
-		count = 0
-	} else if err != nil {
-		Logger.Warn(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Failed to check rate limit")
-	}
-	if count >= maxUpdates {
-		Logger.Warn(c.Context()).WithFields("user_id", userID).Logs("Rate limit exceeded")
+	rateLimit := RateLimitting(c, userIDRaw)
+	if rateLimit {
 		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
 			"error":  "Too many update attempts, try again later",
 			"status": fiber.StatusTooManyRequests,
 		})
-	}
-
-	pipe := Redis.TxPipeline()
-	pipe.Incr(c.Context(), rateKey)
-	pipe.Expire(c.Context(), rateKey, rateTTL)
-	if _, err := pipe.Exec(c.Context()); err != nil {
-		Logger.Warn(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Failed to update rate limit")
 	}
 
 	var req models.UpdateUserRequest
@@ -761,28 +771,12 @@ func UpdateUserNotificationPrefrences(c *fiber.Ctx) error {
 		})
 	}
 
-	rateKey := "profile_update_rate:" + userID.String()
-	const maxUpdates = 5
-	const rateTTL = 1 * time.Minute
-	count, err := Redis.Get(c.Context(), rateKey).Int()
-	if err == redis.Nil {
-		count = 0
-	} else if err != nil {
-		Logger.Warn(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Failed to check rate limit")
-	}
-	if count >= maxUpdates {
-		Logger.Warn(c.Context()).WithFields("user_id", userID).Logs("Rate limit exceeded")
+	rateLimit := RateLimitting(c, userIDRaw)
+	if rateLimit {
 		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
 			"error":  "Too many update attempts, try again later",
 			"status": fiber.StatusTooManyRequests,
 		})
-	}
-
-	pipe := Redis.TxPipeline()
-	pipe.Incr(c.Context(), rateKey)
-	pipe.Expire(c.Context(), rateKey, rateTTL)
-	if _, err := pipe.Exec(c.Context()); err != nil {
-		Logger.Warn(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Failed to update rate limit")
 	}
 
 	var data UpdateData
@@ -832,6 +826,7 @@ func UpdateUserNotificationPrefrences(c *fiber.Ctx) error {
 	})
 }
 
+// UpdateUserCustomization updates the user's customiztion
 func UpdateUserCustomization(c *fiber.Ctx) error {
 	type UpdateData struct {
 		ThemePreference *string `json:"theme_preference" validate:"omitempty,oneof=Light Dark"`
@@ -844,43 +839,19 @@ func UpdateUserCustomization(c *fiber.Ctx) error {
 	userIDRaw, ok := c.Locals("user_id").(string)
 	if !ok || userIDRaw == "" {
 		Logger.Warn(c.Context()).Logs("UpdateUserProfile attempted without user ID in context")
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error":  "Unauthorized",
-			"status": fiber.StatusUnauthorized,
-		})
 	}
 
 	userID, err := uuid.Parse(userIDRaw)
 	if err != nil {
 		Logger.Error(c.Context()).WithFields("error", err, "userID", userIDRaw).Logs("Invalid user ID format in UpdateUserProfile")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":  "Invalid user ID",
-			"status": fiber.StatusBadRequest,
-		})
 	}
 
-	rateKey := "profile_update_rate:" + userID.String()
-	const maxUpdates = 5
-	const rateTTL = 1 * time.Minute
-	count, err := Redis.Get(c.Context(), rateKey).Int()
-	if err == redis.Nil {
-		count = 0
-	} else if err != nil {
-		Logger.Warn(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Failed to check rate limit")
-	}
-	if count >= maxUpdates {
-		Logger.Warn(c.Context()).WithFields("user_id", userID).Logs("Rate limit exceeded")
+	rateLimit := RateLimitting(c, userIDRaw)
+	if rateLimit {
 		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
 			"error":  "Too many update attempts, try again later",
 			"status": fiber.StatusTooManyRequests,
 		})
-	}
-
-	pipe := Redis.TxPipeline()
-	pipe.Incr(c.Context(), rateKey)
-	pipe.Expire(c.Context(), rateKey, rateTTL)
-	if _, err := pipe.Exec(c.Context()); err != nil {
-		Logger.Warn(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Failed to update rate limit")
 	}
 
 	var data UpdateData
@@ -950,6 +921,116 @@ func UpdateUserCustomization(c *fiber.Ctx) error {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "User not found"})
 		}
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update profile"})
+	}
+
+	Redis.Del(c.Context(), userKey)
+	userJSON, _ := json.Marshal(updatedUser)
+	if err := Redis.Set(c.Context(), userKey, userJSON, 30*time.Minute).Err(); err != nil {
+		Logger.Warn(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Failed to update Redis cache")
+	}
+
+	Logger.Info(c.Context()).WithFields("user_id", userID).Logs("User profile updated successfully")
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "Section updated successfully",
+		"status":  fiber.StatusOK,
+		"user":    updatedUser,
+	})
+}
+
+// UpdateUserAccount updates the user's account
+func UpdateUserAccount(c *fiber.Ctx) error {
+	type UpdatePasswordRequest struct {
+		CurrentPassword string `json:"current_password" validate:"required,min=6"`
+		NewPassword     string `json:"new_password" validate:"required,min=6"`
+		ConfirmPassword string `json:"confirm_password" validate:"required,eqfield=NewPassword"`
+	}
+
+	userIDRaw, ok := c.Locals("user_id").(string)
+	if !ok || userIDRaw == "" {
+		Logger.Warn(c.Context()).Logs("UpdateUserPassword attempted without user ID in context")
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error":  "Unauthorized",
+			"status": fiber.StatusUnauthorized,
+		})
+	}
+
+	userID, err := uuid.Parse(userIDRaw)
+	if err != nil {
+		Logger.Error(c.Context()).WithFields("error", err, "userID", userIDRaw).Logs("Invalid user ID format in UpdateUserPassword")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":  "Invalid user ID",
+			"status": fiber.StatusBadRequest,
+		})
+	}
+
+	rateLimit := RateLimitting(c, userIDRaw)
+	if rateLimit {
+		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+			"error":  "Too many update attempts, try again later",
+			"status": fiber.StatusTooManyRequests,
+		})
+	}
+
+	var req UpdatePasswordRequest
+	if err := utils.StrictBodyParser(c, &req); err != nil {
+		Logger.Warn(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Invalid request body")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":  "Invalid request body",
+			"status": fiber.StatusBadRequest,
+		})
+	}
+
+	if err := Validator.Validate(req); err != nil {
+		Logger.Warn(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Validation failed")
+		return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{
+			"error":  err,
+			"status": fiber.StatusUnprocessableEntity,
+		})
+	}
+
+	userKey := "user:" + userIDRaw
+	var user *models.User
+	cachedUser, err := Redis.Get(c.Context(), userKey).Result()
+	if err == nil {
+		user = &models.User{}
+		if err := json.Unmarshal([]byte(cachedUser), user); err != nil {
+			Logger.Warn(c.Context()).WithFields("error", err, "userID", userIDRaw).Logs("Failed to unmarshal cached user from Redis")
+			user = nil
+		}
+	}
+
+	if err := utils.ComparePasswords(user.Password, req.CurrentPassword); err != nil {
+		Logger.Warn(c.Context()).WithFields("email", user.Email).Logs("Invalid password provided")
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error":  "Invalid current password",
+			"status": fiber.StatusUnauthorized,
+		})
+	}
+
+	hashedPassword, err := utils.HashPassword(req.NewPassword)
+	if err != nil {
+		Logger.Error(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Failed to hash new password")
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":  "Failed to process password",
+			"status": fiber.StatusInternalServerError,
+		})
+	}
+
+	updatedUser, err := models.UpdateUser(
+		c.Context(),
+		Redis,
+		DB,
+		userID,
+		models.WithPassword(string(hashedPassword)),
+	)
+
+	if err != nil {
+		Logger.Error(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Failed to update user password")
+		if err.Error() == "user not found" {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "User not found"})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update password"})
 	}
 
 	Redis.Del(c.Context(), userKey)
