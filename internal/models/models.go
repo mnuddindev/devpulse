@@ -36,6 +36,8 @@ var (
 	WithUsername           = user.WithUsername
 	WithEmail              = user.WithEmail
 	WithPassword           = user.WithPassword
+	WithPreviousPasswords  = user.WithPreviousPasswords
+	WithPasswordChangedAt  = user.WithPasswordChangedAt
 	WithOTP                = user.WithOTP
 	WithIsActive           = user.WithIsActive
 	WithEmailVerified      = user.WithEmailVerified

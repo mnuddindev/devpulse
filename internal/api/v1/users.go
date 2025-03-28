@@ -16,16 +16,13 @@ import (
 	"gorm.io/gorm"
 )
 
-func RateLimitting(c *fiber.Ctx, userID string) bool {
-	rateKey := "profile_update_rate:" + userID
-	const maxUpdates = 5
-	const rateTTL = 1 * time.Minute
+func RateLimitting(c *fiber.Ctx, userID string, rateTTL time.Duration, maxUpdates int, prefix string) bool {
+	rateKey := prefix + userID
 	count, err := Redis.Get(c.Context(), rateKey).Int()
 	if err == redis.Nil {
 		count = 0
 	} else if err != nil {
 		Logger.Warn(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Failed to check rate limit")
-		return false
 	}
 	if count >= maxUpdates {
 		Logger.Warn(c.Context()).WithFields("user_id", userID).Logs("Rate limit exceeded")
@@ -37,7 +34,7 @@ func RateLimitting(c *fiber.Ctx, userID string) bool {
 	pipe.Expire(c.Context(), rateKey, rateTTL)
 	if _, err := pipe.Exec(c.Context()); err != nil {
 		Logger.Warn(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Failed to update rate limit")
-		return false
+
 	}
 	return true
 }
@@ -368,6 +365,7 @@ func Login(c *fiber.Ctx) error {
 			"error": "Failed to serialize user data",
 		})
 	}
+
 	if err := Redis.Set(c.Context(), key, userJSON, 30*time.Minute).Err(); err != nil {
 		Logger.Warn(c.Context()).Logs(fmt.Sprintf("Failed to cache user in Redis: %v, key: %s", err, key))
 	} else {
@@ -483,13 +481,7 @@ func GetProfile(c *fiber.Ctx) error {
 		}
 	}
 	if err == redis.Nil || user == nil {
-		user, err = models.GetUserBy(c.Context(), Redis, DB, "id = ?", []interface{}{uid},
-			"NotificationPreferences",
-			"Notifications",
-			"Badges",
-			"Followers",
-			"Following",
-		)
+		user, err = models.GetUserBy(c.Context(), Redis, DB, "id = ?", []interface{}{uid}, "")
 		if err != nil {
 			Logger.Error(c.Context()).WithFields("error", err, "userID", uid).Logs("Database error while fetching user profile")
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -517,50 +509,52 @@ func GetProfile(c *fiber.Ctx) error {
 		}
 	}
 
-	// profileResponse := fiber.Map{
-	// 	"id":                       user.ID,
-	// 	"username":                 user.Username,
-	// 	"email":                    user.Email,
-	// 	"name":                     user.Profile.Name,
-	// 	"bio":                      user.Profile.Bio,
-	// 	"avatar_url":               user.Profile.AvatarURL,
-	// 	"job_title":                user.Profile.JobTitle,
-	// 	"employer":                 user.Profile.Employer,
-	// 	"location":                 user.Profile.Location,
-	// 	"social_links":             user.Profile.SocialLinks,
-	// 	"current_learning":         user.Profile.CurrentLearning,
-	// 	"available_for":            user.Profile.AvailableFor,
-	// 	"currently_hacking_on":     user.Profile.CurrentlyHackingOn,
-	// 	"pronouns":                 user.Profile.Pronouns,
-	// 	"education":                user.Profile.Education,
-	// 	"brand_color":              user.Settings.BrandColor,
-	// 	"posts_count":              user.Stats.PostsCount,
-	// 	"comments_count":           user.Stats.CommentsCount,
-	// 	"likes_count":              user.Stats.LikesCount,
-	// 	"bookmarks_count":          user.Stats.BookmarksCount,
-	// 	"last_seen":                user.Stats.LastSeen,
-	// 	"theme_preference":         user.Settings.ThemePreference,
-	// 	"base_font":                user.Settings.BaseFont,
-	// 	"site_navbar":              user.Settings.SiteNavbar,
-	// 	"content_editor":           user.Settings.ContentEditor,
-	// 	"content_mode":             user.Settings.ContentMode,
-	// 	"created_at":               user.CreatedAt,
-	// 	"updated_at":               user.UpdatedAt,
-	// 	"skills":                   user.Profile.Skills,
-	// 	"interests":                user.Profile.Interests,
-	// 	"badges":                   user.Badges,
-	// 	"roles":                    user.Role,
-	// 	"followers":                user.Followers,
-	// 	"following":                user.Following,
-	// 	"notifications":            user.Notifications,
-	// 	"notification_preferences": user.NotificationPreferences,
-	// }
+	profileResponse := fiber.Map{
+		"id":                       user.ID,
+		"username":                 user.Username,
+		"email":                    user.Email,
+		"name":                     user.Profile.Name,
+		"bio":                      user.Profile.Bio,
+		"avatar_url":               user.Profile.AvatarURL,
+		"job_title":                user.Profile.JobTitle,
+		"employer":                 user.Profile.Employer,
+		"location":                 user.Profile.Location,
+		"social_links":             user.Profile.SocialLinks,
+		"current_learning":         user.Profile.CurrentLearning,
+		"available_for":            user.Profile.AvailableFor,
+		"currently_hacking_on":     user.Profile.CurrentlyHackingOn,
+		"pronouns":                 user.Profile.Pronouns,
+		"education":                user.Profile.Education,
+		"brand_color":              user.Settings.BrandColor,
+		"posts_count":              user.Stats.PostsCount,
+		"comments_count":           user.Stats.CommentsCount,
+		"likes_count":              user.Stats.LikesCount,
+		"bookmarks_count":          user.Stats.BookmarksCount,
+		"last_seen":                user.Stats.LastSeen,
+		"theme_preference":         user.Settings.ThemePreference,
+		"base_font":                user.Settings.BaseFont,
+		"site_navbar":              user.Settings.SiteNavbar,
+		"content_editor":           user.Settings.ContentEditor,
+		"content_mode":             user.Settings.ContentMode,
+		"created_at":               user.CreatedAt,
+		"updated_at":               user.UpdatedAt,
+		"skills":                   user.Profile.Skills,
+		"interests":                user.Profile.Interests,
+		"badges":                   user.Badges,
+		"roles":                    user.Role,
+		"followers":                user.Followers,
+		"following":                user.Following,
+		"notifications":            user.Notifications,
+		"notification_preferences": user.NotificationPreferences,
+		"previous_passwords":       user.PreviousPasswords,
+		"last_password_change":     user.LastPasswordChange,
+	}
 
 	Logger.Info(c.Context()).WithFields("userID", uid).Logs("User profile retrieved successfully")
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"message": "Profile retrieved successfully",
 		"status":  fiber.StatusOK,
-		"user":    user,
+		"user":    profileResponse,
 	})
 }
 
@@ -584,8 +578,8 @@ func UpdateUserProfile(c *fiber.Ctx) error {
 		})
 	}
 
-	rateLimit := RateLimitting(c, userIDRaw)
-	if rateLimit {
+	allowed := RateLimitting(c, userIDRaw, 1*time.Minute, 5, "profile_update_rate:")
+	if !allowed {
 		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
 			"error":  "Too many update attempts, try again later",
 			"status": fiber.StatusTooManyRequests,
@@ -771,8 +765,8 @@ func UpdateUserNotificationPrefrences(c *fiber.Ctx) error {
 		})
 	}
 
-	rateLimit := RateLimitting(c, userIDRaw)
-	if rateLimit {
+	allowed := RateLimitting(c, userIDRaw, 1*time.Minute, 5, "profile_update_rate:")
+	if !allowed {
 		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
 			"error":  "Too many update attempts, try again later",
 			"status": fiber.StatusTooManyRequests,
@@ -846,8 +840,8 @@ func UpdateUserCustomization(c *fiber.Ctx) error {
 		Logger.Error(c.Context()).WithFields("error", err, "userID", userIDRaw).Logs("Invalid user ID format in UpdateUserProfile")
 	}
 
-	rateLimit := RateLimitting(c, userIDRaw)
-	if rateLimit {
+	allowed := RateLimitting(c, userIDRaw, 1*time.Minute, 5, "profile_update_rate:")
+	if !allowed {
 		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
 			"error":  "Too many update attempts, try again later",
 			"status": fiber.StatusTooManyRequests,
@@ -964,8 +958,8 @@ func UpdateUserAccount(c *fiber.Ctx) error {
 		})
 	}
 
-	rateLimit := RateLimitting(c, userIDRaw)
-	if rateLimit {
+	allowed := RateLimitting(c, userIDRaw, 15*time.Minute, 5, "rate:change-password:")
+	if !allowed {
 		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
 			"error":  "Too many update attempts, try again later",
 			"status": fiber.StatusTooManyRequests,
@@ -989,13 +983,20 @@ func UpdateUserAccount(c *fiber.Ctx) error {
 		})
 	}
 
-	userKey := "user:" + userIDRaw
+	if utils.ContainsInvalidChars(req.NewPassword) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"Message": "password contains invalid characters",
+			"status":  fiber.StatusBadRequest,
+		})
+	}
+
+	userKey := "user:" + userID.String()
 	var user *models.User
 	cachedUser, err := Redis.Get(c.Context(), userKey).Result()
 	if err == nil {
 		user = &models.User{}
 		if err := json.Unmarshal([]byte(cachedUser), user); err != nil {
-			Logger.Warn(c.Context()).WithFields("error", err, "userID", userIDRaw).Logs("Failed to unmarshal cached user from Redis")
+			Logger.Warn(c.Context()).WithFields("error", err, "userID", userID.String()).Logs("Failed to unmarshal cached user from Redis")
 			user = nil
 		}
 	}
@@ -1005,6 +1006,27 @@ func UpdateUserAccount(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error":  "Invalid current password",
 			"status": fiber.StatusUnauthorized,
+		})
+	}
+
+	if !utils.IsStrongPassword(req.NewPassword) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"Message": "new password does not meet strength requirements",
+			"status":  fiber.StatusBadRequest,
+		})
+	}
+
+	if req.CurrentPassword == req.NewPassword {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"Message": "new password cannot be the same as current",
+			"status":  fiber.StatusBadRequest,
+		})
+	}
+
+	if utils.IsPasswordReused(user.PreviousPasswords, req.NewPassword) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"Message": "new password cannot match previous passwords",
+			"status":  fiber.StatusBadRequest,
 		})
 	}
 
@@ -1023,6 +1045,8 @@ func UpdateUserAccount(c *fiber.Ctx) error {
 		DB,
 		userID,
 		models.WithPassword(string(hashedPassword)),
+		models.WithPreviousPasswords(utils.UpdatePreviousPasswords(user.PreviousPasswords, user.Password)),
+		models.WithPasswordChangedAt(time.Now()),
 	)
 
 	if err != nil {
@@ -1033,16 +1057,36 @@ func UpdateUserAccount(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to update password"})
 	}
 
+	c.Cookie(&fiber.Cookie{
+		Name:     "access_token",
+		Value:    "",
+		Expires:  time.Now().Add(-time.Hour),
+		HTTPOnly: true,
+		Secure:   true,
+		SameSite: "Strict",
+	})
+	c.Cookie(&fiber.Cookie{
+		Name:     "refresh_token",
+		Value:    "",
+		Expires:  time.Now().Add(-time.Hour),
+		HTTPOnly: true,
+		Secure:   true,
+		SameSite: "Strict",
+	})
+
 	Redis.Del(c.Context(), userKey)
-	userJSON, _ := json.Marshal(updatedUser)
-	if err := Redis.Set(c.Context(), userKey, userJSON, 30*time.Minute).Err(); err != nil {
-		Logger.Warn(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Failed to update Redis cache")
-	}
+
+	c.Set("Authorization", "")
+	c.Set("Cache-Control", "no-store, no-cache, must-revalidate, private")
+	c.Set("Pragma", "no-cache")
+	c.Set("X-Content-Type-Options", "nosniff")
+	c.Set("X-Frame-Options", "DENY")
+	c.Set("Content-Security-Policy", "default-src 'self'")
 
 	Logger.Info(c.Context()).WithFields("user_id", userID).Logs("User profile updated successfully")
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"message": "Section updated successfully",
+		"message": "Section updated successfully. Please log in again.",
 		"status":  fiber.StatusOK,
 		"user":    updatedUser,
 	})

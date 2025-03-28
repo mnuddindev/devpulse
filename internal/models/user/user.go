@@ -20,12 +20,15 @@ type User struct {
 
 	Username        string    `gorm:"size:255;not null;unique" json:"username" validate:"required,min=3,max=255,alphanum"`
 	Email           string    `gorm:"size:100;not null;unique" json:"email" validate:"required,email"`
-	Password        string    `gorm:"size:255;not null" json:"-" validate:"required,min=6"`
+	Password        string    `gorm:"size:255;not null" json:"password" validate:"required,min=6"`
 	OTP             int64     `gorm:"type:bigint;not null" json:"otp"`
 	IsActive        bool      `gorm:"default:false" json:"is_active"`
 	IsEmailVerified bool      `gorm:"default:false" json:"is_email_verified"`
 	RoleID          uuid.UUID `gorm:"type:uuid;not null" json:"role_id"`
 	Role            Role      `gorm:"foreignKey:RoleID" json:"role"`
+
+	PreviousPasswords  string    `gorm:"type:text" json:"previous_passwords"`
+	LastPasswordChange time.Time `gorm:"default:current_timestamp"`
 
 	Profile struct {
 		Name               string `gorm:"size:100" json:"name" validate:"omitempty,max=100"`
@@ -162,7 +165,9 @@ func GetUserBy(ctx context.Context, redisClient *storage.RedisClient, gormDB *go
 		Preload("Following").
 		Preload("NotificationPreferences", func(db *gorm.DB) *gorm.DB {
 			return db.Where("notification_preferences.user_id = ?", u.ID)
-		})
+		}).
+		Preload("Role").
+		Preload("Role.Permissions")
 	if err := query.First(&u).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, utils.NewError(utils.ErrNotFound.Code, "User not found")

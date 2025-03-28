@@ -227,6 +227,7 @@ func handleTokenRefresh(c *fiber.Ctx, cfg Options, refreshToken string) error {
 	})
 
 	cfg.Logger.Info(c.Context()).WithFields("user_id", userID).Logs("Tokens refreshed")
+	c.Next()
 	return nil
 }
 

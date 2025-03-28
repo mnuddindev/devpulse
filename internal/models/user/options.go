@@ -19,6 +19,14 @@ func WithPassword(password string) UserOption {
 	return func(u *User) { u.Password = password }
 }
 
+func WithPreviousPasswords(passwords string) UserOption {
+	return func(u *User) { u.PreviousPasswords = passwords }
+}
+
+func WithPasswordChangedAt(changedAt time.Time) UserOption {
+	return func(u *User) { u.LastPasswordChange = changedAt }
+}
+
 func WithOTP(otp int64) UserOption {
 	return func(u *User) { u.OTP = otp }
 }
@@ -154,6 +162,7 @@ func WithLastSeen(lastSeen time.Time) UserOption {
 	return func(u *User) { u.Stats.LastSeen = lastSeen }
 }
 
+// stats
 func WithEmailOnLikes(ok bool) UserOption {
 	return func(u *User) { u.NotificationPreferences.EmailOnLikes = ok }
 }
