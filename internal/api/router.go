@@ -58,7 +58,7 @@ func NewRoutes(ctx context.Context, app *fiber.App, cfg *config.Config, db *gorm
 	app.Post("/reset-password", v1.ResetPassword)
 
 	users := app.Group("/users")
-	users.Post("/:username", v1.GetUserByUsername)
+	users.Get("/:username", v1.GetUserByUsername)
 	users.Get("/:username/stats", v1.NotImplemented)
 	users.Post("/:username/follow", v1.NotImplemented)
 	users.Post("/:username/unfollow", v1.NotImplemented)
