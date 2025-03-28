@@ -1101,3 +1101,75 @@ func UpdateUserAccount(c *fiber.Ctx) error {
 		"status":  fiber.StatusOK,
 	})
 }
+
+// DeleteUser deletes the authenticated user's account with Redis optimization
+func DeleteUser(c *fiber.Ctx) error {
+	type ConfirmData struct {
+		Confirm bool `json:"confirm" validate:"required"`
+	}
+
+	userIDRaw, ok := c.Locals("user_id").(string)
+	if !ok || userIDRaw == "" {
+		Logger.Warn(c.Context()).Logs("UpdateUserPassword attempted without user ID in context")
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error":  "Unauthorized",
+			"status": fiber.StatusUnauthorized,
+		})
+	}
+
+	userID, err := uuid.Parse(userIDRaw)
+	if err != nil {
+		Logger.Error(c.Context()).WithFields("error", err, "userID", userIDRaw).Logs("Invalid user ID format in UpdateUserPassword")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":  "Invalid user ID",
+			"status": fiber.StatusBadRequest,
+		})
+	}
+
+	allowed := RateLimitting(c, userIDRaw, 5*time.Minute, 5, "rate:delete-user:")
+	if !allowed {
+		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+			"error":  "Too many update attempts, try again later",
+			"status": fiber.StatusTooManyRequests,
+		})
+	}
+
+	var req ConfirmData
+	if err := utils.StrictBodyParser(c, &req); err != nil {
+		Logger.Warn(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Invalid request body")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":  "Invalid request body",
+			"status": fiber.StatusBadRequest,
+		})
+	}
+
+	if err := Validator.Validate(req); err != nil {
+		Logger.Warn(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Validation failed")
+		return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{
+			"error":  err,
+			"status": fiber.StatusUnprocessableEntity,
+		})
+	}
+
+	userKey := "user:id:" + userID.String()
+	exists, err := Redis.Exists(c.Context(), userKey).Result()
+	if err == nil {
+		Logger.Warn(c.Context()).WithFields("error", err, "userID", userID.String()).Logs("Failed to check user existence in Redis")
+	}
+
+	if exists == 0 {
+		user, err := models.GetUserBy(c.Context(), Redis, DB, "id = ?", []interface{}{userID})
+		if err != nil {
+			Logger.Error(c.Context()).WithFields("error", err, "userID", userID).Logs("Database error while fetching user profile")
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error":  "Failed to fetch user profile",
+				"status": fiber.StatusInternalServerError,
+			})
+		}
+
+		userJSON, _ := json.Marshal(user)
+		if err := Redis.Set(c.Context(), userKey, userJSON, 30*time.Minute).Err(); err != nil {
+			Logger.Warn(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Failed to update Redis cache")
+		}
+	}
+}
