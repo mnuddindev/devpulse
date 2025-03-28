@@ -54,8 +54,8 @@ func NewRoutes(ctx context.Context, app *fiber.App, cfg *config.Config, db *gorm
 	app.Post("/login", v1.Login)
 	app.Post("/logout", v1.Logout)
 	app.Post("/refresh-token", v1.Refresh)
-	app.Post("/forgot-password", v1.NotImplemented)
-	app.Post("/reset-password", v1.NotImplemented)
+	app.Post("/forgot-password", v1.ForgotPassword)
+	app.Post("/reset-password", v1.ResetPassword)
 
 	users := app.Group("/users")
 	users.Post("/:username", v1.NotImplemented)
