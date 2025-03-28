@@ -1172,4 +1172,48 @@ func DeleteUser(c *fiber.Ctx) error {
 			Logger.Warn(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Failed to update Redis cache")
 		}
 	}
+
+	err = models.DeleteUser(c.Context(), Redis, DB, userID)
+	if err != nil {
+		Logger.Error(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Failed to delete user")
+		if err.Error() == "user not found" {
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "User not found"})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to delete user"})
+	}
+	Redis.Del(c.Context(), userKey)
+
+	c.Cookie(&fiber.Cookie{
+		Name:     "access_token",
+		Value:    "",
+		Expires:  time.Now().Add(-time.Hour),
+		HTTPOnly: true,
+		Secure:   true,
+		SameSite: "Strict",
+	})
+	c.Cookie(&fiber.Cookie{
+		Name:     "refresh_token",
+		Value:    "",
+		Expires:  time.Now().Add(-time.Hour),
+		HTTPOnly: true,
+		Secure:   true,
+		SameSite: "Strict",
+	})
+
+	c.Set("Authorization", "")
+	c.Set("Cache-Control", "no-store, no-cache, must-revalidate, private")
+	c.Set("Pragma", "no-cache")
+	c.Set("X-Content-Type-Options", "nosniff")
+	c.Set("X-Frame-Options", "DENY")
+	c.Set("Content-Security-Policy", "default-src 'self'")
+	c.ClearCookie("access_token")
+	c.ClearCookie("refresh_token")
+	c.Locals("user_id", nil)
+
+	Logger.Info(c.Context()).WithFields("user_id", userID).Logs("User account deleted successfully")
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "Account deleted successfully",
+		"status":  fiber.StatusOK,
+	})
 }
