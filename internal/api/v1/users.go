@@ -239,3 +239,100 @@ func ResetPassword(c *fiber.Ctx) error {
 		"status":  fiber.StatusOK,
 	})
 }
+
+// GetUserByUsername returns a user by username
+func GetUserByUsername(c *fiber.Ctx) error {
+	username := c.Params("username")
+	if username == "" {
+		Logger.Warn(c.Context()).Logs("Missing username query parameter in GetPublicUserProfile")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":  "Username is required",
+			"status": fiber.StatusBadRequest,
+		})
+	}
+
+	if len(username) < 3 || len(username) > 255 {
+		Logger.Warn(c.Context()).WithFields("username", username).Logs("Invalid username length in GetPublicUserProfile")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":  "Username must be between 3 and 255 characters",
+			"status": fiber.StatusBadRequest,
+		})
+	}
+
+	cacheKey := "public_user:" + username
+	cachedProfile, err := Redis.Get(c.Context(), cacheKey).Result()
+	if err == nil {
+		var publicUser models.User
+		if err := json.Unmarshal([]byte(cachedProfile), &publicUser); err == nil {
+			Logger.Info(c.Context()).WithFields("username", username).Logs("Public user profile served from cache")
+			return c.Status(fiber.StatusOK).JSON(fiber.Map{
+				"message": "Public profile retrieved successfully",
+				"status":  fiber.StatusOK,
+				"user":    publicUser,
+			})
+		}
+		Logger.Warn(c.Context()).WithFields("error", err, "username", username).Logs("Failed to unmarshal cached public user")
+	}
+
+	user, err := models.GetUserBy(c.Context(), Redis, DB, "username = ?", []interface{}{username}, "")
+	if err != nil {
+		Logger.Error(c.Context()).WithFields("error", err).WithFields("username", username).Logs("Failed to fetch user by username")
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error":  "User not found",
+			"status": fiber.StatusNotFound,
+		})
+	}
+
+	userJSON, _ := json.Marshal(user)
+	if err := Redis.Set(c.Context(), cacheKey, userJSON, 5*time.Minute).Err(); err != nil {
+		Logger.Warn(c.Context()).WithFields("error", err).WithFields("username", username).Logs("Failed to cache public user profile")
+	}
+
+	profileResponse := fiber.Map{
+		"id":                       user.ID,
+		"username":                 user.Username,
+		"email":                    user.Email,
+		"name":                     user.Profile.Name,
+		"bio":                      user.Profile.Bio,
+		"avatar_url":               user.Profile.AvatarURL,
+		"job_title":                user.Profile.JobTitle,
+		"employer":                 user.Profile.Employer,
+		"location":                 user.Profile.Location,
+		"social_links":             user.Profile.SocialLinks,
+		"current_learning":         user.Profile.CurrentLearning,
+		"available_for":            user.Profile.AvailableFor,
+		"currently_hacking_on":     user.Profile.CurrentlyHackingOn,
+		"pronouns":                 user.Profile.Pronouns,
+		"education":                user.Profile.Education,
+		"brand_color":              user.Settings.BrandColor,
+		"posts_count":              user.Stats.PostsCount,
+		"comments_count":           user.Stats.CommentsCount,
+		"likes_count":              user.Stats.LikesCount,
+		"bookmarks_count":          user.Stats.BookmarksCount,
+		"last_seen":                user.Stats.LastSeen,
+		"theme_preference":         user.Settings.ThemePreference,
+		"base_font":                user.Settings.BaseFont,
+		"site_navbar":              user.Settings.SiteNavbar,
+		"content_editor":           user.Settings.ContentEditor,
+		"content_mode":             user.Settings.ContentMode,
+		"created_at":               user.CreatedAt,
+		"updated_at":               user.UpdatedAt,
+		"skills":                   user.Profile.Skills,
+		"interests":                user.Profile.Interests,
+		"badges":                   user.Badges,
+		"roles":                    user.Role,
+		"followers":                user.Followers,
+		"following":                user.Following,
+		"notifications":            user.Notifications,
+		"notification_preferences": user.NotificationPreferences,
+		"previous_passwords":       user.PreviousPasswords,
+		"last_password_change":     user.LastPasswordChange,
+	}
+
+	Logger.Info(c.Context()).WithFields("username", username).Logs("Public user profile retrieved successfully")
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "Public profile retrieved successfully",
+		"status":  fiber.StatusOK,
+		"user":    profileResponse,
+	})
+}
