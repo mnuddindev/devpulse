@@ -252,6 +252,17 @@ func ActivateUser(c *fiber.Ctx) error {
 
 // Login ensures user can login to his account.
 func Login(c *fiber.Ctx) error {
+	if accessToken := c.Cookies("access_token"); accessToken != "" {
+		// Verify the token
+		claims, err := auth.VerifyToken(accessToken)
+		if err == nil && claims != nil {
+			// Token is valid, user is already logged in
+			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+				"error":   "Already logged in",
+				"message": "You are already authenticated. Please log out first if you want to switch accounts.",
+			})
+		}
+	}
 	type LoginRequest struct {
 		Email    string `json:"email" validate:"required,email,max=100"`
 		Password string `json:"password" validate:"required,min=6,max=100"`
@@ -958,7 +969,7 @@ func UpdateUserAccount(c *fiber.Ctx) error {
 		})
 	}
 
-	allowed := RateLimitting(c, userIDRaw, 15*time.Minute, 5, "rate:change-password:")
+	allowed := RateLimitting(c, userIDRaw, 5*time.Minute, 5, "rate:change-password:")
 	if !allowed {
 		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
 			"error":  "Too many update attempts, try again later",
@@ -1039,7 +1050,7 @@ func UpdateUserAccount(c *fiber.Ctx) error {
 		})
 	}
 
-	updatedUser, err := models.UpdateUser(
+	_, err = models.UpdateUser(
 		c.Context(),
 		Redis,
 		DB,
@@ -1088,6 +1099,5 @@ func UpdateUserAccount(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"message": "Section updated successfully. Please log in again.",
 		"status":  fiber.StatusOK,
-		"user":    updatedUser,
 	})
 }
