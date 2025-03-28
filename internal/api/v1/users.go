@@ -1102,8 +1102,8 @@ func UpdateUserAccount(c *fiber.Ctx) error {
 	})
 }
 
-// DeleteUser deletes the authenticated user's account with Redis optimization
-func DeleteUser(c *fiber.Ctx) error {
+// DeleteUserAccount deletes the authenticated user's account with Redis optimization
+func DeleteUserAccount(c *fiber.Ctx) error {
 	type ConfirmData struct {
 		Confirm bool `json:"confirm" validate:"required"`
 	}

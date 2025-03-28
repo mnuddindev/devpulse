@@ -54,6 +54,34 @@ func NewRoutes(ctx context.Context, app *fiber.App, cfg *config.Config, db *gorm
 	app.Post("/login", v1.Login)
 	app.Post("/logout", v1.Logout)
 	app.Post("/refresh-token", v1.Refresh)
+	app.Post("/forgot-password", v1.NotImplemented)
+	app.Post("/reset-password", v1.NotImplemented)
+
+	users := app.Group("/users")
+	users.Post("/:username", v1.NotImplemented)
+	users.Get("/:username/stats", v1.NotImplemented)
+	users.Post("/:username/follow", v1.NotImplemented)
+	users.Post("/:username/unfollow", v1.NotImplemented)
+	users.Get("/:username/followers", v1.NotImplemented)
+	users.Get("/:username/following", v1.NotImplemented)
+
+	// User Notifications
+	users.Get("/:username/notifications", v1.NotImplemented)
+	users.Get("/:username/notifications/:notificationId", v1.NotImplemented)
+	users.Post("/:username/notifications/:notificationId/mark-as-read", v1.NotImplemented)
+	users.Post("/:username/notifications/:notificationId/mark-as-unread", v1.NotImplemented)
+	users.Post("/:username/notifications/:notificationId/delete", v1.NotImplemented)
+	users.Post("/:username/notifications/mark-all-as-read", v1.NotImplemented)
+	users.Post("/:username/notifications/mark-all-as-unread", v1.NotImplemented)
+	users.Post("/:username/notifications/delete-all", v1.NotImplemented)
+	users.Post("/:username/notifications/delete-all-read", v1.NotImplemented)
+	users.Post("/:username/notifications/delete-all-unread", v1.NotImplemented)
+
+	// User Badges
+	users.Get("/:username/badges", v1.NotImplemented)
+	users.Post("/:username/badges", v1.NotImplemented)
+
+	//
 
 	opt := auth.Options{
 		DB:      db,
@@ -67,7 +95,16 @@ func NewRoutes(ctx context.Context, app *fiber.App, cfg *config.Config, db *gorm
 	user.Put("/update/notification/me", auth.CheckPerm(opt, "create_comment"), v1.UpdateUserNotificationPrefrences)
 	user.Put("/update/customization/me", auth.CheckPerm(opt, "create_comment"), v1.UpdateUserCustomization)
 	user.Put("/update/account/me", auth.CheckPerm(opt, "create_comment"), v1.UpdateUserAccount)
-	user.Put("/account/delete/me", auth.CheckPerm(opt, "create_comment"), v1.UpdateUserProfile)
+	user.Delete("/account/delete/me", auth.CheckPerm(opt, "create_comment"), v1.DeleteUserAccount)
+
+	// user notifications
+	user.Get("/notifications/me", auth.CheckPerm(opt, "create_comment"), v1.NotImplemented)
+	user.Delete("/notifications/me/:notificationId", auth.CheckPerm(opt, "create_comment"), v1.NotImplemented)
+	user.Post("/notifications/me/:notificationId/mark-as-read", auth.CheckPerm(opt, "create_comment"), v1.NotImplemented)
+	user.Post("/notifications/me/:notificationId/mark-as-unread", auth.CheckPerm(opt, "create_comment"), v1.NotImplemented)
+	user.Post("/notifications/me/mark-all-as-read", auth.CheckPerm(opt, "create_comment"), v1.NotImplemented)
+	user.Post("/notifications/me/mark-all-as-unread", auth.CheckPerm(opt, "create_comment"), v1.NotImplemented)
+	user.Post("/notifications/me/delete-all", auth.CheckPerm(opt, "create_comment"), v1.NotImplemented)
 
 	go func() {
 		<-ctx.Done()

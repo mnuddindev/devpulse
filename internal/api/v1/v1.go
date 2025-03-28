@@ -29,6 +29,13 @@ var (
 	Validator = utils.NewValidator()
 )
 
+// NotImplemented is a placeholder for unimplemented routes
+func NotImplemented(c *fiber.Ctx) error {
+	return c.Status(fiber.StatusNotImplemented).JSON(fiber.Map{
+		"error": "Not Implemented",
+	})
+}
+
 func Refresh(c *fiber.Ctx) error {
 	ipKey := "refresh:ip:" + c.IP()
 	count, err := Redis.Get(c.Context(), ipKey).Int()
