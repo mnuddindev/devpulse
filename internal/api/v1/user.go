@@ -1304,35 +1304,28 @@ func FollowUser(c *fiber.Ctx) error {
 		}
 	}
 
-	following, err := models.GetUserBy(c.Context(), Redis, DB, "id = ?", []interface{}{followingID})
+	err = followU.FollowUser(c.Context(), Redis, DB, followingID)
 	if err != nil {
-		Logger.Warn(c.Context()).WithFields("error", err, "following_id", followingID).Logs("Target user not found")
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error":  "Target user not found",
-			"status": fiber.StatusNotFound,
-		})
-	}
-
-	if err := DB.WithContext(c.Context()).Model(&followU).Association("Following").Find(&followU.Following); err != nil {
-		Logger.Error(c.Context()).WithFields("error", err, "user_id", followerID).Logs("Failed to load Following relationship")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":  "Failed to process request",
-			"status": fiber.StatusInternalServerError,
-		})
-	}
-
-	for _, f := range followU.Following {
-		if f.ID == followingID {
-			Logger.Info(c.Context()).WithFields("user_id", followerID, "following_id", followingID).Logs("User already following target")
-			return c.Status(fiber.StatusOK).JSON(fiber.Map{
-				"message": "Already following this user",
-				"status":  fiber.StatusOK,
+		if strings.Contains(err.Error(), "not found") {
+			Logger.Warn(c.Context()).WithFields("error", err, "following_id", followingID).Logs("Target user not found")
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error":  "Target user not found",
+				"status": fiber.StatusNotFound,
 			})
 		}
-	}
-
-	if err := DB.WithContext(c.Context()).Model(&followU).Association("Following").Append(following); err != nil {
-		Logger.Error(c.Context()).WithFields("error", err, "user_id", followerID, "following_id", followingID).Logs("Failed to add following relationship")
+		// Check if the error is due to already following (GORM doesn't return a specific error for this, so we need to check the association)
+		if err := DB.WithContext(c.Context()).Model(&followU).Association("Following").Find(&followU.Following); err == nil {
+			for _, f := range followU.Following {
+				if f.ID == followingID {
+					Logger.Info(c.Context()).WithFields("user_id", followerID, "following_id", followingID).Logs("User already following target")
+					return c.Status(fiber.StatusOK).JSON(fiber.Map{
+						"message": "Already following this user",
+						"status":  fiber.StatusOK,
+					})
+				}
+			}
+		}
+		Logger.Error(c.Context()).WithFields("error", err, "user_id", followerID, "following_id", followingID).Logs("Failed to follow user")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":  "Failed to follow user",
 			"status": fiber.StatusInternalServerError,
@@ -1435,53 +1428,44 @@ func UnfollowUser(c *fiber.Ctx) error {
 		}
 	}
 
-	following, err := models.GetUserBy(c.Context(), Redis, DB, "id = ?", []interface{}{followingID}, "")
+	err = followU.UnfollowUser(c.Context(), Redis, DB, followingID)
 	if err != nil {
-		Logger.Warn(c.Context()).WithFields("error", err, "following_id", followingID).Logs("Target user not found")
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error":  "Target user not found",
-			"status": fiber.StatusNotFound,
-		})
-	}
-
-	if err := DB.WithContext(c.Context()).Model(&followU).Association("Following").Find(&followU.Following); err != nil {
-		Logger.Error(c.Context()).WithFields("error", err, "user_id", followerID).Logs("Failed to load Following relationship")
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":  "Failed to process request",
-			"status": fiber.StatusInternalServerError,
-		})
-	}
-
-	isFollowing := false
-	for _, f := range followU.Following {
-		if f.ID == followingID {
-			isFollowing = true
-			break
+		if strings.Contains(err.Error(), "not found") {
+			Logger.Warn(c.Context()).WithFields("error", err, "following_id", followingID).Logs("Target user not found")
+			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+				"error":  "Target user not found",
+				"status": fiber.StatusNotFound,
+			})
 		}
-	}
-	if !isFollowing {
-		Logger.Info(c.Context()).WithFields("user_id", followerID, "following_id", followingID).Logs("User not following target")
-		return c.Status(fiber.StatusOK).JSON(fiber.Map{
-			"message": "Not following this user",
-			"status":  fiber.StatusOK,
-		})
-	}
-
-	if err := DB.WithContext(c.Context()).Model(&followU).Association("Following").Delete(following); err != nil {
-		Logger.Error(c.Context()).WithFields("error", err, "user_id", followerID, "following_id", followingID).Logs("Failed to remove following relationship")
+		Logger.Error(c.Context()).WithFields("error", err, "user_id", followerID, "following_id", followingID).Logs("Failed to unfollow user")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":  "Failed to unfollow user",
 			"status": fiber.StatusInternalServerError,
 		})
 	}
 
-	followerKey := "user:" + followerID.String()
-	followingKey := "user:" + followingID.String()
-	Redis.Del(c.Context(), followerKey, followingKey)
-
-	publicFollowerKey := "public_user:" + followU.Username
-	publicFollowingKey := "public_user:" + following.Username
-	Redis.Del(c.Context(), publicFollowerKey, publicFollowingKey)
+	// Check if the user was actually following (since the helper doesn't explicitly tell us)
+	if err := DB.WithContext(c.Context()).Model(&followU).Association("Following").Find(&followU.Following); err == nil {
+		isFollowing := false
+		for _, f := range followU.Following {
+			if f.ID == followingID {
+				isFollowing = true
+				break
+			}
+		}
+		if !isFollowing {
+			Logger.Info(c.Context()).WithFields("user_id", followerID, "following_id", followingID).Logs("User unfollowed successfully")
+			following, _ := models.GetUserBy(c.Context(), Redis, DB, "id = ?", []interface{}{followingID})
+			followingKey := "user:" + followingID.String()
+			publicFollowerKey := "public_user:" + followU.Username
+			publicFollowingKey := "public_user:" + following.Username
+			Redis.Del(c.Context(), followingKey, publicFollowerKey, publicFollowingKey)
+			return c.Status(fiber.StatusOK).JSON(fiber.Map{
+				"message": "User unfollowed successfully",
+				"status":  fiber.StatusOK,
+			})
+		}
+	}
 
 	Logger.Info(c.Context()).WithFields("user_id", followerID, "following_id", followingID).Logs("User unfollowed successfully")
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{

@@ -230,17 +230,28 @@ func UpdateUser(ctx context.Context, redisClient *storage.RedisClient, gormDB *g
 
 // DeleteUser soft-deletes a user and clears cache.
 func DeleteUser(ctx context.Context, redisClient *storage.RedisClient, gormDB *gorm.DB, id uuid.UUID) error {
-	u, err := GetUserBy(ctx, redisClient, gormDB, "id = ?", []interface{}{id}, "")
-	if err != nil {
-		return err
+	tx := gormDB.WithContext(ctx).Begin()
+	if tx.Error != nil {
+		return utils.WrapError(tx.Error, utils.ErrInternalServerError.Code, "Failed to start transaction")
 	}
 
-	if err := gormDB.WithContext(ctx).Delete(u).Error; err != nil {
+	if err := tx.Where("user_id = ?", id).Delete(&NotificationPreferences{}).Error; err != nil {
+		tx.Rollback()
+		return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to delete notification preferences")
+	}
+
+	if err := tx.Where("id = ?", id).Delete(&User{}).Error; err != nil {
+		tx.Rollback()
 		return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to delete user")
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to commit transaction")
 	}
 
 	key := "user:" + id.String()
 	redisClient.Del(ctx, key)
+
 	return nil
 }
 
