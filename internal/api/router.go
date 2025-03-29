@@ -59,7 +59,7 @@ func NewRoutes(ctx context.Context, app *fiber.App, cfg *config.Config, db *gorm
 
 	users := app.Group("/users")
 	users.Get("/:username", v1.GetUserByUsername)
-	users.Get("/:username/stats", v1.NotImplemented)
+	users.Get("/:username/stats", v1.GetUserStats)
 	users.Get("/:username/followers", v1.NotImplemented)
 	users.Get("/:username/following", v1.NotImplemented)
 
@@ -96,7 +96,7 @@ func NewRoutes(ctx context.Context, app *fiber.App, cfg *config.Config, db *gorm
 	user.Delete("/account/delete/me", auth.CheckPerm(opt, "create_comment"), v1.DeleteUserAccount)
 
 	// follow
-	user.Post("/:username/follow", auth.CheckPerm(opt, "create_comment"), v1.NotImplemented)
+	user.Post("/:username/follow", auth.CheckPerm(opt, "create_comment"), v1.FollowUser)
 	user.Post("/:username/unfollow", auth.CheckPerm(opt, "create_comment"), v1.NotImplemented)
 
 	// user notifications
