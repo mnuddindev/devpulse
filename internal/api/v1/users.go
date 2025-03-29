@@ -336,3 +336,140 @@ func GetUserByUsername(c *fiber.Ctx) error {
 		"user":    profileResponse,
 	})
 }
+
+// GetUserStats returns user statistics
+func GetUserStats(c *fiber.Ctx) error {
+	return nil
+}
+
+// FollowUser follows a user
+func FollowUser(c *fiber.Ctx) error {
+	type FollowRequest struct {
+		UserID string `json:"user_id" validate:"required,uuid"`
+	}
+
+	userIDRaw, ok := c.Locals("user_id").(string)
+	if !ok || userIDRaw == "" {
+		Logger.Warn(c.Context()).Logs("FollowUser attempted without user_id in context")
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error":  "Unauthorized",
+			"status": fiber.StatusUnauthorized,
+		})
+	}
+
+	followerID, err := uuid.Parse(userIDRaw)
+	if err != nil {
+		Logger.Error(c.Context()).WithFields("error", err, "user_id", userIDRaw).Logs("Invalid user_id format in FollowUser")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":  "Invalid user ID",
+			"status": fiber.StatusBadRequest,
+		})
+	}
+
+	var req FollowRequest
+	if err := utils.StrictBodyParser(c, &req); err != nil {
+		Logger.Warn(c.Context()).WithFields("error", err).Logs("Invalid request body in FollowUser")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":  "Invalid request body",
+			"status": fiber.StatusBadRequest,
+		})
+	}
+
+	if err := Validator.Validate(req); err != nil {
+		Logger.Warn(c.Context()).WithFields("error", err).Logs("Validation failed in FollowUser")
+		return c.Status(fiber.StatusUnprocessableEntity).JSON(fiber.Map{
+			"error":  err,
+			"status": fiber.StatusUnprocessableEntity,
+		})
+	}
+
+	followingID, err := uuid.Parse(req.UserID)
+	if err != nil {
+		Logger.Warn(c.Context()).WithFields("error", err, "following_id", req.UserID).Logs("Invalid target user_id format")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":  "Invalid target user ID",
+			"status": fiber.StatusBadRequest,
+		})
+	}
+
+	if followerID == followingID {
+		Logger.Warn(c.Context()).WithFields("user_id", followerID).Logs("User attempted to follow themselves")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":  "Cannot follow yourself",
+			"status": fiber.StatusBadRequest,
+		})
+	}
+
+	allowed := RateLimitting(c, followerID.String(), 5*time.Minute, 10, "follow_user_rate")
+	if !allowed {
+		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+			"error":  "Too many update attempts, try again later",
+			"status": fiber.StatusTooManyRequests,
+		})
+	}
+
+	userKey := "user:" + followerID.String()
+	var followU *models.User
+	followerUser, err := Redis.Get(c.Context(), userKey).Result()
+	if err == nil {
+		followU = &models.User{}
+		if err := json.Unmarshal([]byte(followerUser), followU); err != nil {
+			Logger.Warn(c.Context()).WithFields("error", err, "userID", userIDRaw).Logs("Failed to unmarshal cached user from Redis")
+			followU = nil
+		}
+	} else {
+		followU, err = models.GetUserBy(c.Context(), Redis, DB, "id = ?", []interface{}{followerID})
+		if err != nil {
+			Logger.Warn(c.Context()).WithFields("error", err, "user_id", followerID).Logs("Follower not found")
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"error":  "User not found",
+				"status": fiber.StatusUnauthorized,
+			})
+		}
+	}
+
+	following, err := models.GetUserBy(c.Context(), Redis, DB, "id = ?", []interface{}{followingID})
+	if err != nil {
+		Logger.Warn(c.Context()).WithFields("error", err, "following_id", followingID).Logs("Target user not found")
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error":  "Target user not found",
+			"status": fiber.StatusNotFound,
+		})
+	}
+
+	if err := DB.WithContext(c.Context()).Model(&followU).Association("Following").Find(&followU.Following); err != nil {
+		Logger.Error(c.Context()).WithFields("error", err, "user_id", followerID).Logs("Failed to load Following relationship")
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":  "Failed to process request",
+			"status": fiber.StatusInternalServerError,
+		})
+	}
+
+	for _, f := range followU.Following {
+		if f.ID == followingID {
+			Logger.Info(c.Context()).WithFields("user_id", followerID, "following_id", followingID).Logs("User already following target")
+			return c.Status(fiber.StatusOK).JSON(fiber.Map{
+				"message": "Already following this user",
+				"status":  fiber.StatusOK,
+			})
+		}
+	}
+
+	if err := DB.WithContext(c.Context()).Model(&followU).Association("Following").Append(following); err != nil {
+		Logger.Error(c.Context()).WithFields("error", err, "user_id", followerID, "following_id", followingID).Logs("Failed to add following relationship")
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":  "Failed to follow user",
+			"status": fiber.StatusInternalServerError,
+		})
+	}
+
+	followerKey := "user:" + followerID.String()
+	followingKey := "user:" + followingID.String()
+	Redis.Del(c.Context(), followerKey, followingKey)
+
+	Logger.Info(c.Context()).WithFields("user_id", followerID, "following_id", followingID).Logs("User followed successfully")
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "User followed successfully",
+		"status":  fiber.StatusOK,
+	})
+}

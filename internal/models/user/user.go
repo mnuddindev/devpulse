@@ -61,6 +61,7 @@ type User struct {
 		CommentsCount  int       `gorm:"default:0" json:"comments_count"`
 		LikesCount     int       `gorm:"default:0" json:"likes_count"`
 		BookmarksCount int       `gorm:"default:0" json:"bookmarks_count"`
+		TagCount       int       `gorm:"default:0" json:"tag_count"`
 		LastSeen       time.Time `gorm:"default:current_timestamp" json:"last_seen"`
 	} `gorm:"embedded"`
 
