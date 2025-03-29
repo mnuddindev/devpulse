@@ -97,7 +97,7 @@ func NewRoutes(ctx context.Context, app *fiber.App, cfg *config.Config, db *gorm
 
 	// follow
 	user.Post("/:username/follow", auth.CheckPerm(opt, "create_comment"), v1.FollowUser)
-	user.Post("/:username/unfollow", auth.CheckPerm(opt, "create_comment"), v1.NotImplemented)
+	user.Post("/:username/unfollow", auth.CheckPerm(opt, "create_comment"), v1.UnfollowUser)
 
 	// user notifications
 	user.Get("/notifications/me", auth.CheckPerm(opt, "create_comment"), v1.NotImplemented)
