@@ -74,7 +74,7 @@ func Register(c *fiber.Ctx) error {
 		})
 	}
 
-	gotp, err := utils.GenerateOTP()
+	gotp, err := utils.GenerateOTP(10)
 	if err != nil {
 		Logger.Error(c.Context()).Logs(fmt.Sprintf("Failed to generate OTP: %v", err))
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{

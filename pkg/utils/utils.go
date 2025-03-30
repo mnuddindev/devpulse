@@ -11,6 +11,11 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+const (
+	numbers = "0123456789"
+	letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+)
+
 type Map map[string]string
 
 // GenerateRandomToken generates a random token with a length between minLength and maxLength.
@@ -42,18 +47,60 @@ func GenerateRandomToken(minLength, maxLength int) (string, error) {
 	return token, nil
 }
 
-func GenerateOTP() (int64, error) {
-	max := big.NewInt(99999999) // 8 digits max
-	n, err := rand.Int(rand.Reader, max)
+func GenerateOTP(length int) (string, error) {
+	if length < 6 {
+		return "", fmt.Errorf("length must be at least 6")
+	}
+
+	// Randomly decide the number of letters (max 5)
+	maxLetters := 5
+	letterCountLimit := big.NewInt(int64(min(length, maxLetters)))
+	letterCountBig, err := rand.Int(rand.Reader, letterCountLimit)
 	if err != nil {
-		return 0, fmt.Errorf("failed to generate OTP: %w", err)
+		return "", err
 	}
-	otp := n.Int64()
-	// Ensure 8 digits by padding if needed
-	if otp < 10000000 {
-		otp += 10000000 // Min 10000000
+	letterCount := int(letterCountBig.Int64())
+
+	// Remaining characters will be numbers
+	numCount := length - letterCount
+
+	numPart := make([]byte, numCount)
+	letterPart := make([]byte, letterCount)
+
+	for i := 0; i < numCount; i++ {
+		index, err := rand.Int(rand.Reader, big.NewInt(int64(len(numbers))))
+		if err != nil {
+			return "", err
+		}
+		numPart[i] = numbers[index.Int64()]
 	}
-	return otp, nil
+
+	for i := 0; i < letterCount; i++ {
+		index, err := rand.Int(rand.Reader, big.NewInt(int64(len(letters))))
+		if err != nil {
+			return "", err
+		}
+		letterPart[i] = letters[index.Int64()]
+	}
+
+	// Combine both parts
+	mixed := append(numPart, letterPart...)
+
+	// Securely shuffle the mixed slice
+	ShuffleSecure(mixed)
+
+	return string(mixed), nil
+}
+
+// shuffleSecure securely shuffles a byte slice using crypto/rand
+func ShuffleSecure(data []byte) {
+	for i := len(data) - 1; i > 0; i-- {
+		j, err := rand.Int(rand.Reader, big.NewInt(int64(i+1)))
+		if err != nil {
+			continue // If we fail to generate a random index, skip to the next iteration
+		}
+		data[i], data[j.Int64()] = data[j.Int64()], data[i]
+	}
 }
 
 // StrictBodyParser parses the request body strictly and returns an error if the body contains unknown fields.

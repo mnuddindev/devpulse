@@ -20,7 +20,7 @@ type EmailConfig struct {
 }
 
 // SendActivationEmail sends a professional activation email with OTP and link
-func SendActivationEmail(ctx context.Context, config EmailConfig, email, username, token string, otp int64, logger *logger.Logger) error {
+func SendActivationEmail(ctx context.Context, config EmailConfig, email, username, token, otp string, logger *logger.Logger) error {
 	activationLink := fmt.Sprintf("%s/activate?token=%s", config.AppURL, token)
 
 	htmlBody := fmt.Sprintf(`
@@ -101,7 +101,7 @@ func SendActivationEmail(ctx context.Context, config EmailConfig, email, usernam
         <div class="content">
             <p>Hello %s,</p>
             <p>Thanks for joining BlogBlaze—the ultimate platform for creators and readers. To get started, please activate your account using the OTP code below or click the activation link.</p>
-            <div class="otp">%06d</div>
+            <div class="otp">%s</div>
             <p style="text-align: center;">
                 <a href="%s" class="button">Activate Your Account</a>
             </p>

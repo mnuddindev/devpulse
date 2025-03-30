@@ -34,6 +34,14 @@ func ForgotPassword(c *fiber.Ctx) error {
 		})
 	}
 
+	allowed := RateLimitting(c, data.Email, 30*time.Second, 5, "forgot_password_rate:")
+	if !allowed {
+		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
+			"error":  "Too many update attempts, try again later",
+			"status": fiber.StatusTooManyRequests,
+		})
+	}
+
 	user, err := models.GetUserBy(c.Context(), Redis, DB, "email = ?", []interface{}{data.Email}, "")
 	if err != nil {
 		Logger.Warn(c.Context()).WithFields("error", err).WithFields("email", data.Email).Logs("User not found in ForgotPassword")
@@ -43,16 +51,8 @@ func ForgotPassword(c *fiber.Ctx) error {
 		})
 	}
 
-	allowed := RateLimitting(c, user.ID.String(), 1*time.Minute, 5, "forgot_password_rate:")
-	if !allowed {
-		return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
-			"error":  "Too many update attempts, try again later",
-			"status": fiber.StatusTooManyRequests,
-		})
-	}
-
 	token, _ := utils.GenerateRandomToken(26, 40)
-	gotp, err := utils.GenerateOTP()
+	gotp, err := utils.GenerateOTP(10)
 	if err != nil {
 		Logger.Error(c.Context()).Logs(fmt.Sprintf("Failed to generate OTP: %v", err))
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -80,13 +80,11 @@ func ForgotPassword(c *fiber.Ctx) error {
 		Logger.Info(c.Context()).Logs(fmt.Sprintf("User cached in Redis: %s", key))
 	}
 
-	go func() {
-		if err := utils.SendActivationEmail(c.Context(), EmailCfg, user.Email, user.Username, token, gotp, Logger); err != nil {
-			Logger.Warn(c.Context()).Logs(fmt.Sprintf("Email sending failed but user created: %v", err))
-		} else {
-			Logger.Info(c.Context()).Logs(fmt.Sprintf("Activation email sent successfully for user: %s", user.Username))
-		}
-	}()
+	if err := utils.SendActivationEmail(c.Context(), EmailCfg, user.Email, user.Username, token, gotp, Logger); err != nil {
+		Logger.Warn(c.Context()).Logs(fmt.Sprintf("Email sending failed but user created: %v", err))
+	} else {
+		Logger.Info(c.Context()).Logs(fmt.Sprintf("Activation email sent successfully for user: %s", user.Username))
+	}
 
 	Logger.Info(c.Context()).WithFields("user_id", user.ID).Logs("Password reset token generated and stored in Redis")
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{

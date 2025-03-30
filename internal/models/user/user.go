@@ -21,7 +21,7 @@ type User struct {
 	Username        string    `gorm:"size:255;not null;unique" json:"username" validate:"required,min=3,max=255,alphanum"`
 	Email           string    `gorm:"size:100;not null;unique" json:"email" validate:"required,email"`
 	Password        string    `gorm:"size:255;not null" json:"password" validate:"required,min=6"`
-	OTP             int64     `gorm:"type:bigint;not null" json:"otp"`
+	OTP             string    `gorm:"type:text;not null" json:"otp"`
 	IsActive        bool      `gorm:"default:false" json:"is_active"`
 	IsEmailVerified bool      `gorm:"default:false" json:"is_email_verified"`
 	RoleID          uuid.UUID `gorm:"type:uuid;not null" json:"role_id"`
@@ -112,7 +112,7 @@ type UpdateUserRequest struct {
 type UserOption func(*User)
 
 // NewUser creates a new User instance with validation.
-func NewUser(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, username, email, password string, otp int64, opts ...UserOption) (*User, error) {
+func NewUser(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, username, email, password, otp string, opts ...UserOption) (*User, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, utils.WrapError(err, utils.ErrInternalServerError.Code, "user credential canceled")
 	}
@@ -256,13 +256,13 @@ func DeleteUser(ctx context.Context, redisClient *storage.RedisClient, gormDB *g
 }
 
 // VerifyEmail marks a user’s email as verified if OTP matches.
-func (u *User) VerifyEmail(ctx context.Context, redisClient *storage.RedisClient, gormDB *gorm.DB, otp int64) error {
+func (u *User) VerifyEmail(ctx context.Context, redisClient *storage.RedisClient, gormDB *gorm.DB, otp string) error {
 	if u.OTP != otp {
 		return utils.NewError(utils.ErrBadRequest.Code, "Invalid OTP")
 	}
 
 	u.IsEmailVerified = true
-	u.OTP = 0 // Reset OTP after verification
+	u.OTP = "" // Reset OTP after verification
 	if err := gormDB.WithContext(ctx).Save(u).Error; err != nil {
 		return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to verify email")
 	}
