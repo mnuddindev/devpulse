@@ -13,10 +13,10 @@ import (
 )
 
 type User struct {
-	ID        uuid.UUID `gorm:"type:uuid;primary_key;default:uuid_generate_v4()" json:"id"`
-	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
-	DeletedAt time.Time `gorm:"index" json:"-"`
+	ID        uuid.UUID      `gorm:"type:uuid;primary_key;default:uuid_generate_v4()" json:"id"`
+	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 
 	Username        string    `gorm:"size:255;not null;unique" json:"username" validate:"required,min=3,max=255,alphanum"`
 	Email           string    `gorm:"size:100;not null;unique" json:"email" validate:"required,email"`
@@ -274,26 +274,44 @@ func (u *User) VerifyEmail(ctx context.Context, redisClient *storage.RedisClient
 }
 
 // FollowUser adds a follow relationship.
-func (u *User) FollowUser(ctx context.Context, redisClient *storage.RedisClient, gormDB *gorm.DB, followID uuid.UUID) error {
-	followee, err := GetUserBy(ctx, redisClient, gormDB, "id = ?", []interface{}{followID}, "")
+func (u *User) FollowUser(ctx context.Context, redisClient *storage.RedisClient, gormDB *gorm.DB, username string) error {
+	followee, err := GetUserBy(ctx, redisClient, gormDB, "username = ?", []interface{}{username}, "")
 	if err != nil {
 		return err
 	}
 	if u.ID == followee.ID {
 		return utils.NewError(utils.ErrBadRequest.Code, "Cannot follow yourself")
 	}
+
+	// Check if already following before appending
+	var existingFollow []*User
+	err = gormDB.WithContext(ctx).Model(u).Association("Following").Find(&existingFollow)
+	if err != nil {
+		return utils.WrapError(err, utils.ErrInternalServerError.Code, "Database error checking follow status")
+	}
+
+	for _, f := range existingFollow {
+		if f.ID == followee.ID {
+			return utils.NewError(409, "Already following this user")
+		}
+	}
+
+	// Append only if not already following
 	if err := gormDB.WithContext(ctx).Model(u).Association("Following").Append(followee); err != nil {
 		return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to follow user")
 	}
+
+	// Update Redis cache
 	userJSON, _ := json.Marshal(u)
 	key := "user:" + u.ID.String()
 	redisClient.Set(ctx, key, userJSON, 10*time.Minute)
+
 	return nil
 }
 
 // UnfollowUser removes a user from the following list.
-func (u *User) UnfollowUser(ctx context.Context, redisClient *storage.RedisClient, gormDB *gorm.DB, followID uuid.UUID) error {
-	followee, err := GetUserBy(ctx, redisClient, gormDB, "id = ?", []interface{}{followID}, "")
+func (u *User) UnfollowUser(ctx context.Context, redisClient *storage.RedisClient, gormDB *gorm.DB, username string) error {
+	followee, err := GetUserBy(ctx, redisClient, gormDB, "username = ?", []interface{}{username}, "")
 	if err != nil {
 		return err
 	}

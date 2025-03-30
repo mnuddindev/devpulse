@@ -106,6 +106,8 @@ func RefreshTokenMiddleware(opt Options) fiber.Handler {
 			user, err = models.GetUserBy(c.Context(), opt.Rclient, opt.DB, "id = ?", []interface{}{uuid.MustParse(claims.UserID)}, "")
 			if err != nil {
 				opt.Logger.Warn(c.Context()).WithFields("user_id", claims.UserID).Logs("User not found during access token validation")
+				c.ClearCookie("access_token")
+				c.ClearCookie("refresh_token")
 				return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 					"error": "User not found",
 				})
@@ -181,6 +183,8 @@ func handleTokenRefresh(c *fiber.Ctx, cfg Options, refreshToken string) (string,
 		user, err = models.GetUserBy(c.Context(), cfg.Rclient, cfg.DB, "id = ?", []interface{}{uuid.MustParse(userID)}, "Role")
 		if err != nil {
 			cfg.Logger.Warn(c.Context()).WithFields("user_id", userID).Logs("User not found")
+			c.ClearCookie("access_token")
+			c.ClearCookie("refresh_token")
 			return "", c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "User not found"})
 		}
 
@@ -197,6 +201,8 @@ func handleTokenRefresh(c *fiber.Ctx, cfg Options, refreshToken string) (string,
 		user, err = models.GetUserBy(c.Context(), cfg.Rclient, cfg.DB, "id = ?", []interface{}{refreshData["user_id"]}, "")
 		if err != nil {
 			cfg.Logger.Warn(c.Context()).WithFields("user_id", userID).Logs("User not found")
+			c.ClearCookie("access_token")
+			c.ClearCookie("refresh_token")
 			return "", c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "User not found"})
 		}
 	}
