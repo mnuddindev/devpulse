@@ -122,3 +122,14 @@ func Contains(arr []string, str string) bool {
 	}
 	return false
 }
+
+// IsLoggedIn checks if the user is logged in by checking the JWT token.
+func IsLoggedIn(c *fiber.Ctx) bool {
+	if c.Locals("user_id") == nil {
+		return false
+	}
+	if _, ok := c.Locals("user").(string); !ok {
+		return false
+	}
+	return true
+}

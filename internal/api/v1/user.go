@@ -40,6 +40,13 @@ func RateLimitting(c *fiber.Ctx, userID string, rateTTL time.Duration, maxUpdate
 }
 
 func Register(c *fiber.Ctx) error {
+	if !utils.IsLoggedIn(c) {
+		Logger.Warn(c.Context()).Logs("User already logged in, registration not allowed")
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error":   "Already logged in",
+			"message": "You are already authenticated. Please log out first if you want to register a new account.",
+		})
+	}
 	type UserInput struct {
 		AvatarURL       string `json:"avatar_url" validate:"omitempty,url"`
 		Name            string `json:"name" validate:"required,min=8,max=100"`
@@ -252,16 +259,12 @@ func ActivateUser(c *fiber.Ctx) error {
 
 // Login ensures user can login to his account.
 func Login(c *fiber.Ctx) error {
-	if accessToken := c.Cookies("access_token"); accessToken != "" {
-		// Verify the token
-		claims, err := auth.VerifyToken(accessToken)
-		if err == nil && claims != nil {
-			// Token is valid, user is already logged in
-			return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
-				"error":   "Already logged in",
-				"message": "You are already authenticated. Please log out first if you want to switch accounts.",
-			})
-		}
+	if !utils.IsLoggedIn(c) {
+		Logger.Warn(c.Context()).Logs("User already logged in, login not allowed")
+		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
+			"error":   "Already logged in",
+			"message": "You are already authenticated. Please log out first if you want to log in again.",
+		})
 	}
 	type LoginRequest struct {
 		Email    string `json:"email" validate:"required,email,max=100"`

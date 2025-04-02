@@ -63,18 +63,17 @@ func ForgotPassword(c *fiber.Ctx) error {
 	tokenKey := "reset_token:" + token
 	expiresIn := 1 * time.Hour
 
-	if err := Redis.Set(c.Context(), tokenKey, user.ID.String(), expiresIn).Err(); err != nil {
+	if err := Redis.Set(c.Context(), tokenKey, gotp, expiresIn).Err(); err != nil {
 		Logger.Error(c.Context()).WithFields("error", err).WithFields("user_id", user.ID).Logs("Failed to store reset token in Redis")
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":  "Failed to process request",
 			"status": fiber.StatusInternalServerError,
 		})
 	}
-
 	userKey := "user:" + user.ID.String()
 	Redis.Del(c.Context(), userKey)
 	key := "user:" + token
-	if err := Redis.Set(c.Context(), key, user.ID, 1*time.Hour).Err(); err != nil {
+	if err := Redis.Set(c.Context(), key, user.ID.String(), 1*time.Hour).Err(); err != nil {
 		Logger.Warn(c.Context()).Logs(fmt.Sprintf("Failed to cache user in Redis: %v, key: %s", err, key))
 	} else {
 		Logger.Info(c.Context()).Logs(fmt.Sprintf("User cached in Redis: %s", key))
@@ -97,6 +96,7 @@ func ForgotPassword(c *fiber.Ctx) error {
 func ResetPassword(c *fiber.Ctx) error {
 	type ResetPasswordRequest struct {
 		Token           string `json:"token" validate:"required,min=26,max=40"`
+		OTP             string `json:"otp" validate:"required,min=6,max=10"`
 		NewPassword     string `json:"new_password" validate:"required,min=6"`
 		ConfirmPassword string `json:"confirm_password" validate:"required,eqfield=NewPassword"`
 	}
@@ -126,7 +126,7 @@ func ResetPassword(c *fiber.Ctx) error {
 	}
 
 	tokenKey := "reset_token:" + req.Token
-	token, err := Redis.Get(c.Context(), tokenKey).Result()
+	otp, err := Redis.Get(c.Context(), tokenKey).Result()
 	if err == redis.Nil {
 		Logger.Warn(c.Context()).WithFields("token", req.Token).Logs("Invalid or expired reset token")
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -141,7 +141,7 @@ func ResetPassword(c *fiber.Ctx) error {
 		})
 	}
 
-	userIDRaw, err := Redis.Get(c.Context(), "user:"+token).Result()
+	userIDRaw, err := Redis.Get(c.Context(), "user:"+req.Token).Result()
 	if err != nil {
 		Logger.Warn(c.Context()).WithFields("error", err).Logs("User not found or expired")
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -155,6 +155,14 @@ func ResetPassword(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error":  "Failed to process request",
 			"status": fiber.StatusInternalServerError,
+		})
+	}
+
+	if req.OTP != otp {
+		Logger.Warn(c.Context()).WithFields("error", err).WithFields("user_id", userID).Logs("Invalid OTP in ResetPassword")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":  "Invalid OTP",
+			"status": fiber.StatusBadRequest,
 		})
 	}
 
@@ -222,6 +230,36 @@ func ResetPassword(c *fiber.Ctx) error {
 
 	if err := Redis.Del(c.Context(), tokenKey).Err(); err != nil {
 		Logger.Warn(c.Context()).WithFields("error", err).WithFields("token", req.Token).Logs("Failed to delete reset token from Redis")
+	}
+
+	if utils.IsLoggedIn(c) {
+		c.Cookie(&fiber.Cookie{
+			Name:     "access_token",
+			Value:    "",
+			Expires:  time.Now().Add(-time.Hour),
+			HTTPOnly: true,
+			Secure:   true,
+			SameSite: "Strict",
+		})
+		c.Cookie(&fiber.Cookie{
+			Name:     "refresh_token",
+			Value:    "",
+			Expires:  time.Now().Add(-time.Hour),
+			HTTPOnly: true,
+			Secure:   true,
+			SameSite: "Strict",
+		})
+		c.ClearCookie("access_token")
+		c.ClearCookie("refresh_token")
+
+		Redis.Del(c.Context(), userID.String())
+
+		c.Set("Authorization", "")
+		c.Set("Cache-Control", "no-store, no-cache, must-revalidate, private")
+		c.Set("Pragma", "no-cache")
+		c.Set("X-Content-Type-Options", "nosniff")
+		c.Set("X-Frame-Options", "DENY")
+		c.Set("Content-Security-Policy", "default-src 'self'")
 	}
 
 	userKey := "user:" + userID.String()
