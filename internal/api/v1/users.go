@@ -298,7 +298,7 @@ func GetUserByUsername(c *fiber.Ctx) error {
 	cacheKey := "public_user:" + username
 	cachedProfile, err := Redis.Get(c.Context(), cacheKey).Result()
 	if err == nil {
-		var publicUser models.User
+		var publicUser *models.User
 		if err := json.Unmarshal([]byte(cachedProfile), &publicUser); err == nil {
 			Logger.Info(c.Context()).WithFields("username", username).Logs("Public user profile served from cache")
 			return c.Status(fiber.StatusOK).JSON(fiber.Map{
@@ -425,5 +425,111 @@ func GetUserStats(c *fiber.Ctx) error {
 		"message": "User stats retrieved successfully",
 		"status":  fiber.StatusOK,
 		"stats":   user.Stats,
+	})
+}
+
+// GetUserFollowers returns user followers
+func GetUserFollowers(c *fiber.Ctx) error {
+	username := c.Params("username")
+	if username == "" {
+		Logger.Warn(c.Context()).Logs("Missing username query parameter in GetPublicUserProfile")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":  "Username is required",
+			"status": fiber.StatusBadRequest,
+		})
+	}
+
+	if len(username) < 3 || len(username) > 255 {
+		Logger.Warn(c.Context()).WithFields("username", username).Logs("Invalid username length in GetPublicUserProfile")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":  "Username must be between 3 and 255 characters",
+			"status": fiber.StatusBadRequest,
+		})
+	}
+
+	cacheKey := "public_user:" + username
+	cachedFollowers, err := Redis.Get(c.Context(), cacheKey).Result()
+	if err == nil {
+		var publicUser models.User
+		if err := json.Unmarshal([]byte(cachedFollowers), &publicUser); err == nil {
+			Logger.Info(c.Context()).WithFields("username", username).Logs("Public user followers served from cache")
+			return c.Status(fiber.StatusOK).JSON(fiber.Map{
+				"message":   "Public followers retrieved successfully",
+				"status":    fiber.StatusOK,
+				"followers": publicUser.Followers,
+			})
+		}
+		Logger.Warn(c.Context()).WithFields("error", err, "username", username).Logs("Failed to unmarshal cached public user followers")
+	}
+	user, err := models.GetUserBy(c.Context(), Redis, DB, "username = ?", []interface{}{username}, "")
+	if err != nil {
+		Logger.Error(c.Context()).WithFields("error", err).WithFields("username", username).Logs("Failed to fetch user by username")
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error":  "User not found",
+			"status": fiber.StatusNotFound,
+		})
+	}
+	followersJSON, _ := json.Marshal(user.Followers)
+	if err := Redis.Set(c.Context(), cacheKey, followersJSON, 5*time.Minute).Err(); err != nil {
+		Logger.Warn(c.Context()).WithFields("error", err).WithFields("username", username).Logs("Failed to cache public user followers")
+	}
+	Logger.Info(c.Context()).WithFields("username", username).Logs("Public user followers retrieved successfully")
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message":   "Public followers retrieved successfully",
+		"status":    fiber.StatusOK,
+		"followers": user.Followers,
+	})
+}
+
+// GetUserFollowing returns user following
+func GetUserFollowing(c *fiber.Ctx) error {
+	username := c.Params("username")
+	if username == "" {
+		Logger.Warn(c.Context()).Logs("Missing username query parameter in GetPublicUserProfile")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":  "Username is required",
+			"status": fiber.StatusBadRequest,
+		})
+	}
+
+	if len(username) < 3 || len(username) > 255 {
+		Logger.Warn(c.Context()).WithFields("username", username).Logs("Invalid username length in GetPublicUserProfile")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":  "Username must be between 3 and 255 characters",
+			"status": fiber.StatusBadRequest,
+		})
+	}
+
+	cacheKey := "public_user:" + username
+	cachedFollowing, err := Redis.Get(c.Context(), cacheKey).Result()
+	if err == nil {
+		var publicUser models.User
+		if err := json.Unmarshal([]byte(cachedFollowing), &publicUser); err == nil {
+			Logger.Info(c.Context()).WithFields("username", username).Logs("Public user following served from cache")
+			return c.Status(fiber.StatusOK).JSON(fiber.Map{
+				"message":   "Public following retrieved successfully",
+				"status":    fiber.StatusOK,
+				"following": publicUser.Following,
+			})
+		}
+		Logger.Warn(c.Context()).WithFields("error", err, "username", username).Logs("Failed to unmarshal cached public user following")
+	}
+	user, err := models.GetUserBy(c.Context(), Redis, DB, "username = ?", []interface{}{username}, "")
+	if err != nil {
+		Logger.Error(c.Context()).WithFields("error", err).WithFields("username", username).Logs("Failed to fetch user by username")
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error":  "User not found",
+			"status": fiber.StatusNotFound,
+		})
+	}
+	followingJSON, _ := json.Marshal(user.Following)
+	if err := Redis.Set(c.Context(), cacheKey, followingJSON, 5*time.Minute).Err(); err != nil {
+		Logger.Warn(c.Context()).WithFields("error", err).WithFields("username", username).Logs("Failed to cache public user following")
+	}
+	Logger.Info(c.Context()).WithFields("username", username).Logs("Public user following retrieved successfully")
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message":   "Public following retrieved successfully",
+		"status":    fiber.StatusOK,
+		"following": user.Following,
 	})
 }

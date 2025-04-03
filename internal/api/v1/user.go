@@ -1450,3 +1450,159 @@ func UnfollowUser(c *fiber.Ctx) error {
 		"status":  fiber.StatusOK,
 	})
 }
+
+// GetUserNotifications returns user notifications
+func GetUserNotifications(c *fiber.Ctx) error {
+	userIDRaw, ok := c.Locals("user_id").(string)
+	if !ok || userIDRaw == "" {
+		Logger.Warn(c.Context()).Logs("GetUserNotifications attempted without user_id in context")
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error":  "Unauthorized",
+			"status": fiber.StatusUnauthorized,
+		})
+	}
+
+	userID, err := uuid.Parse(userIDRaw)
+	if err != nil {
+		Logger.Error(c.Context()).WithFields("error", err, "userID", userIDRaw).Logs("Invalid user ID format in GetUserNotifications")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":  "Invalid user ID",
+			"status": fiber.StatusBadRequest,
+		})
+	}
+
+	cacheKey := "user:" + userIDRaw
+	cachedNotifications, err := Redis.Get(c.Context(), cacheKey).Result()
+	if err == nil {
+		var publicUser models.User
+		if err := json.Unmarshal([]byte(cachedNotifications), &publicUser); err == nil {
+			Logger.Info(c.Context()).WithFields("user_id", userIDRaw).Logs("user notifications served from cache")
+			return c.Status(fiber.StatusOK).JSON(fiber.Map{
+				"message":       "User notifications retrieved successfully",
+				"status":        fiber.StatusOK,
+				"notifications": publicUser.Notifications,
+			})
+		}
+		Logger.Warn(c.Context()).WithFields("error", err, "user_id", userIDRaw).Logs("Failed to unmarshal cached user notifications")
+	}
+	user, err := models.GetUserBy(c.Context(), Redis, DB, "id = ?", []interface{}{userID}, "")
+	if err != nil {
+		Logger.Error(c.Context()).WithFields("error", err).WithFields("user_id", userIDRaw).Logs("Failed to fetch user by id")
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error":  "User not found",
+			"status": fiber.StatusNotFound,
+		})
+	}
+
+	if len(user.Notifications) == 0 {
+		Logger.Info(c.Context()).WithFields("user_id", userIDRaw).Logs("No notifications found for user")
+		return c.Status(fiber.StatusOK).JSON(fiber.Map{
+			"message":       "No notifications found",
+			"status":        fiber.StatusOK,
+			"notifications": []string{},
+		})
+	}
+	notificationsJSON, _ := json.Marshal(user.Notifications)
+	if err := Redis.Set(c.Context(), cacheKey, notificationsJSON, 5*time.Minute).Err(); err != nil {
+		Logger.Warn(c.Context()).WithFields("error", err).WithFields("user_id", userIDRaw).Logs("Failed to cache user notifications")
+	}
+	Logger.Info(c.Context()).WithFields("user_id", userIDRaw).Logs("user notifications retrieved successfully")
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message":       "Public notifications retrieved successfully",
+		"status":        fiber.StatusOK,
+		"notifications": user.Notifications,
+	})
+}
+
+// GetUserNotificationID returns user notification by ID
+func GetUserNotificationID(c *fiber.Ctx) error {
+	userIDRaw, ok := c.Locals("user_id").(string)
+	if !ok || userIDRaw == "" {
+		Logger.Warn(c.Context()).Logs("GetUserNotificationID attempted without user_id in context")
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error":  "Unauthorized",
+			"status": fiber.StatusUnauthorized,
+		})
+	}
+
+	userID, err := uuid.Parse(userIDRaw)
+	if err != nil {
+		Logger.Error(c.Context()).WithFields("error", err, "userID", userIDRaw).Logs("Invalid user ID format in GetUserNotificationID")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":  "Invalid user ID",
+			"status": fiber.StatusBadRequest,
+		})
+	}
+
+	cacheKey := "user:" + userIDRaw
+	cachedNotifications, err := Redis.Get(c.Context(), cacheKey).Result()
+	if err == nil {
+		var publicUser models.User
+		if err := json.Unmarshal([]byte(cachedNotifications), &publicUser); err == nil {
+			Logger.Info(c.Context()).WithFields("user_id", userIDRaw).Logs("user notifications served from cache")
+			return c.Status(fiber.StatusOK).JSON(fiber.Map{
+				"message":       "User notifications retrieved successfully",
+				"status":        fiber.StatusOK,
+				"notifications": publicUser.Notifications,
+			})
+		}
+		Logger.Warn(c.Context()).WithFields("error", err, "user_id", userIDRaw).Logs("Failed to unmarshal cached user notifications")
+	}
+
+	user, err := models.GetUserBy(c.Context(), Redis, DB, "id = ?", []interface{}{userID}, "")
+	if err != nil {
+		Logger.Error(c.Context()).WithFields("error", err).WithFields("user_id", userIDRaw).Logs("Failed to fetch user by id")
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error":  "User not found",
+			"status": fiber.StatusNotFound,
+		})
+	}
+
+	if len(user.Notifications) == 0 {
+		Logger.Info(c.Context()).WithFields("user_id", userIDRaw).Logs("No notifications found for user")
+		return c.Status(fiber.StatusOK).JSON(fiber.Map{
+			"message":       "No notifications found",
+			"status":        fiber.StatusOK,
+			"notifications": []string{},
+		})
+	}
+	notificationID := c.Params("notificationId")
+	if notificationID == "" {
+		Logger.Warn(c.Context()).Logs("GetUserNotificationID attempted without notification_id in URL")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":  "Notification ID is required",
+			"status": fiber.StatusBadRequest,
+		})
+	}
+	if len(notificationID) > 20 {
+		Logger.Warn(c.Context()).Logs("GetUserNotificationID attempted with notification_id exceeding length limit")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":  "Notification ID exceeds length limit",
+			"status": fiber.StatusBadRequest,
+		})
+	}
+	if strings.Contains(notificationID, " ") {
+		Logger.Warn(c.Context()).Logs("GetUserNotificationID attempted with notification_id containing spaces")
+		notificationID = strings.ReplaceAll(notificationID, " ", "")
+	}
+	notificationid, _ := uuid.Parse(notificationID)
+	notification, err := models.GetNotification(c.Context(), Redis, DB, notificationid)
+	if err != nil {
+		Logger.Error(c.Context()).WithFields("error", err).WithFields("user_id", userIDRaw).Logs("Failed to fetch user notification")
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error":  "Notification not found",
+			"status": fiber.StatusNotFound,
+		})
+	}
+	notificationJSON, _ := json.Marshal(notification)
+	if err := Redis.Set(c.Context(), cacheKey, notificationJSON, 5*time.Minute).Err(); err != nil {
+		Logger.Warn(c.Context()).WithFields("error", err).WithFields("user_id", userIDRaw).Logs("Failed to cache user notification")
+	}
+	Logger.Info(c.Context()).WithFields("user_id", userIDRaw).Logs("user notification retrieved successfully")
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message":       "User notification retrieved successfully",
+		"status":        fiber.StatusOK,
+		"notification":  notification,
+		"notifications": user.Notifications,
+	})
+}

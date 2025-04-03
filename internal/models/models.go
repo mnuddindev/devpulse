@@ -76,16 +76,21 @@ var (
 	WithEmailOnUnread      = user.WithEmailOnUnread
 	WithEmailOnNewPosts    = user.WithEmailOnNewPosts
 
-	NewRole                    = user.NewRole
-	GetRoleBy                  = user.GetRoleBy
-	GetRoles                   = user.GetRoles
-	UpdateRole                 = user.UpdateRole
-	DeleteRole                 = user.DeleteRole
-	NewPermission              = user.NewPermission
-	NewBadge                   = user.NewBadge
-	NewNotification            = user.NewNotification
-	NewNotificationPreferences = user.NewNotificationPreferences
-	SeedRoles                  = user.SeedRoles
+	NewRole       = user.NewRole
+	GetRoleBy     = user.GetRoleBy
+	GetRoles      = user.GetRoles
+	UpdateRole    = user.UpdateRole
+	DeleteRole    = user.DeleteRole
+	NewPermission = user.NewPermission
+	NewBadge      = user.NewBadge
+	SeedRoles     = user.SeedRoles
 
+	NewNotification    = user.NewNotification
+	GetNotification    = user.GetNotification
+	GetNotifications   = user.GetNotifications
+	UpdateNotification = user.UpdateNotification
+	DeleteNotification = user.DeleteNotification
+
+	NewNotificationPreferences    = user.NewNotificationPreferences
 	UpdateNotificationPreferences = user.UpdateNotificationPreferences
 )

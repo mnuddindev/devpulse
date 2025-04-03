@@ -60,8 +60,8 @@ func NewRoutes(ctx context.Context, app *fiber.App, cfg *config.Config, db *gorm
 	users := app.Group("/users")
 	users.Get("/:username", v1.GetUserByUsername)
 	users.Get("/:username/stats", v1.GetUserStats)
-	users.Get("/:username/followers", v1.NotImplemented)
-	users.Get("/:username/following", v1.NotImplemented)
+	users.Get("/:username/followers", v1.GetUserFollowers)
+	users.Get("/:username/following", v1.GetUserFollowing)
 
 	// User Notifications
 	users.Get("/:username/notifications", v1.NotImplemented)
@@ -100,8 +100,8 @@ func NewRoutes(ctx context.Context, app *fiber.App, cfg *config.Config, db *gorm
 	user.Post("/:username/unfollow", auth.CheckPerm(opt, "create_comment"), v1.UnfollowUser)
 
 	// user notifications
-	user.Get("/notifications/me", auth.CheckPerm(opt, "create_comment"), v1.NotImplemented)
-	user.Delete("/notifications/me/:notificationId", auth.CheckPerm(opt, "create_comment"), v1.NotImplemented)
+	user.Get("/notifications/me", auth.CheckPerm(opt, "create_comment"), v1.GetUserNotifications)
+	user.Delete("/notifications/me/:notificationId", auth.CheckPerm(opt, "create_comment"), v1.GetUserNotificationID)
 	user.Post("/notifications/me/:notificationId/mark-as-read", auth.CheckPerm(opt, "create_comment"), v1.NotImplemented)
 	user.Post("/notifications/me/:notificationId/mark-as-unread", auth.CheckPerm(opt, "create_comment"), v1.NotImplemented)
 	user.Post("/notifications/me/mark-all-as-read", auth.CheckPerm(opt, "create_comment"), v1.NotImplemented)
