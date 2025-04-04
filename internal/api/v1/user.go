@@ -228,6 +228,22 @@ func ActivateUser(c *fiber.Ctx) error {
 		})
 	}
 
+	notificationTitle := []string{
+		"Welcome to DEVPULSE! 👋 I'm Heart, the community mascot and I'm here to help get you started. Let's begin by setting up your profile!",
+		"Heart here again! 👋 DEVPULSE is a friendly community. Why not introduce yourself by leaving a comment in the welcome thread!",
+		"You're on a roll! 🎉 Do you have a Facebook account? Consider connecting it.",
+		"Hi, it's me again! 👋 Now that you're a part of the DEVPULSE community, let's focus on personalizing your content. You can start by following some tags to help customize your feed! 🎉",
+		"Heart here! 👋 Did you know that that you can customize your DEVPULSE experience? Try changing your font and theme and find the best style for you!",
+		"Heart here! 👋 I noticed that you haven't asked a question or started a discussion yet. It's easy to do both of these; just click on 'Write a Post' in the sidebar of the tag page to get started!",
+	}
+
+	for _, title := range notificationTitle {
+		_, err := models.NewNotification(c.Context(), Redis, DB, updatedUser.ID, "all", title)
+		if err != nil {
+			Logger.Warn(c.Context()).WithFields("error", err, "user_id", updatedUser.ID).Logs("Failed to create welcome notification")
+		}
+	}
+
 	Redis.Del(c.Context(), otpKey)
 	Redis.Del(c.Context(), "user:"+token)
 	Logger.Info(c.Context()).WithFields("user_id", user.ID).Logs(fmt.Sprintf("User activated successfully: %s", user.Username))
