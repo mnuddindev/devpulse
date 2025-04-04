@@ -101,7 +101,7 @@ func NewRoutes(ctx context.Context, app *fiber.App, cfg *config.Config, db *gorm
 
 	// user notifications
 	user.Get("/notifications/me", auth.CheckPerm(opt, "create_comment"), v1.GetUserNotifications)
-	user.Delete("/notifications/me/:notificationId", auth.CheckPerm(opt, "create_comment"), v1.GetUserNotificationID)
+	user.Post("/:notificationId/me", auth.CheckPerm(opt, "create_comment"), v1.GetUserNotificationID)
 
 	go func() {
 		<-ctx.Done()

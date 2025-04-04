@@ -3,7 +3,6 @@ package v1
 import (
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -40,7 +39,7 @@ func RateLimitting(c *fiber.Ctx, userID string, rateTTL time.Duration, maxUpdate
 }
 
 func Register(c *fiber.Ctx) error {
-	if !utils.IsLoggedIn(c) {
+	if utils.IsLoggedIn(c) {
 		Logger.Warn(c.Context()).Logs("User already logged in, registration not allowed")
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"error":   "Already logged in",
@@ -71,6 +70,13 @@ func Register(c *fiber.Ctx) error {
 		})
 	}
 
+	if utils.ContainsInvalidChars(ui.Password) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"Message": "password contains invalid characters",
+			"status":  fiber.StatusBadRequest,
+		})
+	}
+
 	ui.Email = strings.ToLower(strings.TrimSpace(ui.Email))
 
 	hashedPass, err := utils.HashPassword(ui.Password)
@@ -89,6 +95,13 @@ func Register(c *fiber.Ctx) error {
 		})
 	}
 
+	if !utils.IsStrongPassword(ui.Password) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"Message": "new password does not meet strength requirements",
+			"status":  fiber.StatusBadRequest,
+		})
+	}
+
 	user, err := models.NewUser(c.Context(), Redis, DB, ui.Username, ui.Email, hashedPass, gotp, models.WithName(ui.Name), models.WithAvatarURL(ui.AvatarURL))
 	if err != nil {
 		if strings.Contains(err.Error(), "duplicate") {
@@ -104,7 +117,7 @@ func Register(c *fiber.Ctx) error {
 	}
 
 	token, _ := utils.GenerateRandomToken(64, 124)
-	otp, err := utils.HashPassword(fmt.Sprintf("%d", gotp))
+	otp, err := utils.HashPassword(gotp)
 	if err != nil {
 		Logger.Error(c.Context()).WithFields("error", err).Logs("Failed to hash OTP")
 	} else {
@@ -154,7 +167,7 @@ func ActivateUser(c *fiber.Ctx) error {
 	token := c.Query("token")
 
 	type ActivateRequest struct {
-		OTP int64 `json:"otp" validate:"required"`
+		OTP string `json:"otp" validate:"required"`
 	}
 
 	var ar ActivateRequest
@@ -213,7 +226,9 @@ func ActivateUser(c *fiber.Ctx) error {
 		})
 	}
 
-	if err := utils.ComparePasswords(otpHash, strconv.FormatInt(ar.OTP, 10)); err != nil {
+	fmt.Println("OTP Hash:", otpHash)
+	fmt.Print("OTP:", ar.OTP)
+	if err := utils.ComparePasswords(otpHash, ar.OTP); err != nil {
 		Logger.Warn(c.Context()).WithFields("email", user.Email).Logs("Invalid OTP provided")
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid activation code",
@@ -275,7 +290,7 @@ func ActivateUser(c *fiber.Ctx) error {
 
 // Login ensures user can login to his account.
 func Login(c *fiber.Ctx) error {
-	if !utils.IsLoggedIn(c) {
+	if utils.IsLoggedIn(c) {
 		Logger.Warn(c.Context()).Logs("User already logged in, login not allowed")
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
 			"error":   "Already logged in",
@@ -425,7 +440,9 @@ func Logout(c *fiber.Ctx) error {
 		if err := Redis.Set(c.Context(), accessTokenKey, "invalid", 15*time.Minute).Err(); err != nil {
 			Logger.Warn(c.Context()).WithFields("error", err).Logs("Failed to blacklist access token in Redis")
 		}
-	} else {
+	}
+
+	if utils.IsLoggedIn(c) {
 		Logger.Warn(c.Context()).Logs("Refresh token not found in Redis")
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":  "User not logged in",
@@ -472,6 +489,7 @@ func Logout(c *fiber.Ctx) error {
 	})
 	c.ClearCookie("access_token")
 	c.ClearCookie("refresh_token")
+	c.Locals("user_id", "")
 
 	Redis.Del(c.Context(), refreshData["user_id"].(string))
 
@@ -1541,15 +1559,6 @@ func GetUserNotificationID(c *fiber.Ctx) error {
 		})
 	}
 
-	userID, err := uuid.Parse(userIDRaw)
-	if err != nil {
-		Logger.Error(c.Context()).WithFields("error", err, "userID", userIDRaw).Logs("Invalid user ID format in GetUserNotificationID")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":  "Invalid user ID",
-			"status": fiber.StatusBadRequest,
-		})
-	}
-
 	cacheKey := "user:" + userIDRaw
 	cachedNotifications, err := Redis.Get(c.Context(), cacheKey).Result()
 	if err == nil {
@@ -1565,23 +1574,6 @@ func GetUserNotificationID(c *fiber.Ctx) error {
 		Logger.Warn(c.Context()).WithFields("error", err, "user_id", userIDRaw).Logs("Failed to unmarshal cached user notifications")
 	}
 
-	user, err := models.GetUserBy(c.Context(), Redis, DB, "id = ?", []interface{}{userID}, "")
-	if err != nil {
-		Logger.Error(c.Context()).WithFields("error", err).WithFields("user_id", userIDRaw).Logs("Failed to fetch user by id")
-		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error":  "User not found",
-			"status": fiber.StatusNotFound,
-		})
-	}
-
-	if len(user.Notifications) == 0 {
-		Logger.Info(c.Context()).WithFields("user_id", userIDRaw).Logs("No notifications found for user")
-		return c.Status(fiber.StatusOK).JSON(fiber.Map{
-			"message":       "No notifications found",
-			"status":        fiber.StatusOK,
-			"notifications": []string{},
-		})
-	}
 	notificationID := c.Params("notificationId")
 	if notificationID == "" {
 		Logger.Warn(c.Context()).Logs("GetUserNotificationID attempted without notification_id in URL")
@@ -1616,9 +1608,8 @@ func GetUserNotificationID(c *fiber.Ctx) error {
 	}
 	Logger.Info(c.Context()).WithFields("user_id", userIDRaw).Logs("user notification retrieved successfully")
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
-		"message":       "User notification retrieved successfully",
-		"status":        fiber.StatusOK,
-		"notification":  notification,
-		"notifications": user.Notifications,
+		"message":      "User notification retrieved successfully",
+		"status":       fiber.StatusOK,
+		"notification": notification,
 	})
 }
