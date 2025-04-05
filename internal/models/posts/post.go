@@ -1,11 +1,15 @@
 package models
 
 import (
+	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
 	user "github.com/mnuddindev/devpulse/internal/models/user"
+	"github.com/mnuddindev/devpulse/pkg/utils"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 type Posts struct {
@@ -66,4 +70,58 @@ type PostAnalytics struct {
 	ReadTime       int       `gorm:"default:1" json:"read_time" validate:"min=1"` // Minutes
 	CreatedAt      time.Time `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt      time.Time `gorm:"autoUpdateTime" json:"updated_at"`
+}
+
+// CreatePost creates a new post in the database
+func NewPost(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, opts ...PostOption) (*Posts, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, utils.WrapError(err, utils.ErrInternalServerError.Code, "Post creation canceled")
+	}
+
+	p := &Posts{
+		ID:            uuid.New(),
+		Status:        "draft",    // Default
+		ContentFormat: "markdown", // Default
+		NeedsReview:   false,      // Default
+	}
+
+	for _, opt := range opts {
+		opt(p)
+	}
+
+	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Create post
+		if err := tx.Create(p).Error; err != nil {
+			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to create post")
+		}
+
+		// Initialize PostAnalytics
+		analytics := &PostAnalytics{PostID: p.ID}
+		if err := tx.Create(analytics).Error; err != nil {
+			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to create post analytics")
+		}
+
+		// Update author's PostsCount
+		if err := UpdateUserStats(ctx, rclient, tx, p.AuthorID, "PostsCount", 1); err != nil {
+			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to update user stats")
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Cache post
+	postJSON, _ := json.Marshal(p)
+	key := "post:" + p.ID.String()
+	if err := rclient.Set(ctx, key, postJSON, 10*time.Minute).Err(); err != nil {
+		logger.Default.Warn(ctx, "Failed to cache post in Redis: %v, key: %s", err, key)
+	}
+
+	// Invalidate public cache
+	publicKey := "public_post:" + p.Slug
+	rclient.Del(ctx, publicKey)
+
+	return p, nil
 }
