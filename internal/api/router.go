@@ -63,18 +63,6 @@ func NewRoutes(ctx context.Context, app *fiber.App, cfg *config.Config, db *gorm
 	users.Get("/:username/followers", v1.GetUserFollowers)
 	users.Get("/:username/following", v1.GetUserFollowing)
 
-	// User Notifications
-	users.Get("/:username/notifications", v1.NotImplemented)
-	users.Get("/:username/notifications/:notificationId", v1.NotImplemented)
-	users.Post("/:username/notifications/:notificationId/mark-as-read", v1.NotImplemented)
-	users.Post("/:username/notifications/:notificationId/mark-as-unread", v1.NotImplemented)
-	users.Post("/:username/notifications/:notificationId/delete", v1.NotImplemented)
-	users.Post("/:username/notifications/mark-all-as-read", v1.NotImplemented)
-	users.Post("/:username/notifications/mark-all-as-unread", v1.NotImplemented)
-	users.Post("/:username/notifications/delete-all", v1.NotImplemented)
-	users.Post("/:username/notifications/delete-all-read", v1.NotImplemented)
-	users.Post("/:username/notifications/delete-all-unread", v1.NotImplemented)
-
 	// User Badges
 	users.Get("/:username/badges", v1.NotImplemented)
 	users.Post("/:username/badges", v1.NotImplemented)

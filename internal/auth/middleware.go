@@ -89,6 +89,8 @@ func RefreshTokenMiddleware(opt Options) fiber.Handler {
 			})
 		}
 
+		user.UpdateLastSeen(c.Context(), opt.Rclient, opt.DB)
+
 		userKey := "user:" + user.ID.String()
 		cachedUser, err := opt.Rclient.Get(c.Context(), userKey).Result()
 		if err == nil && cachedUser != "" {

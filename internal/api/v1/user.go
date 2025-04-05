@@ -361,6 +361,8 @@ func Login(c *fiber.Ctx) error {
 		})
 	}
 
+	user.UpdateLastSeen(c.Context(), Redis, DB)
+
 	accessToken, err := auth.GenerateAccessToken(user.ID.String(), user.RoleID.String())
 	if err != nil {
 		Logger.Error(c.Context()).WithFields("error", err).Logs("Failed to generate access token")
