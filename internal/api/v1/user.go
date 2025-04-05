@@ -1559,21 +1559,6 @@ func GetUserNotificationID(c *fiber.Ctx) error {
 		})
 	}
 
-	cacheKey := "user:" + userIDRaw
-	cachedNotifications, err := Redis.Get(c.Context(), cacheKey).Result()
-	if err == nil {
-		var publicUser models.User
-		if err := json.Unmarshal([]byte(cachedNotifications), &publicUser); err == nil {
-			Logger.Info(c.Context()).WithFields("user_id", userIDRaw).Logs("user notifications served from cache")
-			return c.Status(fiber.StatusOK).JSON(fiber.Map{
-				"message":       "User notifications retrieved successfully",
-				"status":        fiber.StatusOK,
-				"notifications": publicUser.Notifications,
-			})
-		}
-		Logger.Warn(c.Context()).WithFields("error", err, "user_id", userIDRaw).Logs("Failed to unmarshal cached user notifications")
-	}
-
 	notificationID := c.Params("notificationId")
 	if notificationID == "" {
 		Logger.Warn(c.Context()).Logs("GetUserNotificationID attempted without notification_id in URL")
@@ -1582,13 +1567,38 @@ func GetUserNotificationID(c *fiber.Ctx) error {
 			"status": fiber.StatusBadRequest,
 		})
 	}
-	if len(notificationID) > 20 {
-		Logger.Warn(c.Context()).Logs("GetUserNotificationID attempted with notification_id exceeding length limit")
+
+	notiID, err := uuid.Parse(notificationID)
+	if err != nil {
+		Logger.Error(c.Context()).WithFields("error", err, "notification_id", notificationID).Logs("Invalid notification ID format in GetUserNotificationID")
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error":  "Notification ID exceeds length limit",
+			"error":  "Invalid notification ID",
 			"status": fiber.StatusBadRequest,
 		})
 	}
+
+	cacheKey := "user:" + userIDRaw
+	cachedNotifications, err := Redis.Get(c.Context(), cacheKey).Result()
+	if err == nil {
+		var publicUser models.User
+		if err := json.Unmarshal([]byte(cachedNotifications), &publicUser); err == nil {
+			Logger.Info(c.Context()).WithFields("user_id", userIDRaw).Logs("user notifications served from cache")
+			var k models.Notification
+			for v, notification := range publicUser.Notifications {
+				if notification.ID == notiID {
+					k = publicUser.Notifications[v]
+					break
+				}
+			}
+			return c.Status(fiber.StatusOK).JSON(fiber.Map{
+				"message":      "User notifications retrieved successfully",
+				"status":       fiber.StatusOK,
+				"notification": k,
+			})
+		}
+		Logger.Warn(c.Context()).WithFields("error", err, "user_id", userIDRaw).Logs("Failed to unmarshal cached user notifications")
+	}
+
 	if strings.Contains(notificationID, " ") {
 		Logger.Warn(c.Context()).Logs("GetUserNotificationID attempted with notification_id containing spaces")
 		notificationID = strings.ReplaceAll(notificationID, " ", "")
