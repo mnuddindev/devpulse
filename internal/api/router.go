@@ -49,6 +49,12 @@ func NewRoutes(ctx context.Context, app *fiber.App, cfg *config.Config, db *gorm
 	v1.Redis = rclient
 	v1.Logger = log
 
+	opt := auth.Options{
+		DB:      db,
+		Rclient: rclient,
+		Logger:  log,
+	}
+
 	app.Post("/register", v1.Register)
 	app.Post("/activate", v1.ActivateUser)
 	app.Post("/login", v1.Login)
@@ -64,17 +70,9 @@ func NewRoutes(ctx context.Context, app *fiber.App, cfg *config.Config, db *gorm
 	users.Get("/:username/following", v1.GetUserFollowing)
 
 	// User Badges
-	users.Get("/:username/badges", v1.NotImplemented)
-	users.Post("/:username/badges", v1.NotImplemented)
+	users.Get("/:username/badges", v1.GetUserBadges)
 
-	//
-
-	opt := auth.Options{
-		DB:      db,
-		Rclient: rclient,
-		Logger:  log,
-	}
-
+	// Private routes
 	user := app.Group("/user", auth.RefreshTokenMiddleware(opt))
 	user.Post("/profile", auth.CheckPerm(opt, "create_comment"), v1.GetProfile)
 	user.Put("/update/profile/me", auth.CheckPerm(opt, "create_comment"), v1.UpdateUserProfile)

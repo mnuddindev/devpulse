@@ -533,3 +533,66 @@ func GetUserFollowing(c *fiber.Ctx) error {
 		"following": user.Following,
 	})
 }
+
+// GetUserBadges returns user badges
+func GetUserBadges(c *fiber.Ctx) error {
+	username := c.Params("username")
+	if username == "" {
+		Logger.Warn(c.Context()).Logs("Missing username query parameter in GetPublicUserProfile")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":  "Username is required",
+			"status": fiber.StatusBadRequest,
+		})
+	}
+
+	if len(username) < 3 || len(username) > 255 {
+		Logger.Warn(c.Context()).WithFields("username", username).Logs("Invalid username length in GetPublicUserProfile")
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":  "Username must be between 3 and 255 characters",
+			"status": fiber.StatusBadRequest,
+		})
+	}
+
+	cacheKey := "public_user:" + username
+	cachedBadges, err := Redis.Get(c.Context(), cacheKey).Result()
+	if err == nil {
+		var publicUser models.User
+		if err := json.Unmarshal([]byte(cachedBadges), &publicUser); err == nil {
+			Logger.Info(c.Context()).WithFields("username", username).Logs("user badges served from cache")
+			return c.Status(fiber.StatusOK).JSON(fiber.Map{
+				"message": "User badges retrieved successfully",
+				"status":  fiber.StatusOK,
+				"badges":  publicUser.Badges,
+			})
+		}
+		Logger.Warn(c.Context()).WithFields("error", err, "username", username).Logs("Failed to unmarshal cached user badges")
+	}
+
+	user, err := models.GetUserBy(c.Context(), Redis, DB, "username = ?", []interface{}{username}, "")
+	if err != nil {
+		Logger.Error(c.Context()).WithFields("error", err).WithFields("username", username).Logs("Failed to fetch user by id")
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
+			"error":  "User not found",
+			"status": fiber.StatusNotFound,
+		})
+	}
+
+	if len(user.Badges) == 0 {
+		Logger.Info(c.Context()).WithFields("username", username).Logs("No badges found for user")
+		return c.Status(fiber.StatusOK).JSON(fiber.Map{
+			"message": "No badges found",
+			"status":  fiber.StatusOK,
+			"badges":  []string{},
+		})
+	}
+	badgesJSON, _ := json.Marshal(user.Badges)
+	if err := Redis.Set(c.Context(), cacheKey, badgesJSON, 5*time.Minute).Err(); err != nil {
+		Logger.Warn(c.Context()).WithFields("error", err).WithFields("username", username).Logs("Failed to cache user badges")
+	}
+	Logger.Info(c.Context()).WithFields("username", username).Logs("user badges retrieved successfully")
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "User badges retrieved successfully",
+		"status":  fiber.StatusOK,
+		"badges":  user.Badges,
+	})
+}

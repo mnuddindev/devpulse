@@ -1,6 +1,7 @@
 package models
 
 import (
+	posts "github.com/mnuddindev/devpulse/internal/models/posts"
 	user "github.com/mnuddindev/devpulse/internal/models/user"
 )
 
@@ -24,6 +25,23 @@ type (
 	Notification            = user.Notification
 	NotificationPreferences = user.NotificationPreferences
 	UserOption              = user.UserOption
+
+	Posts            = posts.Posts
+	PostAnalytics    = posts.PostAnalytics
+	Series           = posts.Series
+	SeriesPost       = posts.SeriesPost
+	SeriesAnalytics  = posts.SeriesAnalytics
+	Bookmark         = posts.Bookmark
+	Collection       = posts.Collection
+	Tag              = posts.Tag
+	TagFollower      = posts.TagFollower
+	TagAnalytics     = posts.TagAnalytics
+	TagModerator     = posts.TagModerator
+	Reaction         = posts.Reaction
+	ReadingListEntry = posts.ReadingListEntry
+	Comment          = posts.Comment
+	CommentFlag      = posts.CommentFlag
+	CommentMention   = posts.CommentMention
 )
 
 var (
