@@ -141,3 +141,30 @@ func GetPostsBy(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, 
 
 	return &post, nil
 }
+
+// GetPosts retrieves multiple users with pagination and optional filters.
+func GetPosts(ctx context.Context, redisClient *storage.RedisClient, gormDB *gorm.DB, page, limit int, filters ...string) ([]Posts, error) {
+	key := "posts:page:" + string(page) + ":limit:" + string(limit)
+	if cached, err := redisClient.Get(ctx, key).Result(); err == nil {
+		var posts []Posts
+		if err := json.Unmarshal([]byte(cached), &posts); err == nil {
+			return posts, nil
+		}
+	}
+
+	var posts []Posts
+	query := gormDB.WithContext(ctx).Limit(limit).Offset((page - 1) * limit).Order("created_at desc")
+
+	for _, filter := range filters {
+		query = query.Where(filter)
+	}
+
+	if err := query.Find(&posts).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, utils.NewError(utils.ErrNotFound.Code, "No posts found")
+		}
+		return nil, utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to fetch posts")
+	}
+
+	return posts, nil
+}
