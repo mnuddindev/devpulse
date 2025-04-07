@@ -62,6 +62,9 @@ type User struct {
 		LikesCount     int       `gorm:"default:0" json:"likes_count"`
 		BookmarksCount int       `gorm:"default:0" json:"bookmarks_count"`
 		TagCount       int       `gorm:"default:0" json:"tag_count"`
+		FollowersCount int       `gorm:"default:0" json:"followers_count"`
+		FollowingCount int       `gorm:"default:0" json:"following_count"`
+		ReactionsCount int       `gorm:"default:0" json:"reactions_count"`
 		LastSeen       time.Time `gorm:"default:current_timestamp" json:"last_seen"`
 	} `gorm:"embedded"`
 
@@ -251,6 +254,27 @@ func DeleteUser(ctx context.Context, redisClient *storage.RedisClient, gormDB *g
 
 	key := "user:" + id.String()
 	redisClient.Del(ctx, key)
+
+	return nil
+}
+
+// UpdateUserStats updates user statistics.
+func UpdateUserStats(ctx context.Context, redisClient *storage.RedisClient, gormDB *gorm.DB, userID uuid.UUID, options ...UserOption) error {
+	user, err := GetUserBy(ctx, redisClient, gormDB, "id = ?", []interface{}{userID}, "")
+	if err != nil {
+		return utils.WrapError(err, utils.ErrNotFound.Code, "User not found")
+	}
+
+	for _, opt := range options {
+		opt(user)
+	}
+
+	if err := gormDB.WithContext(ctx).Model(&user).Update("stats", user.Stats).Error; err != nil {
+		return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to update user stats")
+	}
+
+	userData, _ := json.Marshal(user)
+	redisClient.Set(ctx, "user:"+userID.String(), userData, 10*time.Minute)
 
 	return nil
 }

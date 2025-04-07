@@ -45,11 +45,12 @@ type (
 )
 
 var (
-	NewUser    = user.NewUser
-	GetUserBy  = user.GetUserBy
-	GetUsers   = user.GetUsers
-	UpdateUser = user.UpdateUser
-	DeleteUser = user.DeleteUser
+	NewUser         = user.NewUser
+	GetUserBy       = user.GetUserBy
+	GetUsers        = user.GetUsers
+	UpdateUser      = user.UpdateUser
+	UpdateUserStats = user.UpdateUserStats
+	DeleteUser      = user.DeleteUser
 
 	WithUsername           = user.WithUsername
 	WithEmail              = user.WithEmail

@@ -142,20 +142,77 @@ func WithContentMode(mode int) UserOption {
 }
 
 // Stats
-func WithPostsCount(count int) UserOption {
-	return func(u *User) { u.Stats.PostsCount = count }
+
+func WithPostsCount(delta int) UserOption {
+	return func(u *User) {
+		u.Stats.PostsCount += delta
+		if u.Stats.PostsCount < 0 {
+			u.Stats.PostsCount = 0
+		}
+	}
 }
 
-func WithCommentsCount(count int) UserOption {
-	return func(u *User) { u.Stats.CommentsCount = count }
+func WithCommentsCount(delta int) UserOption {
+	return func(u *User) {
+		u.Stats.CommentsCount += delta
+		if u.Stats.CommentsCount < 0 {
+			u.Stats.CommentsCount = 0
+		}
+	}
 }
 
-func WithLikesCount(count int) UserOption {
-	return func(u *User) { u.Stats.LikesCount = count }
+func WithLikesCount(delta int) UserOption {
+	return func(u *User) {
+		u.Stats.LikesCount += delta
+		if u.Stats.LikesCount < 0 {
+			u.Stats.LikesCount = 0
+		}
+	}
 }
 
-func WithBookmarksCount(count int) UserOption {
-	return func(u *User) { u.Stats.BookmarksCount = count }
+func WithBookmarksCount(delta int) UserOption {
+	return func(u *User) {
+		u.Stats.BookmarksCount += delta
+		if u.Stats.BookmarksCount < 0 {
+			u.Stats.BookmarksCount = 0
+		}
+	}
+}
+
+func WithTagCount(delta int) UserOption {
+	return func(u *User) {
+		u.Stats.TagCount += delta
+		if u.Stats.TagCount < 0 {
+			u.Stats.TagCount = 0
+		}
+	}
+}
+
+func WithFollowersCount(delta int) UserOption {
+	return func(u *User) {
+		u.Stats.FollowersCount += delta
+		if u.Stats.FollowersCount < 0 {
+			u.Stats.FollowersCount = 0
+		}
+	}
+}
+
+func WithFollowingCount(delta int) UserOption {
+	return func(u *User) {
+		u.Stats.FollowingCount += delta
+		if u.Stats.FollowingCount < 0 {
+			u.Stats.FollowingCount = 0
+		}
+	}
+}
+
+func WithReactionsCount(delta int) UserOption {
+	return func(u *User) {
+		u.Stats.ReactionsCount += delta
+		if u.Stats.ReactionsCount < 0 {
+			u.Stats.ReactionsCount = 0
+		}
+	}
 }
 
 func WithLastSeen(lastSeen time.Time) UserOption {
