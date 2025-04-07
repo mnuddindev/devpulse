@@ -215,3 +215,43 @@ func UpdatePost(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, 
 
 	return post, nil
 }
+
+// DeletePost deletes a post from the database
+func DeletePost(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, postID uuid.UUID) error {
+	tx := db.WithContext(ctx).Begin()
+	post, err := GetPostsBy(ctx, rclient, tx, "id = ?", []interface{}{postID}, "Mentions", "CoAuthors", "PostAnalytics")
+	if err != nil {
+		return err
+	}
+
+	err = tx.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Delete(&PostAnalytics{}, "post_id = ?", post.ID).Error; err != nil {
+			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to delete post analytics")
+		}
+
+		if err := tx.Model(post).Association("Mentions").Clear(); err != nil {
+			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to clear post mentions")
+		}
+
+		if err := tx.Model(post).Association("CoAuthors").Clear(); err != nil {
+			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to clear post co-authors")
+		}
+
+		if err := tx.Delete(post).Error; err != nil {
+			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to delete post")
+		}
+
+		return user.UpdateUserStats(ctx, rclient, tx, post.AuthorID, user.WithPostsCount(-1))
+	})
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	tx.Commit()
+
+	rclient.Del(ctx, "post:"+post.ID.String())
+	rclient.Del(ctx, "public_post:"+post.Slug)
+
+	return nil
+}
