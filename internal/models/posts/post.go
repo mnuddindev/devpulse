@@ -169,3 +169,49 @@ func GetPosts(ctx context.Context, redisClient *storage.RedisClient, gormDB *gor
 
 	return posts, nil
 }
+
+// UpdatePost updates a post in the database
+func UpdatePost(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, post *Posts, opts ...PostsOption) (*Posts, error) {
+	tx := db.WithContext(ctx).Begin()
+	post, err := GetPostsBy(ctx, rclient, tx, "id = ?", []interface{}{post.ID}, "Mentions", "CoAuthors", "PostAnalytics")
+	if err != nil {
+		return nil, err
+	}
+
+	originalSlug := post.Slug
+	for _, opt := range opts {
+		opt(post)
+	}
+
+	err = tx.Transaction(func(tx *gorm.DB) error {
+		if post.Slug != originalSlug && post.Slug != "" {
+			var existing Posts
+			if err := tx.Where("slug = ?", post.Slug).First(&existing).Error; err == nil {
+				return utils.NewError(utils.ErrBadRequest.Code, "Slug already taken")
+			} else if err != gorm.ErrRecordNotFound {
+				return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to check slug")
+			}
+		}
+
+		if err := tx.Save(post).Error; err != nil {
+			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to update post")
+		}
+
+		return nil
+	})
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	tx.Commit()
+
+	postData, _ := json.Marshal(post)
+	rclient.Set(ctx, "post:"+post.ID.String(), postData, 10*time.Minute)
+	rclient.Del(ctx, "public_post:"+originalSlug)
+	if post.Slug != originalSlug {
+		rclient.Del(ctx, "public_post:"+post.Slug)
+	}
+
+	return post, nil
+}
