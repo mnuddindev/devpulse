@@ -3,6 +3,7 @@ package models
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -144,10 +145,10 @@ func GetPostsBy(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, 
 
 // GetPosts retrieves multiple users with pagination and optional filters.
 func GetPosts(ctx context.Context, redisClient *storage.RedisClient, gormDB *gorm.DB, page, limit int, filters ...string) ([]Posts, error) {
-	key := "posts:page:" + string(page) + ":limit:" + string(limit)
-	if cached, err := redisClient.Get(ctx, key).Result(); err == nil {
+	cacheKey := fmt.Sprintf("posts:page:%d:limit:%d", page, limit)
+	if cached, err := redisClient.Get(ctx, cacheKey).Result(); err == nil {
 		var posts []Posts
-		if err := json.Unmarshal([]byte(cached), &posts); err == nil {
+		if json.Unmarshal([]byte(cached), &posts) == nil {
 			return posts, nil
 		}
 	}
