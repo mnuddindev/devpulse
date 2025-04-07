@@ -124,3 +124,20 @@ func CreatePost(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, 
 
 	return nil
 }
+
+// GetPostsBy retrieves a post by condition, with optional preloading of relationships.
+func GetPostsBy(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, condition string, args []interface{}, preload ...string) (*Posts, error) {
+	var post Posts
+	query := db.WithContext(ctx).Where(condition, args...)
+	for _, rel := range preload {
+		query = query.Preload(rel)
+	}
+	if err := query.First(&post).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, utils.NewError(utils.ErrNotFound.Code, "Post not found")
+		}
+		return nil, utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to fetch post")
+	}
+
+	return &post, nil
+}

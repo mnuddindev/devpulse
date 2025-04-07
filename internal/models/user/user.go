@@ -159,7 +159,7 @@ func NewUser(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, use
 	return u, nil
 }
 
-// GetUser retrieves a user by ID, with optional preloading of relationships.
+// GetUser retrieves a user by condition, with optional preloading of relationships.
 func GetUserBy(ctx context.Context, redisClient *storage.RedisClient, gormDB *gorm.DB, condition string, args []interface{}, preload ...string) (*User, error) {
 	var u User
 	query := gormDB.WithContext(ctx).Where(condition, args...)
