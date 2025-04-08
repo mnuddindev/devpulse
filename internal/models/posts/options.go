@@ -54,44 +54,44 @@ func WithPostCoAuthors(coAuthors []user.User) PostsOption {
 }
 
 // PostAnalytics
-func WithViewsCount(delta int) PostsOption {
-	return func(pa *Posts) {
-		pa.PostAnalytics.ViewsCount += delta
-		if pa.PostAnalytics.ViewsCount < 0 {
-			pa.PostAnalytics.ViewsCount = 0
+func WithViewsCount(delta int) PostAnalyticsOption {
+	return func(pa *PostAnalytics) {
+		pa.ViewsCount += delta
+		if pa.ViewsCount < 0 {
+			pa.ViewsCount = 0
 		}
 	}
 }
 
-func WithCommentsCount(delta int) PostsOption {
-	return func(pa *Posts) {
-		pa.PostAnalytics.CommentsCount += delta
-		if pa.PostAnalytics.CommentsCount < 0 {
-			pa.PostAnalytics.CommentsCount = 0
+func WithCommentsCount(delta int) PostAnalyticsOption {
+	return func(pa *PostAnalytics) {
+		pa.CommentsCount += delta
+		if pa.CommentsCount < 0 {
+			pa.CommentsCount = 0
 		}
 	}
 }
 
-func WithReactionsCount(delta int) PostsOption {
-	return func(pa *Posts) {
-		pa.PostAnalytics.ReactionsCount += delta
-		if pa.PostAnalytics.ReactionsCount < 0 {
-			pa.PostAnalytics.ReactionsCount = 0
+func WithReactionsCount(delta int) PostAnalyticsOption {
+	return func(pa *PostAnalytics) {
+		pa.ReactionsCount += delta
+		if pa.ReactionsCount < 0 {
+			pa.ReactionsCount = 0
 		}
 	}
 }
 
-func WithBookmarksCount(delta int) PostsOption {
-	return func(pa *Posts) {
-		pa.PostAnalytics.BookmarksCount += delta
-		if pa.PostAnalytics.BookmarksCount < 0 {
-			pa.PostAnalytics.BookmarksCount = 0
+func WithBookmarksCount(delta int) PostAnalyticsOption {
+	return func(pa *PostAnalytics) {
+		pa.BookmarksCount += delta
+		if pa.BookmarksCount < 0 {
+			pa.BookmarksCount = 0
 		}
 	}
 }
 
-func WithReadTime(minutes int) PostsOption {
-	return func(pa *Posts) {
-		pa.PostAnalytics.ReadTime = minutes
+func WithReadTime(minutes int) PostAnalyticsOption {
+	return func(pa *PostAnalytics) {
+		pa.ReadTime = minutes
 	}
 }

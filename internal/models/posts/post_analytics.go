@@ -23,6 +23,9 @@ type PostAnalytics struct {
 	UpdatedAt      time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
+// PostAnalyticsOption is a function that modifies the PostAnalytics instance.
+type PostAnalyticsOption func(*PostAnalytics)
+
 // CreatePostAnalytics creates a new PostAnalytics instance with the given post ID.
 func CreatePostAnalytics(ctx context.Context, redisClient *storage.RedisClient, gormDB *gorm.DB, pa *PostAnalytics) error {
 	if pa.PostID == uuid.Nil {
