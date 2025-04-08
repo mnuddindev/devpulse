@@ -1,53 +1,210 @@
 package models
 
 import (
-	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	user "github.com/mnuddindev/devpulse/internal/models/user"
 )
 
-func WithPostTitle(title string) PostsOption {
+// Core Content Fields
+func WithTitle(title string) PostsOption {
 	return func(p *Posts) {
-		trimmed := strings.TrimSpace(title)
-		p.Title = trimmed
+		p.Title = title
 	}
 }
 
-func WithPostSlug(slug string) PostsOption {
+func WithSlug(slug string) PostsOption {
 	return func(p *Posts) {
-		slug = strings.ToLower(strings.TrimSpace(slug))
 		p.Slug = slug
 	}
 }
 
-func WithPostContent(content string) PostsOption {
+func WithContent(content string) PostsOption {
 	return func(p *Posts) {
-		trimmed := strings.TrimSpace(content)
-		p.Content = trimmed
+		p.Content = content
 	}
 }
 
-func WithPostStatus(status string) PostsOption {
+func WithExcerpt(excerpt string) PostsOption {
+	return func(p *Posts) {
+		p.Excerpt = excerpt
+	}
+}
+
+func WithFeaturedImageURL(url string) PostsOption {
+	return func(p *Posts) {
+		p.FeaturedImageURL = url
+	}
+}
+
+func WithStatus(status string) PostsOption {
 	return func(p *Posts) {
 		p.Status = status
-		p.Published = (status == "published" || status == "public")
-		if p.Published && p.PublishedAt == nil {
-			now := time.Now()
-			p.PublishedAt = &now
-		} else if !p.Published {
-			p.PublishedAt = nil
-		}
 	}
 }
 
-func WithPostMentions(mentions []user.User) PostsOption {
+func WithPublishingStatus(status string) PostsOption {
+	return func(p *Posts) {
+		p.PublishingStatus = status
+	}
+}
+
+func WithContentFormat(format string) PostsOption {
+	return func(p *Posts) {
+		p.ContentFormat = format
+	}
+}
+
+func WithCanonicalURL(url string) PostsOption {
+	return func(p *Posts) {
+		p.CanonicalURL = url
+	}
+}
+
+// SEO & Social Metadata
+func WithMetaTitle(title string) PostsOption {
+	return func(p *Posts) {
+		p.MetaTitle = title
+	}
+}
+
+func WithMetaDescription(desc string) PostsOption {
+	return func(p *Posts) {
+		p.MetaDescription = desc
+	}
+}
+
+func WithSEOKeywords(keywords string) PostsOption {
+	return func(p *Posts) {
+		p.SEOKeywords = keywords
+	}
+}
+
+func WithOGTitle(title string) PostsOption {
+	return func(p *Posts) {
+		p.OGTitle = title
+	}
+}
+
+func WithOGDescription(desc string) PostsOption {
+	return func(p *Posts) {
+		p.OGDescription = desc
+	}
+}
+
+func WithOGImageURL(url string) PostsOption {
+	return func(p *Posts) {
+		p.OGImageURL = url
+	}
+}
+
+func WithTwitterTitle(title string) PostsOption {
+	return func(p *Posts) {
+		p.TwitterTitle = title
+	}
+}
+
+func WithTwitterDescription(desc string) PostsOption {
+	return func(p *Posts) {
+		p.TwitterDescription = desc
+	}
+}
+
+func WithTwitterImageURL(url string) PostsOption {
+	return func(p *Posts) {
+		p.TwitterImageURL = url
+	}
+}
+
+// Collaboration & Review System
+func WithAuthorID(authorID uuid.UUID) PostsOption {
+	return func(p *Posts) {
+		p.AuthorID = authorID
+	}
+}
+
+func WithSeriesID(seriesID *uuid.UUID) PostsOption {
+	return func(p *Posts) {
+		p.SeriesID = seriesID
+	}
+}
+
+func WithEditedAt(editedAt *time.Time) PostsOption {
+	return func(p *Posts) {
+		p.EditedAt = editedAt
+	}
+}
+
+func WithLastEditedByID(userID *uuid.UUID) PostsOption {
+	return func(p *Posts) {
+		p.LastEditedByID = userID
+	}
+}
+
+func WithNeedsReview(needsReview bool) PostsOption {
+	return func(p *Posts) {
+		p.NeedsReview = needsReview
+	}
+}
+
+func WithReviewedByID(userID *uuid.UUID) PostsOption {
+	return func(p *Posts) {
+		p.ReviewedByID = userID
+	}
+}
+
+func WithReviewedAt(reviewedAt *time.Time) PostsOption {
+	return func(p *Posts) {
+		p.ReviewedAt = reviewedAt
+	}
+}
+
+// Publishing Fields
+func WithPublished(published bool) PostsOption {
+	return func(p *Posts) {
+		p.Published = published
+	}
+}
+
+func WithPublishedAt(publishedAt *time.Time) PostsOption {
+	return func(p *Posts) {
+		p.PublishedAt = publishedAt
+	}
+}
+
+// Relationships
+func WithTags(tags []Tag) PostsOption {
+	return func(p *Posts) {
+		p.Tags = tags
+	}
+}
+
+func WithComments(comments []Comment) PostsOption {
+	return func(p *Posts) {
+		p.Comments = comments
+	}
+}
+
+func WithReactions(reactions []Reaction) PostsOption {
+	return func(p *Posts) {
+		p.Reactions = reactions
+	}
+}
+
+func WithBookmarks(bookmarks []Bookmark) PostsOption {
+	return func(p *Posts) {
+		p.Bookmarks = bookmarks
+	}
+}
+
+func WithMentions(mentions []user.User) PostsOption {
 	return func(p *Posts) {
 		p.Mentions = mentions
 	}
 }
 
-func WithPostCoAuthors(coAuthors []user.User) PostsOption {
+func WithCoAuthors(coAuthors []user.User) PostsOption {
 	return func(p *Posts) {
 		p.CoAuthors = coAuthors
 	}

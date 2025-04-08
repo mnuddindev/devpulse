@@ -11,6 +11,7 @@ import (
 	user "github.com/mnuddindev/devpulse/internal/models/user"
 	storage "github.com/mnuddindev/devpulse/pkg/redis"
 	"github.com/mnuddindev/devpulse/pkg/utils"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
@@ -24,6 +25,7 @@ type Posts struct {
 	Published        bool       `gorm:"default:false;index" json:"published"`
 	PublishedAt      *time.Time `gorm:"index:idx_post_published_at" json:"published_at" validate:"omitempty"`
 	Status           string     `gorm:"type:varchar(20);default:'draft';index" json:"status" validate:"required,oneof=draft published unpublished public private"`
+	PublishingStatus string     `gorm:"type:varchar(50);default:'draft'" json:"publishing_status"`
 	ContentFormat    string     `gorm:"size:20;default:'markdown'" json:"content_format" validate:"oneof=markdown html"`
 	CanonicalURL     string     `gorm:"size:500" json:"canonical_url" validate:"omitempty,url,max=500"`
 
@@ -90,6 +92,46 @@ func CreatePost(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, 
 	}
 
 	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var author user.User
+		key := "user:" + post.AuthorID.String()
+		autho, err := rclient.Get(ctx, key).Result()
+		if err != nil {
+			if err == redis.Nil {
+				author, err := user.GetUserBy(ctx, rclient, db, "id = ?", []interface{}{post.AuthorID})
+				if err != nil {
+					return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to fetch author")
+				}
+				authorData, _ := json.Marshal(author)
+				rclient.Set(ctx, key, authorData, 10*time.Minute)
+			} else {
+				return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to fetch author from cache")
+			}
+		} else {
+			if err := json.Unmarshal([]byte(autho), &author); err != nil {
+				return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to unmarshal author data")
+			}
+		}
+
+		validStatuses := map[string]bool{"draft": true, "published": true, "unpublished": true, "public": true, "private": true}
+		if !validStatuses[post.Status] {
+			return utils.NewError(utils.ErrBadRequest.Code, "Invalid post status")
+		}
+
+		if author.Role.Name == "member" {
+			post.PublishingStatus = "moderation"
+			post.Published = false
+			post.PublishedAt = nil
+		} else {
+			post.PublishingStatus = "published"
+			post.Published = (post.Status == "published" || post.Status == "public")
+			if post.Published && post.PublishedAt == nil {
+				now := time.Now()
+				post.PublishedAt = &now
+			} else if !post.Published {
+				post.PublishedAt = nil
+			}
+		}
+
 		if err := tx.WithContext(ctx).Create(post).Error; err != nil {
 			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to create post")
 		}
@@ -214,8 +256,8 @@ func DeletePost(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, 
 	}
 
 	err = tx.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Delete(&PostAnalytics{}, "post_id = ?", post.ID).Error; err != nil {
-			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to delete post analytics")
+		if err := DeletePostAnalytics(ctx, rclient, db, postID); err != nil {
+			return err
 		}
 
 		if err := tx.Model(post).Association("Mentions").Clear(); err != nil {
