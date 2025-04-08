@@ -94,3 +94,36 @@ func GetPostAnalyticsBy(ctx context.Context, rclient *storage.RedisClient, db *g
 
 	return &pa, nil
 }
+
+// UpdatePostAnalytics updates the PostAnalytics for a given post ID.
+func UpdatePostAnalytics(ctx context.Context, rclient *storage.RedisClient, gormDB *gorm.DB, postID uuid.UUID, options ...PostAnalyticsOption) (*PostAnalytics, error) {
+	tx := gormDB.WithContext(ctx).Begin()
+	pa, err := GetPostAnalyticsBy(ctx, rclient, gormDB, "post_id = ?", []interface{}{postID})
+	if err != nil {
+		return nil, err
+	}
+
+	for _, opt := range options {
+		opt(pa)
+	}
+
+	err = tx.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Save(pa).Error; err != nil {
+			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to update post analytics")
+		}
+		return nil
+	})
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	tx.Commit()
+
+	key := "post_analytics:" + postID.String()
+	rclient.Del(ctx, key)
+	paData, _ := json.Marshal(pa)
+	rclient.Set(ctx, key, paData, 10*time.Minute)
+
+	return pa, nil
+}
