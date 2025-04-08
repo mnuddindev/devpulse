@@ -130,3 +130,28 @@ func UpdatePostAnalytics(ctx context.Context, rclient *storage.RedisClient, gorm
 
 	return pa, nil
 }
+
+// DeletePostAnalytics deletes the PostAnalytics for a given post ID.
+func DeletePostAnalytics(ctx context.Context, rclient *storage.RedisClient, gormDB *gorm.DB, postID uuid.UUID) error {
+	tx := gormDB.WithContext(ctx).Begin()
+	err := tx.Transaction(func(tx *gorm.DB) error {
+		result := tx.Where("post_id = ?", postID).Delete(&PostAnalytics{})
+		if result.Error != nil {
+			return utils.WrapError(result.Error, utils.ErrInternalServerError.Code, "Failed to delete post analytics")
+		}
+		if result.RowsAffected == 0 {
+			return utils.NewError(utils.ErrNotFound.Code, "Post analytics not found for deletion")
+		}
+		return nil
+	})
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	tx.Commit()
+
+	key := "post_analytics:" + postID.String()
+	rclient.Del(ctx, key)
+	return nil
+}
