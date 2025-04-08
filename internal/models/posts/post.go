@@ -63,17 +63,6 @@ type Posts struct {
 	PostAnalytics *PostAnalytics `gorm:"foreignKey:PostID" json:"analytics" validate:"-"`
 }
 
-type PostAnalytics struct {
-	PostID         uuid.UUID `gorm:"type:uuid;primaryKey" json:"post_id" validate:"required"`
-	ViewsCount     int       `gorm:"default:0" json:"views_count"`
-	CommentsCount  int       `gorm:"default:0" json:"comments_count"`
-	ReactionsCount int       `gorm:"default:0" json:"reactions_count"`
-	BookmarksCount int       `gorm:"default:0" json:"bookmarks_count"`
-	ReadTime       int       `gorm:"default:1" json:"read_time" validate:"min=1"` // Minutes
-	CreatedAt      time.Time `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt      time.Time `gorm:"autoUpdateTime" json:"updated_at"`
-}
-
 // PostsOption configures a Post.
 type PostsOption func(*Posts)
 
@@ -107,8 +96,8 @@ func CreatePost(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, 
 
 		// Create analytics entry
 		analytics := &PostAnalytics{PostID: post.ID}
-		if err := tx.Create(analytics).Error; err != nil {
-			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to initialize post analytics")
+		if err := CreatePostAnalytics(ctx, rclient, tx, analytics); err != nil {
+			return err
 		}
 		post.PostAnalytics = analytics
 
