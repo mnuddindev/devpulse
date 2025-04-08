@@ -1,6 +1,7 @@
 package models
 
 import (
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -251,4 +252,53 @@ func WithReadTime(minutes int) PostAnalyticsOption {
 	return func(pa *PostAnalytics) {
 		pa.ReadTime = minutes
 	}
+}
+
+// Tag Options
+func WithTagName(name string) TagOption {
+	return func(t *Tag) { t.Name = strings.TrimSpace(name) }
+}
+
+func WithTagSlug(slug string) TagOption {
+	return func(t *Tag) { t.Slug = strings.ToLower(strings.TrimSpace(slug)) }
+}
+
+func WithTagDescription(desc string) TagOption {
+	return func(t *Tag) { t.Description = strings.TrimSpace(desc) }
+}
+
+func WithTagShortDescription(desc string) TagOption {
+	return func(t *Tag) { t.ShortDescription = strings.TrimSpace(desc) }
+}
+
+func WithTagIconURL(url string) TagOption {
+	return func(t *Tag) { t.IconURL = url }
+}
+
+func WithTagBackgroundURL(url string) TagOption {
+	return func(t *Tag) { t.BackgroundURL = url }
+}
+
+func WithTagTextColor(color string) TagOption {
+	return func(t *Tag) { t.TextColor = color }
+}
+
+func WithTagBackgroundColor(color string) TagOption {
+	return func(t *Tag) { t.BackgroundColor = color }
+}
+
+func WithTagIsFeatured(featured bool) TagOption {
+	return func(t *Tag) { t.IsFeatured = featured }
+}
+
+func WithTagIsModerated(moderated bool) TagOption {
+	return func(t *Tag) { t.IsModerated = moderated }
+}
+
+func WithTagRules(rules string) TagOption {
+	return func(t *Tag) { t.Rules = strings.TrimSpace(rules) }
+}
+
+func WithTagModerators(moderators []user.User) TagOption {
+	return func(t *Tag) { t.Moderators = moderators }
 }

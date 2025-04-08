@@ -70,9 +70,6 @@ type PostsOption func(*Posts)
 
 // CreatePost creates a new post in the database
 func CreatePost(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, post *Posts, opts ...PostsOption) error {
-	if post.ID == uuid.Nil {
-		post.ID = uuid.New()
-	}
 	if post.Status == "" {
 		post.Status = "draft"
 	}

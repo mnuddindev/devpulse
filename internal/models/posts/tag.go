@@ -36,39 +36,5 @@ type Tag struct {
 	Analytics  *TagAnalytics `gorm:"foreignKey:TagID" json:"analytics" validate:"-"`
 }
 
-// TagAnalytics represents analytics data for a tag
-type TagAnalytics struct {
-	ID               uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
-	TagID            uuid.UUID `gorm:"type:uuid;not null;uniqueIndex:idx_tag_analytics_tag_id" json:"tag_id" validate:"required"`
-	DailyViews       int       `gorm:"default:0" json:"daily_views" validate:"min=0"`
-	WeeklyViews      int       `gorm:"default:0" json:"weekly_views" validate:"min=0"`
-	MonthlyViews     int       `gorm:"default:0" json:"monthly_views" validate:"min=0"`
-	DailyFollowers   int       `gorm:"default:0" json:"daily_followers" validate:"min=0"`
-	WeeklyFollowers  int       `gorm:"default:0" json:"weekly_followers" validate:"min=0"`
-	MonthlyFollowers int       `gorm:"default:0" json:"monthly_followers" validate:"min=0"`
-
-	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
-
-	Tag Tag `gorm:"foreignKey:TagID" json:"tag" validate:"-"`
-}
-
-// TagFollower represents users following a tag
-type TagFollower struct {
-	TagID     uuid.UUID `gorm:"type:uuid;primaryKey;index" json:"tag_id" validate:"required"`
-	UserID    uuid.UUID `gorm:"type:uuid;primaryKey;index" json:"user_id" validate:"required"`
-	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
-
-	Tag  Tag       `gorm:"foreignKey:TagID" json:"tag" validate:"-"`
-	User user.User `gorm:"foreignKey:UserID" json:"user" validate:"-"`
-}
-
-// TagModerator represents moderators for a tag
-type TagModerator struct {
-	TagID     uuid.UUID `gorm:"type:uuid;primaryKey;index" json:"tag_id" validate:"required"`
-	UserID    uuid.UUID `gorm:"type:uuid;primaryKey;index" json:"user_id" validate:"required"`
-	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
-
-	Tag  Tag       `gorm:"foreignKey:TagID" json:"tag" validate:"-"`
-	User user.User `gorm:"foreignKey:UserID" json:"user" validate:"-"`
-}
+// TagOptions defines a function type that takes a pointer to a Tag and modifies it.
+type TagOption func(*Tag)
