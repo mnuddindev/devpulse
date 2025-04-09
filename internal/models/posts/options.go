@@ -259,6 +259,12 @@ func WithTagName(name string) TagOption {
 	return func(t *Tag) { t.Name = strings.TrimSpace(name) }
 }
 
+func WithTagIsApproved(isapproved bool) TagOption {
+	return func(t *Tag) {
+		t.IsApproved = isapproved
+	}
+}
+
 func WithTagSlug(slug string) TagOption {
 	return func(t *Tag) { t.Slug = strings.ToLower(strings.TrimSpace(slug)) }
 }

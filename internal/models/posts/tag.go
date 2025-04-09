@@ -198,3 +198,9 @@ func DeleteTag(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, t
 
 	return nil
 }
+
+// ApproveTag sets a tag as approved
+func ApproveTag(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, tagID uuid.UUID) error {
+	_, err := UpdateTag(ctx, rclient, db, tagID, WithTagIsApproved(true))
+	return err
+}
