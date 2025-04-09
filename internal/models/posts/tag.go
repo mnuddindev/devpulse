@@ -204,3 +204,9 @@ func ApproveTag(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, 
 	_, err := UpdateTag(ctx, rclient, db, tagID, WithTagIsApproved(true))
 	return err
 }
+
+// DisapproveTag sets a tag as disapproved
+func DisapproveTag(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, tagID uuid.UUID) error {
+	_, err := UpdateTag(ctx, rclient, db, tagID, WithTagIsApproved(false))
+	return err
+}
