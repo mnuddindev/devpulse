@@ -81,7 +81,7 @@ func CreateTag(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, t
 	return nil
 }
 
-// GetTagBy retrieves a tag
+// GetTagBy retrieves a tags
 func GetTagBy(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, condition string, args []interface{}) (*Tag, error) {
 	cacheKey := ""
 	switch condition {
@@ -113,4 +113,53 @@ func GetTagBy(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, co
 	}
 
 	return &tag, nil
+}
+
+// UpdateTag updates a tag in the database and cache
+func UpdateTag(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, tagID uuid.UUID, options ...TagOption) (*Tag, error) {
+	tx := db.WithContext(ctx).Begin()
+	tag, err := GetTagBy(ctx, rclient, db, "id = ?", []interface{}{tagID})
+	if err != nil {
+		return nil, err
+	}
+
+	originalSlug := tag.Slug
+	for _, opt := range options {
+		opt(tag)
+	}
+
+	err = tx.Transaction(func(tx *gorm.DB) error {
+		// Check name uniqueness if changed
+		if tag.Name != "" && tag.Name != originalSlug {
+			var existing Tag
+			if err := tx.Where("name = ? AND id != ?", tag.Name, tagID).First(&existing).Error; err == nil {
+				return utils.NewError(utils.ErrBadRequest.Code, "Tag name already taken")
+			} else if err != gorm.ErrRecordNotFound {
+				return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to check tag name")
+			}
+		}
+
+		// Save tag
+		if err := tx.Save(tag).Error; err != nil {
+			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to update tag")
+		}
+
+		return nil
+	})
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	tx.Commit()
+
+	// Update caches
+	tagData, _ := json.Marshal(tag)
+	rclient.Set(ctx, "tag:"+tag.ID.String(), tagData, 24*time.Hour)
+	rclient.Set(ctx, "tag:slug:"+tag.Slug, tagData, 24*time.Hour)
+	if tag.Slug != originalSlug {
+		rclient.Del(ctx, "tag:slug:"+originalSlug)
+	}
+
+	return tag, nil
 }
