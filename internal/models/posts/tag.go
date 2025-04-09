@@ -210,3 +210,44 @@ func DisapproveTag(ctx context.Context, rclient *storage.RedisClient, db *gorm.D
 	_, err := UpdateTag(ctx, rclient, db, tagID, WithTagIsApproved(false))
 	return err
 }
+
+// IncrementTagCounts adjusts PostsCount or FollowersCount
+func IncrementTagCounts(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, tagID uuid.UUID, postsDelta, followersDelta int) error {
+	tx := db.WithContext(ctx).Begin()
+	tag, err := GetTagBy(ctx, rclient, db, "id = ?", []interface{}{tagID})
+	if err != nil {
+		return err
+	}
+
+	tag.PostsCount += postsDelta
+	if tag.PostsCount < 0 {
+		tag.PostsCount = 0
+	}
+	tag.FollowersCount += followersDelta
+	if tag.FollowersCount < 0 {
+		tag.FollowersCount = 0
+	}
+
+	err = tx.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(tag).Updates(map[string]interface{}{
+			"posts_count":     tag.PostsCount,
+			"followers_count": tag.FollowersCount,
+		}).Error; err != nil {
+			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to update tag counts")
+		}
+		return nil
+	})
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	tx.Commit()
+
+	// Update caches
+	tagData, _ := json.Marshal(tag)
+	rclient.Set(ctx, "tag:"+tag.ID.String(), tagData, 24*time.Hour)
+	rclient.Set(ctx, "tag:slug:"+tag.Slug, tagData, 24*time.Hour)
+
+	return nil
+}
