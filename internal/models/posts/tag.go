@@ -80,3 +80,37 @@ func CreateTag(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, t
 
 	return nil
 }
+
+// GetTagBy retrieves a tag
+func GetTagBy(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, condition string, args []interface{}) (*Tag, error) {
+	cacheKey := ""
+	switch condition {
+	case "id = ?":
+		cacheKey = "tag:" + args[0].(uuid.UUID).String()
+	case "slug = ?":
+		cacheKey = "tag:slug:" + args[0].(string)
+	}
+	if cacheKey != "" {
+		if cached, err := rclient.Get(ctx, cacheKey).Result(); err == nil {
+			var tag Tag
+			if json.Unmarshal([]byte(cached), &tag) == nil {
+				return &tag, nil
+			}
+		}
+	}
+
+	var tag Tag
+	if err := db.WithContext(ctx).Where(condition, args...).Preload("Moderators").Preload("Followers").Preload("Posts").Preload("Analytics").First(&tag).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, utils.NewError(utils.ErrNotFound.Code, "Tag not found")
+		}
+		return nil, utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to fetch tag")
+	}
+
+	if cacheKey != "" {
+		tagData, _ := json.Marshal(tag)
+		rclient.Set(ctx, cacheKey, tagData, 24*time.Hour)
+	}
+
+	return &tag, nil
+}
