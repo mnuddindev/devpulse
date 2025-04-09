@@ -163,3 +163,38 @@ func UpdateTag(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, t
 
 	return tag, nil
 }
+
+// DeleteTag soft-deletes a tag
+func DeleteTag(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, tagID uuid.UUID) error {
+	tx := db.WithContext(ctx).Begin()
+	tag, err := GetTagBy(ctx, rclient, db, "id = ?", []interface{}{tagID})
+	if err != nil {
+		return err
+	}
+
+	err = tx.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(tag).Association("Moderators").Clear(); err != nil {
+			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to clear tag moderators")
+		}
+
+		if err := tx.Model(tag).Association("Followers").Clear(); err != nil {
+			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to clear tag followers")
+		}
+
+		if err := tx.Delete(tag).Error; err != nil {
+			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to delete tag")
+		}
+
+		return nil
+	})
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	tx.Commit()
+
+	rclient.Del(ctx, "tag:"+tagID.String(), "tag:slug:"+tag.Slug)
+
+	return nil
+}
