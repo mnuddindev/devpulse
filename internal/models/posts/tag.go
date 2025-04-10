@@ -68,6 +68,11 @@ func CreateTag(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, t
 			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to create tag")
 		}
 
+		ta := &TagAnalytics{TagID: tag.ID}
+		if err := CreateTagAnalytics(ctx, rclient, tx, ta); err != nil {
+			return err
+		}
+
 		return nil
 	})
 	if err != nil {
