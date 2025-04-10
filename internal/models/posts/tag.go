@@ -278,7 +278,7 @@ func (tag *Tag) FollowTag(ctx context.Context, rclient *storage.RedisClient, db 
 				var u user.User
 				if err := tx.Where("id = ?", userID).First(&u).Error; err != nil {
 					if err == gorm.ErrRecordNotFound {
-						return utils.NewError(utils.ErrNotFound.Code, "User not found: "+uid.String())
+						return utils.NewError(utils.ErrNotFound.Code, "User not found: "+userID.String())
 					}
 					return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to fetch user")
 				}
