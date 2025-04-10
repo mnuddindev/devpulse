@@ -1,9 +1,15 @@
 package models
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
+	storage "github.com/mnuddindev/devpulse/pkg/redis"
+	"github.com/mnuddindev/devpulse/pkg/utils"
+	"gorm.io/gorm"
 )
 
 type TagAnalytics struct {
@@ -25,3 +31,30 @@ type TagAnalytics struct {
 type TagAnalyticsOption func(*TagAnalytics)
 
 // CreateTagAnalytics creates a new TagAnalytics instance with the given options.
+func CreateTagAnalytics(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, ta *TagAnalytics) error {
+	if ta.TagID == uuid.Nil {
+		return errors.New("TagAnalytics requires a valid tag_id")
+	}
+
+	err := db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var existing TagAnalytics
+		if err := tx.Where("tag_id = ?", ta.TagID).First(&existing).Error; err == nil {
+			return utils.NewError(utils.ErrBadRequest.Code, "Tag analytics already exists for this tag_id")
+		} else if err != gorm.ErrRecordNotFound {
+			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to check existing analytics")
+		}
+
+		if err := tx.Create(ta).Error; err != nil {
+			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to create tag analytics")
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	taData, _ := json.Marshal(ta)
+	rclient.Set(ctx, "tag_analytics:"+ta.TagID.String(), taData, 1*time.Hour)
+
+	return nil
+}
