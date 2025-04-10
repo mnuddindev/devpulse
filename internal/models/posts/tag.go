@@ -450,3 +450,38 @@ func (tag *Tag) AddTagModerators(ctx context.Context, rclient *storage.RedisClie
 
 	return nil
 }
+
+// RemoveTagModerators removes moderators from a tag
+func (tag *Tag) RemoveTagModerators(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, tagID uuid.UUID, userIDs []uuid.UUID) error {
+	tx := db.WithContext(ctx).Begin()
+	tag, err := GetTagBy(ctx, rclient, db, "id = ?", []interface{}{tagID})
+	if err != nil {
+		return err
+	}
+
+	err = tx.Transaction(func(tx *gorm.DB) error {
+		usersToRemove := make([]user.User, 0, len(userIDs))
+		for _, uid := range userIDs {
+			usersToRemove = append(usersToRemove, user.User{ID: uid})
+		}
+
+		if err := tx.Model(tag).Association("Moderators").Delete(usersToRemove); err != nil {
+			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to remove tag moderators")
+		}
+
+		return nil
+	})
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	tx.Commit()
+
+	tagData, _ := json.Marshal(tag)
+	rclient.Set(ctx, "tag:"+tag.ID.String(), tagData, 24*time.Hour)
+	rclient.Set(ctx, "tag:slug:"+tag.Slug, tagData, 24*time.Hour)
+	rclient.Del(ctx, "tag:moderators:"+tag.ID.String()) // Invalidate moderators cache
+
+	return nil
+}
