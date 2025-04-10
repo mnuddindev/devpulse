@@ -284,7 +284,7 @@ func (tag *Tag) FollowTag(ctx context.Context, rclient *storage.RedisClient, db 
 			}
 
 			if !exists {
-				u, err := user.GetUserBy(ctx, rclient, db, "id = ?", []interface{}{userID})
+				u, err := user.GetUserBy(ctx, rclient, tx, "id = ?", []interface{}{userID})
 				if err != nil {
 					if err == gorm.ErrRecordNotFound {
 						return utils.NewError(utils.ErrNotFound.Code, "User not found: "+userID.String())
@@ -328,7 +328,7 @@ func (tag *Tag) FollowTag(ctx context.Context, rclient *storage.RedisClient, db 
 // UnfollowTag removes a user from the tag's followers
 func (tag *Tag) UnfollowTag(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, tagID uuid.UUID, userIDs []uuid.UUID) error {
 	tx := db.WithContext(ctx).Begin()
-	tag, err := GetTagBy(ctx, rclient, db, "id = ?", []interface{}{tagID})
+	tag, err := GetTagBy(ctx, rclient, tx, "id = ?", []interface{}{tagID})
 	if err != nil {
 		return err
 	}
@@ -425,7 +425,7 @@ func (tag *Tag) AddTagModerators(ctx context.Context, rclient *storage.RedisClie
 				}
 			}
 			if !exists {
-				u, err := user.GetUserBy(ctx, rclient, db, "id = ?", []interface{}{uid})
+				u, err := user.GetUserBy(ctx, rclient, tx, "id = ?", []interface{}{uid})
 				if err != nil {
 					if err == gorm.ErrRecordNotFound {
 						return utils.NewError(utils.ErrNotFound.Code, "User not found: "+uid.String())

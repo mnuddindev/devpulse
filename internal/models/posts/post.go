@@ -133,7 +133,6 @@ func CreatePost(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, 
 			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to create post")
 		}
 
-		// Create analytics entry
 		analytics := &PostAnalytics{PostID: post.ID}
 		if err := CreatePostAnalytics(ctx, rclient, tx, analytics); err != nil {
 			return err
