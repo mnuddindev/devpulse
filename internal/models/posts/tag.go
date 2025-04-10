@@ -390,3 +390,63 @@ func GetTagFollowers(ctx context.Context, rclient *storage.RedisClient, db *gorm
 
 	return followers, nil
 }
+
+// AddTagModerators adds moderators to a tag
+func (tag *Tag) AddTagModerators(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, tagID uuid.UUID, userIDs []uuid.UUID) error {
+	tx := db.WithContext(ctx).Begin()
+	tag, err := GetTagBy(ctx, rclient, db, "id = ?", []interface{}{tagID})
+	if err != nil {
+		return err
+	}
+
+	if !tag.IsModerated {
+		return utils.NewError(utils.ErrBadRequest.Code, "Tag must be moderated to add moderators")
+	}
+
+	err = tx.Transaction(func(tx *gorm.DB) error {
+		currentModerators := tag.Moderators
+		newModerators := make([]user.User, 0, len(userIDs))
+
+		for _, uid := range userIDs {
+			exists := false
+			for _, m := range currentModerators {
+				if m.ID == uid {
+					exists = true
+					break
+				}
+			}
+			if !exists {
+				var u user.User
+				if err := tx.Where("id = ?", uid).First(&u).Error; err != nil {
+					if err == gorm.ErrRecordNotFound {
+						return utils.NewError(utils.ErrNotFound.Code, "User not found: "+uid.String())
+					}
+					return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to fetch user")
+				}
+				newModerators = append(newModerators, u)
+			}
+		}
+
+		if len(newModerators) > 0 {
+			if err := tx.Model(tag).Association("Moderators").Append(newModerators); err != nil {
+				return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to add tag moderators")
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	tx.Commit()
+
+	tagData, _ := json.Marshal(tag)
+	rclient.Del(ctx, "tag:moderators:"+tag.ID.String(), "tag:slug:"+tag.Slug)
+	rclient.Set(ctx, "tag:"+tag.ID.String(), tagData, 24*time.Hour)
+	rclient.Set(ctx, "tag:slug:"+tag.Slug, tagData, 24*time.Hour)
+	rclient.Del(ctx, "tag:moderators:"+tag.ID.String()) // Invalidate moderators cache
+
+	return nil
+}
