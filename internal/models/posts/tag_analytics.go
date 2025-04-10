@@ -139,3 +139,12 @@ func DeleteTagAnalytics(ctx context.Context, rclient *storage.RedisClient, db *g
 
 	return nil
 }
+
+// SyncTagAnalytics syncs the TagAnalytics for a tag.
+func SyncTagAnalytics(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, tagID uuid.UUID, viewsDelta, followersDelta int) error {
+	_, err := UpdateTagAnalytics(ctx, rclient, db, tagID,
+		WithDailyViews(viewsDelta),
+		WithDailyFollowers(followersDelta),
+	)
+	return err
+}
