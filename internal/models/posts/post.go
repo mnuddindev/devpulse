@@ -213,6 +213,7 @@ func UpdatePost(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, 
 	}
 
 	originalSlug := post.Slug
+	originalTags := post.Tags
 	for _, opt := range opts {
 		opt(post)
 	}
@@ -224,6 +225,32 @@ func UpdatePost(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, 
 				return utils.NewError(utils.ErrBadRequest.Code, "Slug already taken")
 			} else if err != gorm.ErrRecordNotFound {
 				return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to check slug")
+			}
+		}
+
+		originalTagIDs := make(map[uuid.UUID]bool)
+		for _, tag := range originalTags {
+			originalTagIDs[tag.ID] = true
+		}
+
+		newTagIDs := make(map[uuid.UUID]bool)
+		for _, tag := range post.Tags {
+			newTagIDs[tag.ID] = true
+		}
+
+		for tagID := range originalTagIDs {
+			if !newTagIDs[tagID] {
+				if err := IncrementTagCounts(ctx, rclient, tx, tagID, -1, 0); err != nil {
+					return err
+				}
+			}
+		}
+
+		for tagID := range newTagIDs {
+			if !originalTagIDs[tagID] {
+				if err := IncrementTagCounts(ctx, rclient, tx, tagID, 1, 0); err != nil {
+					return err
+				}
 			}
 		}
 
