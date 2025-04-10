@@ -361,3 +361,32 @@ func (tag *Tag) UnfollowTag(ctx context.Context, rclient *storage.RedisClient, d
 
 	return nil
 }
+
+// GetTagFollowers retrieves the followers of a tag
+func GetTagFollowers(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, tagID uuid.UUID, page, limit int) ([]user.User, error) {
+	cacheKey := "tag:followers:" + tagID.String() + ":page:" + string(page) + ":limit:" + string(limit)
+	if cached, err := rclient.Get(ctx, cacheKey).Result(); err == nil {
+		var followers []user.User
+		if json.Unmarshal([]byte(cached), &followers) == nil {
+			return followers, nil
+		}
+	}
+
+	var tag Tag
+	if err := db.WithContext(ctx).Where("id = ?", tagID).First(&tag).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, utils.NewError(utils.ErrNotFound.Code, "Tag not found")
+		}
+		return nil, utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to fetch tag")
+	}
+
+	var followers []user.User
+	if err := db.WithContext(ctx).Model(&tag).Offset((page - 1) * limit).Limit(limit).Association("Followers").Find(&followers); err != nil {
+		return nil, utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to fetch tag followers")
+	}
+
+	followersData, _ := json.Marshal(followers)
+	rclient.Set(ctx, cacheKey, followersData, 1*time.Hour)
+
+	return followers, nil
+}
