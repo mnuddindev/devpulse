@@ -416,14 +416,14 @@ func (tag *Tag) AddTagModerators(ctx context.Context, rclient *storage.RedisClie
 				}
 			}
 			if !exists {
-				var u user.User
-				if err := tx.Where("id = ?", uid).First(&u).Error; err != nil {
+				u, err := user.GetUserBy(ctx, rclient, db, "id = ?", []interface{}{uid})
+				if err != nil {
 					if err == gorm.ErrRecordNotFound {
 						return utils.NewError(utils.ErrNotFound.Code, "User not found: "+uid.String())
 					}
 					return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to fetch user")
 				}
-				newModerators = append(newModerators, u)
+				newModerators = append(newModerators, *u)
 			}
 		}
 
