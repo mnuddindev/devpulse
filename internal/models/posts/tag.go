@@ -315,3 +315,49 @@ func (tag *Tag) FollowTag(ctx context.Context, rclient *storage.RedisClient, db 
 
 	return nil
 }
+
+// UnfollowTag removes a user from the tag's followers
+func (tag *Tag) UnfollowTag(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, tagID uuid.UUID, userIDs []uuid.UUID) error {
+	tx := db.WithContext(ctx).Begin()
+	tag, err := GetTagBy(ctx, rclient, db, "id = ?", []interface{}{tagID})
+	if err != nil {
+		return err
+	}
+	err = tx.Transaction(func(tx *gorm.DB) error {
+		usersToRemove := make([]user.User, 0, len(userIDs))
+		for _, uid := range userIDs {
+			usersToRemove = append(usersToRemove, user.User{ID: uid})
+		}
+
+		if err := tx.Model(tag).Association("Followers").Delete(usersToRemove); err != nil {
+			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to remove tag followers")
+		}
+
+		countRemoved := len(usersToRemove)
+		if countRemoved > 0 {
+			tag.FollowersCount -= countRemoved
+			if tag.FollowersCount < 0 {
+				tag.FollowersCount = 0
+			}
+			if err := tx.Model(tag).Update("followers_count", tag.FollowersCount).Error; err != nil {
+				return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to update followers count")
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	tx.Commit()
+
+	tagData, _ := json.Marshal(tag)
+	rclient.Del(ctx, "tag:followers:"+tag.ID.String(), "tag:slug:"+tag.Slug)
+	rclient.Set(ctx, "tag:"+tag.ID.String(), tagData, 24*time.Hour)
+	rclient.Set(ctx, "tag:slug:"+tag.Slug, tagData, 24*time.Hour)
+	rclient.Del(ctx, "tag:followers:"+tag.ID.String()) // Invalidate followers cache
+
+	return nil
+}
