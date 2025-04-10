@@ -21,3 +21,7 @@ type TagAnalytics struct {
 
 	Tag Tag `gorm:"foreignKey:TagID" json:"tag" validate:"-"`
 }
+
+type TagAnalyticsOption func(*TagAnalytics)
+
+// CreateTagAnalytics creates a new TagAnalytics instance with the given options.

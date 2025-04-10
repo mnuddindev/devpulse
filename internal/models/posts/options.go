@@ -308,3 +308,58 @@ func WithTagRules(rules string) TagOption {
 func WithTagModerators(moderators []user.User) TagOption {
 	return func(t *Tag) { t.Moderators = moderators }
 }
+
+// TagAnalytics Options
+func WithDailyViews(delta int) TagAnalyticsOption {
+	return func(ta *TagAnalytics) {
+		ta.DailyViews += delta
+		if ta.DailyViews < 0 {
+			ta.DailyViews = 0
+		}
+	}
+}
+
+func WithWeeklyViews(delta int) TagAnalyticsOption {
+	return func(ta *TagAnalytics) {
+		ta.WeeklyViews += delta
+		if ta.WeeklyViews < 0 {
+			ta.WeeklyViews = 0
+		}
+	}
+}
+
+func WithMonthlyViews(delta int) TagAnalyticsOption {
+	return func(ta *TagAnalytics) {
+		ta.MonthlyViews += delta
+		if ta.MonthlyViews < 0 {
+			ta.MonthlyViews = 0
+		}
+	}
+}
+
+func WithDailyFollowers(delta int) TagAnalyticsOption {
+	return func(ta *TagAnalytics) {
+		ta.DailyFollowers += delta
+		if ta.DailyFollowers < 0 {
+			ta.DailyFollowers = 0
+		}
+	}
+}
+
+func WithWeeklyFollowers(delta int) TagAnalyticsOption {
+	return func(ta *TagAnalytics) {
+		ta.WeeklyFollowers += delta
+		if ta.WeeklyFollowers < 0 {
+			ta.WeeklyFollowers = 0
+		}
+	}
+}
+
+func WithMonthlyFollowers(delta int) TagAnalyticsOption {
+	return func(ta *TagAnalytics) {
+		ta.MonthlyFollowers += delta
+		if ta.MonthlyFollowers < 0 {
+			ta.MonthlyFollowers = 0
+		}
+	}
+}
