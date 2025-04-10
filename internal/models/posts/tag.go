@@ -3,6 +3,7 @@ package models
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -304,6 +305,10 @@ func (tag *Tag) FollowTag(ctx context.Context, rclient *storage.RedisClient, db 
 			if err := tx.Model(tag).Update("followers_count", tag.FollowersCount).Error; err != nil {
 				return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to update followers count")
 			}
+
+			if err := SyncTagAnalytics(ctx, rclient, tx, tag.ID, 0, len(newFollowers)); err != nil {
+				return err
+			}
 		}
 
 		return nil
@@ -351,6 +356,10 @@ func (tag *Tag) UnfollowTag(ctx context.Context, rclient *storage.RedisClient, d
 			if err := tx.Model(tag).Update("followers_count", tag.FollowersCount).Error; err != nil {
 				return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to update followers count")
 			}
+
+			if err := SyncTagAnalytics(ctx, rclient, tx, tag.ID, 0, -countRemoved); err != nil {
+				return err
+			}
 		}
 
 		return nil
@@ -373,7 +382,7 @@ func (tag *Tag) UnfollowTag(ctx context.Context, rclient *storage.RedisClient, d
 
 // GetTagFollowers retrieves the followers of a tag
 func GetTagFollowers(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, tagID uuid.UUID, page, limit int) ([]user.User, error) {
-	cacheKey := "tag:followers:" + tagID.String() + ":page:" + string(page) + ":limit:" + string(limit)
+	cacheKey := "tag:followers:" + tagID.String() + ":page:" + fmt.Sprintf("%d", page) + ":limit:" + fmt.Sprintf("%d", limit)
 	if cached, err := rclient.Get(ctx, cacheKey).Result(); err == nil {
 		var followers []user.User
 		if json.Unmarshal([]byte(cached), &followers) == nil {
@@ -497,7 +506,7 @@ func (tag *Tag) RemoveTagModerators(ctx context.Context, rclient *storage.RedisC
 
 // GetTagModerators retrieves the moderators of a tag
 func GetTagModerators(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, tagID uuid.UUID, page, limit int) ([]user.User, error) {
-	cacheKey := "tag:moderators:" + tagID.String() + ":page:" + string(page) + ":limit:" + string(limit)
+	cacheKey := "tag:moderators:" + tagID.String() + ":page:" + fmt.Sprintf("%d", page) + ":limit:" + fmt.Sprintf("%d", limit)
 	if cached, err := rclient.Get(ctx, cacheKey).Result(); err == nil {
 		var moderators []user.User
 		if json.Unmarshal([]byte(cached), &moderators) == nil {

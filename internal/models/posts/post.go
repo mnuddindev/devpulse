@@ -143,6 +143,9 @@ func CreatePost(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, 
 			if err := IncrementTagCounts(ctx, rclient, tx, tag.ID, 1, 0); err != nil {
 				return err
 			}
+			if err := SyncTagAnalytics(ctx, rclient, tx, tag.ID, 1, 0); err != nil { // Initial view on creation
+				return err
+			}
 		}
 
 		return user.UpdateUserStats(ctx, rclient, tx, post.AuthorID, user.WithPostsCount(1))
