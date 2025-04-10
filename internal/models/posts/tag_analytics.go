@@ -58,3 +58,27 @@ func CreateTagAnalytics(ctx context.Context, rclient *storage.RedisClient, db *g
 
 	return nil
 }
+
+// GetTagAnalytics retrieves the TagAnalytics for a tag.
+func GetTagAnalytics(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, tagID uuid.UUID) (*TagAnalytics, error) {
+	cacheKey := "tag_analytics:" + tagID.String()
+	if cached, err := rclient.Get(ctx, cacheKey).Result(); err == nil {
+		var ta TagAnalytics
+		if json.Unmarshal([]byte(cached), &ta) == nil {
+			return &ta, nil
+		}
+	}
+
+	var ta TagAnalytics
+	if err := db.WithContext(ctx).Where("tag_id = ?", tagID).First(&ta).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, utils.NewError(utils.ErrNotFound.Code, "Tag analytics not found")
+		}
+		return nil, utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to fetch tag analytics")
+	}
+
+	taData, _ := json.Marshal(ta)
+	rclient.Set(ctx, cacheKey, taData, 1*time.Hour)
+
+	return &ta, nil
+}
