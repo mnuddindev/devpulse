@@ -275,14 +275,14 @@ func (tag *Tag) FollowTag(ctx context.Context, rclient *storage.RedisClient, db 
 			}
 
 			if !exists {
-				var u user.User
-				if err := tx.Where("id = ?", userID).First(&u).Error; err != nil {
+				u, err := user.GetUserBy(ctx, rclient, db, "id = ?", []interface{}{userID})
+				if err != nil {
 					if err == gorm.ErrRecordNotFound {
 						return utils.NewError(utils.ErrNotFound.Code, "User not found: "+userID.String())
 					}
 					return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to fetch user")
 				}
-				newFollowers = append(newFollowers, u)
+				newFollowers = append(newFollowers, *u)
 			}
 		}
 
