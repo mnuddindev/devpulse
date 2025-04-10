@@ -82,3 +82,34 @@ func GetTagAnalytics(ctx context.Context, rclient *storage.RedisClient, db *gorm
 
 	return &ta, nil
 }
+
+// UpdateTagAnalytics updates the TagAnalytics for a tag.
+func UpdateTagAnalytics(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, tagID uuid.UUID, options ...TagAnalyticsOption) (*TagAnalytics, error) {
+	tx := db.WithContext(ctx).Begin()
+	ta, err := GetTagAnalytics(ctx, rclient, db, tagID)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, opt := range options {
+		opt(ta)
+	}
+
+	err = tx.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Save(ta).Error; err != nil {
+			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to update tag analytics")
+		}
+		return nil
+	})
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	tx.Commit()
+
+	taData, _ := json.Marshal(ta)
+	rclient.Set(ctx, "tag_analytics:"+tagID.String(), taData, 1*time.Hour)
+
+	return ta, nil
+}
