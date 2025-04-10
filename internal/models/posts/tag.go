@@ -186,6 +186,10 @@ func DeleteTag(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, t
 			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to clear tag followers")
 		}
 
+		if err := DeleteTagAnalytics(ctx, rclient, tx, tag.ID); err != nil {
+			return err
+		}
+
 		if err := tx.Delete(tag).Error; err != nil {
 			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to delete tag")
 		}

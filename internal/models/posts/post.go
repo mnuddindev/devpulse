@@ -94,7 +94,7 @@ func CreatePost(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, 
 		autho, err := rclient.Get(ctx, key).Result()
 		if err != nil {
 			if err == redis.Nil {
-				author, err := user.GetUserBy(ctx, rclient, db, "id = ?", []interface{}{post.AuthorID})
+				author, err := user.GetUserBy(ctx, rclient, tx, "id = ?", []interface{}{post.AuthorID})
 				if err != nil {
 					return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to fetch author")
 				}
