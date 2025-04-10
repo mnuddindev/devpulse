@@ -113,3 +113,29 @@ func UpdateTagAnalytics(ctx context.Context, rclient *storage.RedisClient, db *g
 
 	return ta, nil
 }
+
+// DeleteTagAnalytics deletes the TagAnalytics for a tag.
+func DeleteTagAnalytics(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, tagID uuid.UUID) error {
+	tx := db.WithContext(ctx).Begin()
+
+	err := tx.Transaction(func(tx *gorm.DB) error {
+		result := tx.Where("tag_id = ?", tagID).Delete(&TagAnalytics{})
+		if result.Error != nil {
+			return utils.WrapError(result.Error, utils.ErrInternalServerError.Code, "Failed to delete tag analytics")
+		}
+		if result.RowsAffected == 0 {
+			return utils.NewError(utils.ErrNotFound.Code, "Tag analytics not found for deletion")
+		}
+		return nil
+	})
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	tx.Commit()
+
+	rclient.Del(ctx, "tag_analytics:"+tagID.String())
+
+	return nil
+}
