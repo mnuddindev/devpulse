@@ -298,6 +298,12 @@ func DeletePost(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, 
 			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to clear post co-authors")
 		}
 
+		for _, tag := range post.Tags {
+			if err := IncrementTagCounts(ctx, rclient, tx, tag.ID, -1, 0); err != nil {
+				return err
+			}
+		}
+
 		if err := tx.Delete(post).Error; err != nil {
 			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to delete post")
 		}
