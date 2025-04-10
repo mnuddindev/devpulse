@@ -238,7 +238,7 @@ func DeleteUser(ctx context.Context, redisClient *storage.RedisClient, gormDB *g
 		return utils.WrapError(tx.Error, utils.ErrInternalServerError.Code, "Failed to start transaction")
 	}
 
-	if err := tx.Where("user_id = ?", id).Delete(&NotificationPreferences{}).Error; err != nil {
+	if err := DeleteNotificationPreferences(ctx, redisClient, tx, id); err != nil {
 		tx.Rollback()
 		return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to delete notification preferences")
 	}
