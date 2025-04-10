@@ -251,3 +251,67 @@ func IncrementTagCounts(ctx context.Context, rclient *storage.RedisClient, db *g
 
 	return nil
 }
+
+// FollowTag adds a user to the tag's followers
+func (tag *Tag) FollowTag(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, tagID uuid.UUID, userIDs []uuid.UUID) error {
+	tx := db.WithContext(ctx).Begin()
+
+	tag, err := GetTagBy(ctx, rclient, db, "id = ?", []interface{}{tagID})
+	if err != nil {
+		return err
+	}
+
+	err = tx.Transaction(func(tx *gorm.DB) error {
+		currentFollowers := tag.Followers
+		newFollowers := make([]user.User, 0, len(userIDs))
+
+		for _, userID := range userIDs {
+			exists := false
+			for _, f := range currentFollowers {
+				if f.ID == userID {
+					exists = true
+					break
+				}
+			}
+
+			if !exists {
+				var u user.User
+				if err := tx.Where("id = ?", userID).First(&u).Error; err != nil {
+					if err == gorm.ErrRecordNotFound {
+						return utils.NewError(utils.ErrNotFound.Code, "User not found: "+uid.String())
+					}
+					return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to fetch user")
+				}
+				newFollowers = append(newFollowers, u)
+			}
+		}
+
+		if len(newFollowers) > 0 {
+			if err := tx.Model(tag).Association("Followers").Append(newFollowers); err != nil {
+				return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to add tag followers")
+			}
+
+			tag.FollowersCount += len(newFollowers)
+			if err := tx.Model(tag).Update("followers_count", tag.FollowersCount).Error; err != nil {
+				return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to update followers count")
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	tx.Commit()
+
+	tagData, _ := json.Marshal(tag)
+	rclient.Del(ctx, "tag:followers:"+tag.ID.String(), "tag:slug:"+tag.Slug)
+	rclient.Set(ctx, "tag:"+tag.ID.String(), tagData, 24*time.Hour)
+	rclient.Set(ctx, "tag:slug:"+tag.Slug, tagData, 24*time.Hour)
+	rclient.Del(ctx, "tag:followers:"+tag.ID.String())
+
+	return nil
+}
