@@ -27,7 +27,7 @@ const (
 )
 
 // AddTagModerator adds a new tag moderator to the database
-func (tm *TagModerator) AddTagModerator(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, tagID uuid.UUID, userIDs []uuid.UUID) error {
+func AddTagModerator(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, tagID uuid.UUID, userIDs []uuid.UUID) error {
 	if len(userIDs) == 0 {
 		return utils.NewError(utils.ErrBadRequest.Code, "No user IDs provided")
 	}
@@ -101,7 +101,7 @@ func (tm *TagModerator) AddTagModerator(ctx context.Context, rclient *storage.Re
 }
 
 // RemoveTagModerator removes a tag moderator from the database
-func (tm *TagModerator) RemoveTagModerator(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, tagID uuid.UUID, userIDs []uuid.UUID) error {
+func RemoveTagModerator(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, tagID uuid.UUID, userIDs []uuid.UUID) error {
 	if len(userIDs) == 0 {
 		return utils.NewError(utils.ErrBadRequest.Code, "No user IDs provided")
 	}
@@ -149,7 +149,7 @@ func (tm *TagModerator) RemoveTagModerator(ctx context.Context, rclient *storage
 }
 
 // GetTagModerators retrieves the moderators for a tag
-func (tm *TagModerator) GetTagModerators(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, tagID uuid.UUID, page, limit int) ([]user.User, error) {
+func GetTagModerators(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, tagID uuid.UUID, page, limit int) ([]user.User, error) {
 	if page < 1 || limit < 1 {
 		return nil, utils.NewError(utils.ErrBadRequest.Code, "Invalid page or limit")
 	}
@@ -182,7 +182,7 @@ func (tm *TagModerator) GetTagModerators(ctx context.Context, rclient *storage.R
 }
 
 // IsModerator checks if a user is a moderator of a tag
-func (tm *TagModerator) IsModerator(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, tagID, userID uuid.UUID) (bool, error) {
+func IsModerator(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, tagID, userID uuid.UUID) (bool, error) {
 	cacheKey := fmt.Sprintf("tag:moderator:%s:%s", tagID.String(), userID.String())
 	if cached, err := rclient.Get(ctx, cacheKey).Result(); err == nil {
 		return cached == "true", nil
@@ -205,7 +205,7 @@ func (tm *TagModerator) IsModerator(ctx context.Context, rclient *storage.RedisC
 }
 
 // DeleteTagModerators deletes all moderators for a tag
-func (tm *TagModerator) DeleteTagModerators(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, tagID uuid.UUID) error {
+func DeleteTagModerators(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, tagID uuid.UUID) error {
 	tx := db.WithContext(ctx)
 
 	var moderatorCount int64

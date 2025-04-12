@@ -178,8 +178,8 @@ func DeleteTag(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, t
 	}
 
 	err = tx.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(tag).Association("Moderators").Clear(); err != nil {
-			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to clear tag moderators")
+		if err := DeleteTagModerators(ctx, rclient, tx, tagID); err != nil {
+			return err
 		}
 
 		if err := DeleteFollowers(ctx, rclient, tx, tagID); err != nil {
