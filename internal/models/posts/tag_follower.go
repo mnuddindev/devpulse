@@ -159,7 +159,6 @@ func GetTagFollowers(ctx context.Context, rclient *storage.RedisClient, db *gorm
 		return nil, utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to fetch tag followers")
 	}
 
-	// Cache result
 	followersData, _ := json.Marshal(followers)
 	rclient.Set(ctx, cacheKey, followersData, 1*time.Hour)
 
@@ -187,4 +186,41 @@ func IsFollowingTag(ctx context.Context, rclient *storage.RedisClient, db *gorm.
 
 	rclient.Set(ctx, cacheKey, "true", 1*time.Hour)
 	return true, nil
+}
+
+// DeleteFollowers deletes all followers of a tag
+func DeleteFollowers(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, tagID uuid.UUID) error {
+	tx := db.WithContext(ctx)
+
+	tag, err := GetTagBy(ctx, rclient, tx, "id = ?", []interface{}{tagID})
+	if err != nil {
+		return err
+	}
+
+	followerCount := tag.FollowersCount
+	err = tx.Transaction(func(tx *gorm.DB) error {
+		result := tx.Where("tag_id = ?", tagID).Delete(&TagFollower{})
+		if result.Error != nil {
+			return utils.WrapError(result.Error, utils.ErrInternalServerError.Code, "Failed to delete tag followers")
+		}
+
+		if followerCount > 0 {
+			if err := tx.Model(&Tag{ID: tagID}).Update("followers_count", 0).Error; err != nil {
+				return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to reset followers count")
+			}
+
+			if err := SyncTagAnalytics(ctx, rclient, tx, tagID, 0, -followerCount); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	rclient.Del(ctx, "tag:followers:"+tagID.String())
+
+	return nil
 }
