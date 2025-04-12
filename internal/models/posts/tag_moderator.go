@@ -180,3 +180,26 @@ func (tm *TagModerator) GetTagModerators(ctx context.Context, rclient *storage.R
 
 	return moderators, nil
 }
+
+// IsModerator checks if a user is a moderator of a tag
+func (tm *TagModerator) IsModerator(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, tagID, userID uuid.UUID) (bool, error) {
+	cacheKey := fmt.Sprintf("tag:moderator:%s:%s", tagID.String(), userID.String())
+	if cached, err := rclient.Get(ctx, cacheKey).Result(); err == nil {
+		return cached == "true", nil
+	}
+
+	var moderator TagModerator
+	err := db.WithContext(ctx).
+		Where("tag_id = ? AND user_id = ?", tagID, userID).
+		First(&moderator).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			rclient.Set(ctx, cacheKey, "false", 1*time.Hour)
+			return false, nil
+		}
+		return false, utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to check moderator status")
+	}
+
+	rclient.Set(ctx, cacheKey, "true", 1*time.Hour)
+	return true, nil
+}
