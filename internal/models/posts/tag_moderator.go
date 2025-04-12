@@ -147,3 +147,36 @@ func (tm *TagModerator) RemoveTagModerator(ctx context.Context, rclient *storage
 
 	return nil
 }
+
+// GetTagModerators retrieves the moderators for a tag
+func (tm *TagModerator) GetTagModerators(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, tagID uuid.UUID, page, limit int) ([]user.User, error) {
+	if page < 1 || limit < 1 {
+		return nil, utils.NewError(utils.ErrBadRequest.Code, "Invalid page or limit")
+	}
+
+	cacheKey := fmt.Sprintf("tag:moderators:%s:page:%d:limit:%d", tagID.String(), page, limit)
+	if cached, err := rclient.Get(ctx, cacheKey).Result(); err == nil {
+		var moderators []user.User
+		if json.Unmarshal([]byte(cached), &moderators) == nil {
+			return moderators, nil
+		}
+	}
+
+	var moderators []user.User
+	offset := (page - 1) * limit
+	err := db.WithContext(ctx).
+		Joins("JOIN tag_moderators ON tag_moderators.user_id = users.id").
+		Where("tag_moderators.tag_id = ?", tagID).
+		Offset(offset).
+		Limit(limit).
+		Order("tag_moderators.created_at DESC").
+		Find(&moderators).Error
+	if err != nil {
+		return nil, utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to fetch tag moderators")
+	}
+
+	moderatorsData, _ := json.Marshal(moderators)
+	rclient.Set(ctx, cacheKey, moderatorsData, 1*time.Hour)
+
+	return moderators, nil
+}
