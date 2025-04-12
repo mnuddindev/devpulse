@@ -27,13 +27,13 @@ const (
 )
 
 // AddTagModerator adds a new tag moderator to the database
-func (tm *TagModerator) AddTagModerator(ctx context.Context, redisClient *storage.RedisClient, gormDB *gorm.DB, tagID uuid.UUID, userIDs []uuid.UUID) error {
+func (tm *TagModerator) AddTagModerator(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, tagID uuid.UUID, userIDs []uuid.UUID) error {
 	if len(userIDs) == 0 {
 		return utils.NewError(utils.ErrBadRequest.Code, "No user IDs provided")
 	}
 
-	tx := gormDB.WithContext(ctx).Begin()
-	tag, err := GetTagBy(ctx, redisClient, gormDB, "id = ?", []interface{}{tagID})
+	tx := db.WithContext(ctx).Begin()
+	tag, err := GetTagBy(ctx, rclient, db, "id = ?", []interface{}{tagID})
 	if err != nil {
 		return err
 	}
@@ -64,7 +64,7 @@ func (tm *TagModerator) AddTagModerator(ctx context.Context, redisClient *storag
 			if existingMap[userID] {
 				continue
 			}
-			_, err := user.GetUserBy(ctx, redisClient, tx, "id = ?", []interface{}{userID})
+			_, err := user.GetUserBy(ctx, rclient, tx, "id = ?", []interface{}{userID})
 			if err != nil {
 				if err == gorm.ErrRecordNotFound {
 					return utils.NewError(utils.ErrNotFound.Code, "User not found: "+userID.String())
@@ -92,10 +92,58 @@ func (tm *TagModerator) AddTagModerator(ctx context.Context, redisClient *storag
 	tx.Commit()
 
 	tagData, _ := json.Marshal(tag)
-	redisClient.Set(ctx, "tag:"+tag.ID.String(), tagData, 24*time.Hour)
-	redisClient.Set(ctx, "tag:slug:"+tag.Slug, tagData, 24*time.Hour)
-	redisClient.Set(ctx, "tag:moderators_count:"+tag.ID.String(), int(currentCount)+len(newModerators), 24*time.Hour)
-	redisClient.Del(ctx, "tag:moderators:"+tag.ID.String())
+	rclient.Set(ctx, "tag:"+tag.ID.String(), tagData, 24*time.Hour)
+	rclient.Set(ctx, "tag:slug:"+tag.Slug, tagData, 24*time.Hour)
+	rclient.Set(ctx, "tag:moderators_count:"+tag.ID.String(), int(currentCount)+len(newModerators), 24*time.Hour)
+	rclient.Del(ctx, "tag:moderators:"+tag.ID.String())
+
+	return nil
+}
+
+// RemoveTagModerator removes a tag moderator from the database
+func (tm *TagModerator) RemoveTagModerator(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, tagID uuid.UUID, userIDs []uuid.UUID) error {
+	if len(userIDs) == 0 {
+		return utils.NewError(utils.ErrBadRequest.Code, "No user IDs provided")
+	}
+
+	tx := db.WithContext(ctx).Begin()
+
+	tag, err := GetTagBy(ctx, rclient, db, "id = ?", []interface{}{tagID})
+	if err != nil {
+		return err
+	}
+
+	err = tx.Transaction(func(tx *gorm.DB) error {
+		var currentCount int64
+		if err := tx.Model(&TagModerator{}).Where("tag_id = ?", tagID).Count(&currentCount).Error; err != nil {
+			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to count moderators")
+		}
+
+		result := tx.Where("tag_id = ? AND user_id IN ?", tagID, userIDs).Delete(&TagModerator{})
+		if result.Error != nil {
+			return utils.WrapError(result.Error, utils.ErrInternalServerError.Code, "Failed to remove tag moderators")
+		}
+
+		countRemoved := int(result.RowsAffected)
+		if countRemoved == 0 {
+			return nil
+		}
+
+		return nil
+	})
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	tx.Commit()
+
+	// Update caches
+	tagData, _ := json.Marshal(tag)
+	rclient.Set(ctx, "tag:"+tag.ID.String(), tagData, 24*time.Hour)
+	rclient.Set(ctx, "tag:slug:"+tag.Slug, tagData, 24*time.Hour)
+	rclient.Set(ctx, "tag:moderators_count:"+tag.ID.String(), 0, 24*time.Hour)
+	rclient.Del(ctx, "tag:moderators:"+tag.ID.String())
 
 	return nil
 }
