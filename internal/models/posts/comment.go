@@ -32,28 +32,3 @@ type Comment struct {
 	Reactions     []Reaction    `gorm:"foreignKey:ReactableID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"reactions" validate:"-"`
 	Flags         []CommentFlag `gorm:"foreignKey:CommentID" json:"flags" validate:"-"`
 }
-
-type CommentFlag struct {
-	ID        uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
-	CommentID uuid.UUID `gorm:"type:uuid;not null;index:idx_flag_comment" json:"comment_id" validate:"required"`
-	UserID    uuid.UUID `gorm:"type:uuid;not null;index:idx_flag_user" json:"user_id" validate:"required"`
-	Reason    string    `gorm:"size:100;not null" json:"reason" validate:"required,oneof=spam inappropriate harassment other"`
-	Notes     string    `gorm:"size:500" json:"notes" validate:"omitempty,max=500"`
-	Resolved  bool      `gorm:"default:false;index" json:"resolved"`
-
-	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
-
-	User    user.User `gorm:"foreignKey:UserID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"user" validate:"-"`
-	Comment Comment   `gorm:"foreignKey:CommentID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"comment" validate:"-"`
-}
-
-type CommentMention struct {
-	CommentID uuid.UUID `gorm:"type:uuid;primaryKey;index" json:"comment_id" validate:"required"`
-	UserID    uuid.UUID `gorm:"type:uuid;primaryKey;index" json:"user_id" validate:"required"`
-
-	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
-
-	Comment Comment   `gorm:"foreignKey:CommentID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"comment" validate:"-"`
-	User    user.User `gorm:"foreignKey:UserID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"user" validate:"-"`
-}

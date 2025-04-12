@@ -22,34 +22,7 @@ type Series struct {
 	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 
-	// Relationships
 	Author      user.User       `gorm:"foreignKey:AuthorID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"author" validate:"-"`
 	SeriesPosts []SeriesPost    `gorm:"foreignKey:SeriesID" json:"series_posts" validate:"-"`
 	Analytics   SeriesAnalytics `gorm:"foreignKey:SeriesID" json:"analytics" validate:"-"`
-}
-
-type SeriesPost struct {
-	ID       uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
-	SeriesID uuid.UUID `gorm:"type:uuid;not null;index:idx_series_post_series" json:"series_id" validate:"required"`
-	PostID   uuid.UUID `gorm:"type:uuid;not null;index:idx_series_post_post" json:"post_id" validate:"required"`
-	Position int       `gorm:"not null;index:idx_series_position" json:"position" validate:"min=1"`
-
-	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
-
-	// Relationships
-	Post   Posts  `gorm:"foreignKey:PostID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"post" validate:"-"`
-	Series Series `gorm:"foreignKey:SeriesID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"series" validate:"-"`
-}
-
-type SeriesAnalytics struct {
-	ID              uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()" json:"id"`
-	SeriesID        uuid.UUID `gorm:"type:uuid;not null;uniqueIndex:idx_series_analytics" json:"series_id" validate:"required"`
-	TotalViews      int       `gorm:"default:0" json:"total_views" validate:"min=0"`
-	TotalReactions  int       `gorm:"default:0" json:"total_reactions" validate:"min=0"`
-	AverageReadTime float64   `gorm:"default:0.0" json:"average_read_time" validate:"min=0.0"`
-	CompletionRate  float64   `gorm:"default:0.0" json:"completion_rate" validate:"min=0.0,max=1.0"`
-
-	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 }

@@ -20,21 +20,7 @@ type Reaction struct {
 	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 
-	// Relationships
 	User    user.User `gorm:"foreignKey:UserID" json:"user" validate:"-"`
 	Post    Posts     `gorm:"foreignKey:PostID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"post,omitempty" validate:"-"`
 	Comment Comment   `gorm:"foreignKey:ReactableID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL" json:"comment,omitempty" validate:"-"`
-}
-
-type ReadingListEntry struct {
-	ReactionID uuid.UUID `gorm:"type:uuid;primaryKey" json:"reaction_id" validate:"required"`
-	Notes      string    `gorm:"type:text" json:"notes" validate:"omitempty,max=500"`
-	IsPrivate  bool      `gorm:"default:false;index" json:"is_private"`
-	Tags       []string  `gorm:"type:text[];index:idx_reading_tags,gin" json:"tags" validate:"max=5,dive,max=20,alphanumunicode"`
-
-	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
-	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
-
-	Reaction Reaction `gorm:"foreignKey:ReactionID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE" json:"reaction" validate:"-"`
 }
