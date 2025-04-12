@@ -203,3 +203,34 @@ func (tm *TagModerator) IsModerator(ctx context.Context, rclient *storage.RedisC
 	rclient.Set(ctx, cacheKey, "true", 1*time.Hour)
 	return true, nil
 }
+
+// DeleteTagModerators deletes all moderators for a tag
+func (tm *TagModerator) DeleteTagModerators(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, tagID uuid.UUID) error {
+	tx := db.WithContext(ctx)
+
+	var moderatorCount int64
+	if err := tx.Model(&TagModerator{}).Where("tag_id = ?", tagID).Count(&moderatorCount).Error; err != nil {
+		return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to count tag moderators")
+	}
+	if moderatorCount == 0 {
+		return nil
+	}
+
+	err := tx.Transaction(func(tx *gorm.DB) error {
+		result := tx.Where("tag_id = ?", tagID).Delete(&TagModerator{})
+		if result.Error != nil {
+			return utils.WrapError(result.Error, utils.ErrInternalServerError.Code, "Failed to delete tag moderators")
+		}
+
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	tx.Commit()
+
+	rclient.Del(ctx, "tag:moderators:"+tagID.String(), "tag:moderators_count:"+tagID.String())
+
+	return nil
+}
