@@ -363,3 +363,49 @@ func WithMonthlyFollowers(delta int) TagAnalyticsOption {
 		}
 	}
 }
+
+// Series Options
+func WithSeriesTitle(title string) SeriesOption {
+	return func(s *Series) {
+		s.Title = strings.TrimSpace(title)
+	}
+}
+
+func WithSeriesSlug(slug string) SeriesOption {
+	return func(s *Series) {
+		s.Slug = strings.ToLower(strings.TrimSpace(slug))
+	}
+}
+
+func WithSeriesDescription(description string) SeriesOption {
+	return func(s *Series) {
+		s.Description = strings.TrimSpace(description)
+	}
+}
+
+func WithSeriesCoverImageURL(url string) SeriesOption {
+	return func(s *Series) {
+		s.CoverImageURL = strings.TrimSpace(url)
+	}
+}
+
+func WithSeriesAuthorID(authorID uuid.UUID) SeriesOption {
+	return func(s *Series) {
+		s.AuthorID = authorID
+	}
+}
+
+func WithSeriesIsPublished(isPublished bool) SeriesOption {
+	return func(s *Series) {
+		s.IsPublished = isPublished
+	}
+}
+
+func WithSeriesTotalPostsDelta(delta int) SeriesOption {
+	return func(s *Series) {
+		s.TotalPosts += delta
+		if s.TotalPosts < 0 {
+			s.TotalPosts = 0
+		}
+	}
+}
