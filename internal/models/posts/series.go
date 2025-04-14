@@ -334,3 +334,87 @@ func AddSeriesPost(ctx context.Context, rclient *storage.RedisClient, db *gorm.D
 
 	return nil
 }
+
+// RemoveSeriesPost removes a post from a series
+func RemoveSeriesPost(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, seriesID, postID uuid.UUID) error {
+	tx := db.WithContext(ctx).Begin()
+	series, err := GetSeries(ctx, rclient, db, "id = ?", []interface{}{seriesID})
+	if err != nil {
+		return err
+	}
+	err = tx.Transaction(func(tx *gorm.DB) error {
+		result := tx.Where("series_id = ? AND post_id = ?", seriesID, postID).Delete(&SeriesPost{})
+		if result.Error != nil {
+			return utils.WrapError(result.Error, utils.ErrInternalServerError.Code, "Failed to remove series post")
+		}
+		if result.RowsAffected == 0 {
+			return utils.NewError(utils.ErrNotFound.Code, "Series post not found")
+		}
+
+		series.TotalPosts--
+		if series.TotalPosts < 0 {
+			series.TotalPosts = 0
+		}
+		if err := tx.Model(series).Update("total_posts", series.TotalPosts).Error; err != nil {
+			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to update total posts")
+		}
+
+		if err := SyncSeriesAnalytics(ctx, rclient, tx, seriesID, -1, 0); err != nil {
+			return err
+		}
+
+		return nil
+	})
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	tx.Commit()
+
+	seriesData, _ := json.Marshal(series)
+	rclient.Set(ctx, "series:"+series.ID.String(), seriesData, 24*time.Hour)
+	rclient.Set(ctx, "series:slug:"+series.Slug, seriesData, 24*time.Hour)
+	rclient.Set(ctx, "series:total_posts:"+series.ID.String(), series.TotalPosts, 24*time.Hour)
+	rclient.Del(ctx, "series:posts:"+series.ID.String())
+
+	return nil
+}
+
+// DeleteSeriesPosts removes all series posts for a series
+func DeleteSeriesPosts(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, seriesID uuid.UUID) error {
+	tx := db.WithContext(ctx)
+
+	var postCount int64
+	if err := tx.Model(&SeriesPost{}).Where("series_id = ?", seriesID).Count(&postCount).Error; err != nil {
+		return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to count series posts")
+	}
+	if postCount == 0 {
+		return nil
+	}
+
+	count := int(postCount)
+	err := tx.Transaction(func(tx *gorm.DB) error {
+		result := tx.Where("series_id = ?", seriesID).Delete(&SeriesPost{})
+		if result.Error != nil {
+			return utils.WrapError(result.Error, utils.ErrInternalServerError.Code, "Failed to delete series posts")
+		}
+
+		if err := tx.Model(&Series{ID: seriesID}).Update("total_posts", 0).Error; err != nil {
+			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to reset total posts")
+		}
+
+		if err := SyncSeriesAnalytics(ctx, rclient, tx, seriesID, -count, 0); err != nil {
+			return err
+		}
+
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	rclient.Del(ctx, "series:posts:"+seriesID.String())
+
+	return nil
+}
