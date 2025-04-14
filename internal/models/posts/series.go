@@ -83,3 +83,56 @@ func CreateSeries(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB
 
 	return nil
 }
+
+// GetSeries retrieves a series by condition
+func GetSeries(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, condition string, args []interface{}, preload ...string) (*Series, error) {
+	cacheKey := ""
+	switch condition {
+	case "id = ?":
+		cacheKey = "series:" + args[0].(uuid.UUID).String()
+	case "slug = ?":
+		cacheKey = "series:slug:" + args[0].(string)
+	}
+	if cacheKey != "" {
+		if cached, err := rclient.Get(ctx, cacheKey).Result(); err == nil {
+			var series Series
+			if json.Unmarshal([]byte(cached), &series) == nil {
+				return &series, nil
+			}
+		}
+	}
+
+	query := db.WithContext(ctx).Where(condition, args...)
+	for _, p := range preload {
+		query = query.Preload(p)
+	}
+
+	var series Series
+	if err := query.First(&series).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, utils.NewError(utils.ErrNotFound.Code, "Series not found")
+		}
+		return nil, utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to fetch series")
+	}
+
+	if cacheKey != "" {
+		seriesData, _ := json.Marshal(series)
+		rclient.Set(ctx, cacheKey, seriesData, 24*time.Hour)
+	}
+
+	return &series, nil
+}
+
+// UpdateSeries modifies a series using options
+func UpdateSeries(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, seriesID uuid.UUID, options ...SeriesOption) (*Series, error) {
+	tx := db.WithContext(ctx).Begin()
+	series, err := GetSeries(ctx, rclient, db, "id = ?", []interface{}{seriesID}, "")
+	if err != nil {
+		return nil, err
+	}
+
+	originalSlug := series.Slug
+	for _, opt := range options {
+		opt(series)
+	}
+}
