@@ -135,4 +135,56 @@ func UpdateSeries(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB
 	for _, opt := range options {
 		opt(series)
 	}
+
+	err = tx.Transaction(func(tx *gorm.DB) error {
+		if series.Title != "" && series.Title != series.Title {
+			var existingByTitle Series
+			if err := tx.Where("title = ? AND id != ?", series.Title, series.ID).First(&existingByTitle).Error; err == nil {
+				return utils.NewError(utils.ErrBadRequest.Code, "Series title already exists")
+			} else if err != gorm.ErrRecordNotFound {
+				return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to check series title")
+			}
+		}
+
+		if series.Slug != originalSlug && series.Slug != "" {
+			var existingBySlug Series
+			if err := tx.Where("slug = ? AND id != ?", series.Slug, series.ID).First(&existingBySlug).Error; err == nil {
+				return utils.NewError(utils.ErrBadRequest.Code, "Series slug already exists")
+			} else if err != gorm.ErrRecordNotFound {
+				return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to check series slug")
+			}
+		}
+
+		if series.AuthorID != uuid.Nil && series.AuthorID != series.AuthorID {
+			_, err := user.GetUserBy(ctx, rclient, tx, "id = ?", []interface{}{series.AuthorID})
+			if err != nil {
+				if err == gorm.ErrRecordNotFound {
+					return utils.NewError(utils.ErrNotFound.Code, "Author not found")
+				}
+				return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to fetch author")
+			}
+		}
+
+		if err := tx.Save(series).Error; err != nil {
+			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to update series")
+		}
+
+		return nil
+	})
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	tx.Commit()
+
+	seriesData, _ := json.Marshal(series)
+	rclient.Set(ctx, "series:"+series.ID.String(), seriesData, 24*time.Hour)
+	rclient.Set(ctx, "series:slug:"+series.Slug, seriesData, 24*time.Hour)
+	if series.Slug != originalSlug {
+		rclient.Del(ctx, "series:slug:"+originalSlug)
+	}
+	rclient.Set(ctx, "series:total_posts:"+series.ID.String(), series.TotalPosts, 24*time.Hour)
+
+	return series, nil
 }
