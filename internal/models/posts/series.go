@@ -188,3 +188,46 @@ func UpdateSeries(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB
 
 	return series, nil
 }
+
+// DeleteSeries soft-deletes a series and its related data
+func DeleteSeries(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, seriesID uuid.UUID) error {
+	tx := db.WithContext(ctx).Begin()
+	series, err := GetSeries(ctx, rclient, db, "id = ?", []interface{}{seriesID})
+	if err != nil {
+		return err
+	}
+
+	err = tx.Transaction(func(tx *gorm.DB) error {
+		// Delete series posts
+		if err := DeleteSeriesPosts(ctx, rclient, tx, seriesID); err != nil {
+			return err
+		}
+
+		// Delete analytics
+		if err := DeleteSeriesAnalytics(ctx, rclient, tx, seriesID); err != nil {
+			return err
+		}
+
+		// Soft-delete series
+		if err := tx.Delete(&Series{ID: seriesID}).Error; err != nil {
+			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to delete series")
+		}
+
+		return nil
+	})
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	tx.Commit()
+
+	rclient.Del(ctx,
+		"series:"+seriesID.String(),
+		"series:slug:"+series.Slug,
+		"series:analytics:"+seriesID.String(),
+		"series:total_posts:"+seriesID.String(),
+	)
+
+	return nil
+}
