@@ -3,6 +3,7 @@ package models
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 
@@ -198,17 +199,14 @@ func DeleteSeries(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB
 	}
 
 	err = tx.Transaction(func(tx *gorm.DB) error {
-		// Delete series posts
 		if err := DeleteSeriesPosts(ctx, rclient, tx, seriesID); err != nil {
 			return err
 		}
 
-		// Delete analytics
 		if err := DeleteSeriesAnalytics(ctx, rclient, tx, seriesID); err != nil {
 			return err
 		}
 
-		// Soft-delete series
 		if err := tx.Delete(&Series{ID: seriesID}).Error; err != nil {
 			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to delete series")
 		}
@@ -230,4 +228,50 @@ func DeleteSeries(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB
 	)
 
 	return nil
+}
+
+// ListSeries retrieves a paginated list of series
+func ListSeries(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, page, limit int, authorID uuid.UUID, isPublished *bool) ([]Series, int64, error) {
+	if page < 1 || limit < 1 {
+		return nil, 0, utils.NewError(utils.ErrBadRequest.Code, "Invalid page or limit")
+	}
+
+	cacheKey := fmt.Sprintf("series:list:page:%d:limit:%d:author:%s:pub:%v", page, limit, authorID.String(), isPublished)
+	if cached, err := rclient.Get(ctx, cacheKey).Result(); err == nil {
+		var seriesList struct {
+			Series []Series
+			Total  int64
+		}
+		if json.Unmarshal([]byte(cached), &seriesList) == nil {
+			return seriesList.Series, seriesList.Total, nil
+		}
+	}
+
+	query := db.WithContext(ctx)
+	if authorID != uuid.Nil {
+		query = query.Where("author_id = ?", authorID)
+	}
+	if isPublished != nil {
+		query = query.Where("is_published = ?", *isPublished)
+	}
+
+	var total int64
+	if err := query.Model(&Series{}).Count(&total).Error; err != nil {
+		return nil, 0, utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to count series")
+	}
+
+	var series []Series
+	offset := (page - 1) * limit
+	if err := query.Offset(offset).Limit(limit).Order("created_at DESC").Find(&series).Error; err != nil {
+		return nil, 0, utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to fetch series")
+	}
+
+	seriesList := struct {
+		Series []Series
+		Total  int64
+	}{series, total}
+	seriesData, _ := json.Marshal(seriesList)
+	rclient.Set(ctx, cacheKey, seriesData, 1*time.Hour)
+
+	return series, total, nil
 }
