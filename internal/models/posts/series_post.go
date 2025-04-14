@@ -84,7 +84,7 @@ func CreateSeriesPost(ctx context.Context, rclient *storage.RedisClient, db *gor
 }
 
 // GetSeriesPost retrieves a series post
-func GetSeriesPost(ctx context.Context, redisClient *storage.RedisClient, gormDB *gorm.DB, condition string, args []interface{}, preload ...string) (*SeriesPost, error) {
+func GetSeriesPost(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, condition string, args []interface{}, preload ...string) (*SeriesPost, error) {
 	cacheKey := ""
 	if condition == "series_id = ? AND post_id = ?" {
 		cacheKey = fmt.Sprintf("series_post:%s:%s", args[0].(uuid.UUID).String(), args[1].(uuid.UUID).String())
@@ -92,7 +92,7 @@ func GetSeriesPost(ctx context.Context, redisClient *storage.RedisClient, gormDB
 		cacheKey = "series_post:id:" + args[0].(uuid.UUID).String()
 	}
 	if cacheKey != "" {
-		if cached, err := redisClient.Get(ctx, cacheKey).Result(); err == nil {
+		if cached, err := rclient.Get(ctx, cacheKey).Result(); err == nil {
 			var seriesPost SeriesPost
 			if json.Unmarshal([]byte(cached), &seriesPost) == nil {
 				return &seriesPost, nil
@@ -100,7 +100,7 @@ func GetSeriesPost(ctx context.Context, redisClient *storage.RedisClient, gormDB
 		}
 	}
 
-	query := gormDB.WithContext(ctx).Where(condition, args...)
+	query := db.WithContext(ctx).Where(condition, args...)
 	for _, p := range preload {
 		query = query.Preload(p)
 	}
@@ -115,7 +115,7 @@ func GetSeriesPost(ctx context.Context, redisClient *storage.RedisClient, gormDB
 
 	if cacheKey != "" {
 		data, _ := json.Marshal(seriesPost)
-		redisClient.Set(ctx, cacheKey, data, 1*time.Hour)
+		rclient.Set(ctx, cacheKey, data, 1*time.Hour)
 	}
 
 	return &seriesPost, nil
