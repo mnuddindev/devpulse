@@ -409,3 +409,22 @@ func WithSeriesTotalPostsDelta(delta int) SeriesOption {
 		}
 	}
 }
+
+// SeriesPost Options
+func WithSeriesPostSID(seriesID uuid.UUID) SeriesPostOption {
+	return func(sp *SeriesPost) {
+		sp.SeriesID = seriesID
+	}
+}
+
+func WithSeriesPostID(postID uuid.UUID) SeriesPostOption {
+	return func(sp *SeriesPost) {
+		sp.PostID = postID
+	}
+}
+
+func WithSeriesPostPosition(position int) SeriesPostOption {
+	return func(sp *SeriesPost) {
+		sp.Position = position
+	}
+}
