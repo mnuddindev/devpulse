@@ -275,3 +275,62 @@ func ListSeries(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, 
 
 	return series, total, nil
 }
+
+// AddSeriesPost adds a post to a series
+func AddSeriesPost(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, seriesID, postID uuid.UUID, order int) error {
+	tx := db.WithContext(ctx).Begin()
+	series, err := GetSeries(ctx, rclient, db, "id = ?", []interface{}{seriesID})
+	if err != nil {
+		return err
+	}
+	err = tx.Transaction(func(tx *gorm.DB) error {
+		_, err := GetPostsBy(ctx, rclient, tx, "id = ?", []interface{}{postID})
+		if err != nil {
+			if err == gorm.ErrRecordNotFound {
+				return utils.NewError(utils.ErrNotFound.Code, "Post not found")
+			}
+			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to fetch post")
+		}
+
+		var existing SeriesPost
+		if err := tx.Where("series_id = ? AND post_id = ?", seriesID, postID).First(&existing).Error; err == nil {
+			return utils.NewError(utils.ErrBadRequest.Code, "Post already in series")
+		} else if err != gorm.ErrRecordNotFound {
+			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to check series post")
+		}
+
+		seriesPost := &SeriesPost{
+			SeriesID: seriesID,
+			PostID:   postID,
+			Position: order,
+		}
+		if err := tx.Create(seriesPost).Error; err != nil {
+			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to add series post")
+		}
+
+		series.TotalPosts++
+		if err := tx.Model(series).Update("total_posts", series.TotalPosts).Error; err != nil {
+			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to update total posts")
+		}
+
+		if err := SyncSeriesAnalytics(ctx, rclient, tx, seriesID, 1, 0); err != nil {
+			return err
+		}
+
+		return nil
+	})
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	tx.Commit()
+
+	seriesData, _ := json.Marshal(series)
+	rclient.Set(ctx, "series:"+series.ID.String(), seriesData, 24*time.Hour)
+	rclient.Set(ctx, "series:slug:"+series.Slug, seriesData, 24*time.Hour)
+	rclient.Set(ctx, "series:total_posts:"+series.ID.String(), series.TotalPosts, 24*time.Hour)
+	rclient.Del(ctx, "series:posts:"+series.ID.String())
+
+	return nil
+}
