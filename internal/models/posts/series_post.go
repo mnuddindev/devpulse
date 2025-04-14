@@ -286,7 +286,6 @@ func ListSeriesPosts(ctx context.Context, rclient *storage.RedisClient, db *gorm
 		return nil, 0, utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to fetch series posts")
 	}
 
-	// Cache result
 	result := struct {
 		Posts []SeriesPost
 		Total int64
