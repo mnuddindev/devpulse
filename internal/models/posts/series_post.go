@@ -120,3 +120,84 @@ func GetSeriesPost(ctx context.Context, rclient *storage.RedisClient, db *gorm.D
 
 	return &seriesPost, nil
 }
+
+// UpdateSeriesPost modifies a series post
+func UpdateSeriesPost(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, seriesPostID uuid.UUID, options ...SeriesPostOption) (*SeriesPost, error) {
+	tx := db.WithContext(ctx).Begin()
+	seriesPost, err := GetSeriesPost(ctx, rclient, db, "id = ?", []interface{}{seriesPostID})
+	if err != nil {
+		return nil, err
+	}
+
+	originalSeriesID := seriesPost.SeriesID
+	for _, opt := range options {
+		opt(seriesPost)
+	}
+
+	err = tx.Transaction(func(tx *gorm.DB) error {
+		if seriesPost.PostID != seriesPost.PostID && seriesPost.PostID != uuid.Nil {
+			_, err := GetPostsBy(ctx, rclient, tx, "id = ?", []interface{}{seriesPost.PostID})
+			if err != nil {
+				if err == gorm.ErrRecordNotFound {
+					return utils.NewError(utils.ErrNotFound.Code, "Post not found")
+				}
+				return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to fetch post")
+			}
+		}
+
+		if seriesPost.SeriesID != originalSeriesID || seriesPost.PostID != seriesPost.PostID {
+			var existing SeriesPost
+			if err := tx.Where("series_id = ? AND post_id = ?", seriesPost.SeriesID, seriesPost.PostID).First(&existing).Error; err == nil {
+				return utils.NewError(utils.ErrBadRequest.Code, "Post already in series")
+			} else if err != gorm.ErrRecordNotFound {
+				return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to check series post")
+			}
+		}
+
+		var maxPosition int
+		if err := tx.Model(&SeriesPost{}).Where("series_id = ?", seriesPost.SeriesID).Select("COALESCE(MAX(position), 0)").Scan(&maxPosition).Error; err != nil {
+			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to check max position")
+		}
+		if seriesPost.Position > maxPosition {
+			seriesPost.Position = maxPosition
+		}
+
+		if err := tx.Save(seriesPost).Error; err != nil {
+			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to update series post")
+		}
+
+		if seriesPost.SeriesID != originalSeriesID {
+			if err := tx.Model(&Series{ID: originalSeriesID}).Update("total_posts", gorm.Expr("total_posts - 1")).Error; err != nil {
+				return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to update old series total posts")
+			}
+			if err := tx.Model(&Series{ID: seriesPost.SeriesID}).Update("total_posts", gorm.Expr("total_posts + 1")).Error; err != nil {
+				return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to update new series total posts")
+			}
+			if err := SyncSeriesAnalytics(ctx, rclient, tx, originalSeriesID, -1, 0); err != nil {
+				return err
+			}
+			if err := SyncSeriesAnalytics(ctx, rclient, tx, seriesPost.SeriesID, 1, 0); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+
+	tx.Commit()
+
+	rclient.Del(ctx,
+		"series:posts:"+seriesPost.SeriesID.String(),
+		"series:posts:"+originalSeriesID.String(),
+	)
+	if seriesPost.SeriesID != originalSeriesID {
+		rclient.Set(ctx, "series:total_posts:"+seriesPost.SeriesID.String(), Series.TotalPosts+1, 24*time.Hour)
+		rclient.Set(ctx, "series:total_posts:"+originalSeriesID.String(), Series.TotalPosts-1, 24*time.Hour)
+	}
+
+	return seriesPost, nil
+}
