@@ -201,3 +201,160 @@ func UpdateSeriesPost(ctx context.Context, rclient *storage.RedisClient, db *gor
 
 	return seriesPost, nil
 }
+
+// DeleteSeriesPost removes a post from a series
+func DeleteSeriesPost(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, seriesID, postID uuid.UUID) error {
+	tx := db.WithContext(ctx).Begin()
+	series, err := GetSeries(ctx, rclient, db, "id = ?", []interface{}{seriesID})
+	if err != nil {
+		return err
+	}
+
+	err = tx.Transaction(func(tx *gorm.DB) error {
+		// Delete series post
+		result := tx.Where("series_id = ? AND post_id = ?", seriesID, postID).Delete(&SeriesPost{})
+		if result.Error != nil {
+			return utils.WrapError(result.Error, utils.ErrInternalServerError.Code, "Failed to delete series post")
+		}
+		if result.RowsAffected == 0 {
+			return utils.NewError(utils.ErrNotFound.Code, "Series post not found")
+		}
+
+		// Update TotalPosts
+		if series.TotalPosts > 0 {
+			series.TotalPosts--
+			if err := tx.Model(series).Update("total_posts", series.TotalPosts).Error; err != nil {
+				return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to update total posts")
+			}
+		}
+
+		// Sync analytics
+		if err := SyncSeriesAnalytics(ctx, rclient, tx, seriesID, -1, 0); err != nil {
+			return err
+		}
+
+		return nil
+	})
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	tx.Commit()
+
+	// Update caches
+	seriesData, _ := json.Marshal(series)
+	rclient.Set(ctx, "series:"+series.ID.String(), seriesData, 24*time.Hour)
+	rclient.Set(ctx, "series:slug:"+series.Slug, seriesData, 24*time.Hour)
+	rclient.Set(ctx, "series:total_posts:"+seriesID.String(), series.TotalPosts, 24*time.Hour)
+	rclient.Del(ctx, "series:posts:"+seriesID.String())
+
+	return nil
+}
+
+// ListSeriesPosts retrieves all posts in a series
+func ListSeriesPosts(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, seriesID uuid.UUID, page, limit int) ([]SeriesPost, int64, error) {
+	if page < 1 || limit < 1 {
+		return nil, 0, utils.NewError(utils.ErrBadRequest.Code, "Invalid page or limit")
+	}
+
+	cacheKey := fmt.Sprintf("series:posts:%s:page:%d:limit:%d", seriesID.String(), page, limit)
+	if cached, err := rclient.Get(ctx, cacheKey).Result(); err == nil {
+		var result struct {
+			Posts []SeriesPost
+			Total int64
+		}
+		if json.Unmarshal([]byte(cached), &result) == nil {
+			return result.Posts, result.Total, nil
+		}
+	}
+
+	var total int64
+	if err := db.WithContext(ctx).Model(&SeriesPost{}).Where("series_id = ?", seriesID).Count(&total).Error; err != nil {
+		return nil, 0, utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to count series posts")
+	}
+
+	var seriesPosts []SeriesPost
+	offset := (page - 1) * limit
+	if err := db.WithContext(ctx).
+		Where("series_id = ?", seriesID).
+		Offset(offset).
+		Limit(limit).
+		Order("position ASC").
+		Preload("Post").
+		Find(&seriesPosts).Error; err != nil {
+		return nil, 0, utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to fetch series posts")
+	}
+
+	// Cache result
+	result := struct {
+		Posts []SeriesPost
+		Total int64
+	}{seriesPosts, total}
+	data, _ := json.Marshal(result)
+	rclient.Set(ctx, cacheKey, data, 1*time.Hour)
+
+	return seriesPosts, total, nil
+}
+
+// ReorderSeriesPosts updates positions for multiple series posts
+func ReorderSeriesPosts(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, seriesID uuid.UUID, positions map[uuid.UUID]int) error {
+	if len(positions) == 0 {
+		return utils.NewError(utils.ErrBadRequest.Code, "No positions provided")
+	}
+
+	tx := db.WithContext(ctx).Begin()
+	_, err := GetSeries(ctx, rclient, db, "id = ?", []interface{}{seriesID})
+	if err != nil {
+		return err
+	}
+
+	err = tx.Transaction(func(tx *gorm.DB) error {
+		var seriesPosts []SeriesPost
+		if err := tx.Where("series_id = ? AND post_id IN ?", seriesID, getKeys(positions)).Find(&seriesPosts).Error; err != nil {
+			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to fetch series posts")
+		}
+
+		usedPositions := make(map[int]bool)
+		for postID, pos := range positions {
+			if pos < 1 {
+				return utils.NewError(utils.ErrBadRequest.Code, fmt.Sprintf("Invalid position %d for post %s", pos, postID.String()))
+			}
+			if usedPositions[pos] {
+				return utils.NewError(utils.ErrBadRequest.Code, fmt.Sprintf("Duplicate position %d", pos))
+			}
+			usedPositions[pos] = true
+		}
+
+		for _, sp := range seriesPosts {
+			if newPos, exists := positions[sp.PostID]; exists && newPos != sp.Position {
+				if err := tx.Model(&SeriesPost{}).
+					Where("id = ?", sp.ID).
+					Update("position", newPos).Error; err != nil {
+					return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to update series post position")
+				}
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+
+	tx.Commit()
+
+	rclient.Del(ctx, "series:posts:"+seriesID.String())
+
+	return nil
+}
+
+// getKeys extracts keys from a map
+func getKeys(m map[uuid.UUID]int) []uuid.UUID {
+	keys := make([]uuid.UUID, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}
