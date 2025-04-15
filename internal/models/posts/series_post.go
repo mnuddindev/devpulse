@@ -78,7 +78,6 @@ func CreateSeriesPost(ctx context.Context, rclient *storage.RedisClient, db *gor
 	}
 
 	rclient.Del(ctx, "series:posts:"+seriesPost.SeriesID.String())
-	rclient.Set(ctx, "series:total_posts:"+seriesPost.SeriesID.String(), Series.TotalPosts+1, 24*time.Hour)
 
 	return nil
 }
@@ -194,10 +193,6 @@ func UpdateSeriesPost(ctx context.Context, rclient *storage.RedisClient, db *gor
 		"series:posts:"+seriesPost.SeriesID.String(),
 		"series:posts:"+originalSeriesID.String(),
 	)
-	if seriesPost.SeriesID != originalSeriesID {
-		rclient.Set(ctx, "series:total_posts:"+seriesPost.SeriesID.String(), Series.TotalPosts+1, 24*time.Hour)
-		rclient.Set(ctx, "series:total_posts:"+originalSeriesID.String(), Series.TotalPosts-1, 24*time.Hour)
-	}
 
 	return seriesPost, nil
 }
@@ -211,7 +206,6 @@ func DeleteSeriesPost(ctx context.Context, rclient *storage.RedisClient, db *gor
 	}
 
 	err = tx.Transaction(func(tx *gorm.DB) error {
-		// Delete series post
 		result := tx.Where("series_id = ? AND post_id = ?", seriesID, postID).Delete(&SeriesPost{})
 		if result.Error != nil {
 			return utils.WrapError(result.Error, utils.ErrInternalServerError.Code, "Failed to delete series post")
@@ -220,7 +214,6 @@ func DeleteSeriesPost(ctx context.Context, rclient *storage.RedisClient, db *gor
 			return utils.NewError(utils.ErrNotFound.Code, "Series post not found")
 		}
 
-		// Update TotalPosts
 		if series.TotalPosts > 0 {
 			series.TotalPosts--
 			if err := tx.Model(series).Update("total_posts", series.TotalPosts).Error; err != nil {
@@ -228,7 +221,6 @@ func DeleteSeriesPost(ctx context.Context, rclient *storage.RedisClient, db *gor
 			}
 		}
 
-		// Sync analytics
 		if err := SyncSeriesAnalytics(ctx, rclient, tx, seriesID, -1, 0); err != nil {
 			return err
 		}
@@ -242,7 +234,6 @@ func DeleteSeriesPost(ctx context.Context, rclient *storage.RedisClient, db *gor
 
 	tx.Commit()
 
-	// Update caches
 	seriesData, _ := json.Marshal(series)
 	rclient.Set(ctx, "series:"+series.ID.String(), seriesData, 24*time.Hour)
 	rclient.Set(ctx, "series:slug:"+series.Slug, seriesData, 24*time.Hour)

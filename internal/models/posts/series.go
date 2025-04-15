@@ -38,9 +38,6 @@ type SeriesOption func(*Series)
 
 // CreateSeries initializes a new series with analytics
 func CreateSeries(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB, series *Series) error {
-	if series.ID == uuid.Nil {
-		series.ID = uuid.New()
-	}
 	series.Title = strings.TrimSpace(series.Title)
 	series.Slug = strings.ToLower(strings.TrimSpace(series.Slug))
 	series.Description = strings.TrimSpace(series.Description)
@@ -138,6 +135,10 @@ func UpdateSeries(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB
 	}
 
 	err = tx.Transaction(func(tx *gorm.DB) error {
+		var original Series
+		if err := tx.Where("id = ?", series.ID).First(&original).Error; err != nil {
+			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to fetch original series")
+		}
 		if series.Title != "" && series.Title != series.Title {
 			var existingByTitle Series
 			if err := tx.Where("title = ? AND id != ?", series.Title, series.ID).First(&existingByTitle).Error; err == nil {

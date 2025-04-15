@@ -428,3 +428,34 @@ func WithSeriesPostPosition(position int) SeriesPostOption {
 		sp.Position = position
 	}
 }
+
+// SeriesAnalytics Options
+func WithSeriesSeriesAnalyticsID(seriesID uuid.UUID) SeriesAnalyticsOption {
+	return func(sa *SeriesAnalytics) {
+		sa.SeriesID = seriesID
+	}
+}
+
+func WithSeriesAnalyticsTotalViews(totalViews int) SeriesAnalyticsOption {
+	return func(sa *SeriesAnalytics) {
+		sa.TotalViews = totalViews
+	}
+}
+
+func WithSeriesAnalyticsTotalReactions(totalReactions int) SeriesAnalyticsOption {
+	return func(sa *SeriesAnalytics) {
+		sa.TotalReactions = totalReactions
+	}
+}
+
+func WithSeriesAnalyticsAverageReadTime(readTime float64) SeriesAnalyticsOption {
+	return func(sa *SeriesAnalytics) {
+		sa.AverageReadTime = readTime
+	}
+}
+
+func WithSeriesAnalyticsCompletionRate(rate float64) SeriesAnalyticsOption {
+	return func(sa *SeriesAnalytics) {
+		sa.CompletionRate = rate
+	}
+}
