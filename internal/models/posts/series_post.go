@@ -67,7 +67,7 @@ func CreateSeriesPost(ctx context.Context, rclient *storage.RedisClient, db *gor
 			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to update total posts")
 		}
 
-		if err := SyncSeriesAnalytics(ctx, rclient, tx, seriesPost.SeriesID, 1, 0); err != nil {
+		if err := SyncSeriesAnalytics(ctx, rclient, tx, seriesPost.SeriesID); err != nil {
 			return err
 		}
 
@@ -172,10 +172,10 @@ func UpdateSeriesPost(ctx context.Context, rclient *storage.RedisClient, db *gor
 			if err := tx.Model(&Series{ID: seriesPost.SeriesID}).Update("total_posts", gorm.Expr("total_posts + 1")).Error; err != nil {
 				return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to update new series total posts")
 			}
-			if err := SyncSeriesAnalytics(ctx, rclient, tx, originalSeriesID, -1, 0); err != nil {
+			if err := SyncSeriesAnalytics(ctx, rclient, tx, originalSeriesID); err != nil {
 				return err
 			}
-			if err := SyncSeriesAnalytics(ctx, rclient, tx, seriesPost.SeriesID, 1, 0); err != nil {
+			if err := SyncSeriesAnalytics(ctx, rclient, tx, seriesPost.SeriesID); err != nil {
 				return err
 			}
 		}
@@ -221,7 +221,7 @@ func DeleteSeriesPost(ctx context.Context, rclient *storage.RedisClient, db *gor
 			}
 		}
 
-		if err := SyncSeriesAnalytics(ctx, rclient, tx, seriesID, -1, 0); err != nil {
+		if err := SyncSeriesAnalytics(ctx, rclient, tx, seriesID); err != nil {
 			return err
 		}
 

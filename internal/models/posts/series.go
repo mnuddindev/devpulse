@@ -63,10 +63,10 @@ func CreateSeries(ctx context.Context, rclient *storage.RedisClient, db *gorm.DB
 			return utils.WrapError(err, utils.ErrInternalServerError.Code, "Failed to create series")
 		}
 
-		// analytics := &SeriesAnalytics{SeriesID: series.ID}
-		// if err := CreateSeriesAnalytics(ctx, redisClient, tx, analytics); err != nil {
-		// 	return err
-		// }
+		analytics := &SeriesAnalytics{SeriesID: series.ID}
+		if err := CreateSeriesAnalytics(ctx, rclient, tx, analytics); err != nil {
+			return err
+		}
 
 		return nil
 	})
